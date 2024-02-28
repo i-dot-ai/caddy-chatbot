@@ -1,0 +1,11 @@
+.env
+env.json
+.builds
+.aws-sam
+.DS_Store
+docker/
+__pychache__/
+cachedir
+.idea
+.vscode
+.venv

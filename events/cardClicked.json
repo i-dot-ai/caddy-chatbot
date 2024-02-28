@@ -1,0 +1,168 @@
+{
+    "type": "CARD_CLICKED",
+    "eventTime": "2023-11-12T20:27:57.281752Z",
+    "message": {
+      "name": "spaces/ABCDEFG/messages/123456",
+      "sender": {
+        "name": "users/12345678",
+        "displayName": "Caddy Supervisor",
+        "avatarUrl": "https://storage.googleapis.com/sort_assets/CA_Logo.png",
+        "type": "BOT"
+      },
+      "createTime": "2023-11-12T20:26:22.722927Z",
+      "thread": {
+        "name": "spaces/ABCDEFG/threads/123456",
+        "retentionSettings": {
+          "state": "PERMANENT"
+        }
+      },
+      "space": {
+        "name": "spaces/ABCDEFG",
+        "type": "ROOM",
+        "displayName": "Event Test Space",
+        "spaceThreadingState": "THREADED_MESSAGES",
+        "spaceType": "SPACE",
+        "spaceHistoryState": "HISTORY_ON"
+      },
+      "cardsV2": [
+        {
+          "cardId": "aiResponseCard",
+          "card": {
+            "sections": [
+              {
+                "header": "Adviser question",
+                "widgets": [
+                  {
+                    "textParagraph": {
+                      "text": "test@tester.com asked:  what is a debt relief order?"
+                    }
+                  }
+                ]
+              },
+              {
+                "widgets": [
+                  {
+                    "textParagraph": {
+                      "text": " Based on the documents provided, here are the key details about what a debt relief order (DRO) is:- A DRO is an agreement you make with a DRO adviser, also known as an 'approved intermediary', if you cannot pay your debts. - The DRO adviser will help determine if you are eligible to apply for a DRO. They will look at your income, outgoings, debts and assets. - To apply for a DRO, you need to pay a £90 fee. The application is sent to an official receiver at the Insolvency Service who will make a decision.- If approved, the DRO lasts usually for 1 year. During this time, your debts are frozen. After the DRO period ends, the debts are cancelled. - You need to be honest in your DRO application. If you get a refund over £1000 for mis-sold PPI while under a DRO, your DRO could be cancelled.- Citizens Advice is authorized to help clients apply for DROs on their behalf.In summary, a DRO is an agreement made through an adviser to freeze and eventually cancel debts if you cannot afford to pay"
+                    }
+                  }
+                ]
+              },
+              {
+                "header": "Reference links",
+                "widgets": [
+                  {
+                    "textParagraph": {
+                      "text": "<a href='https://www.citizensadvice.org.uk/cymraeg/Dyled-ac-arian/debt-solutions/debt-relief-orders/getting-a-debt-relief-order/how-to-get-a-debt-relief-order/'>How to get a debt relief order - Home</a>"
+                    }
+                  },
+                  {
+                    "textParagraph": {
+                      "text": "<a href='https://www.citizensadvice.org.uk/wales/consumer/insurance/problems-with-insurance-policies/payment-protection-insurance/check-if-you-can-complain-about-mis-sold-ppi/'>Check if you can complain about mis-sold PPI - Citizens Advice</a>"
+                    }
+                  },
+                  {
+                    "textParagraph": {
+                      "text": "<a href='https://www.citizensadvice.org.uk/about-us/about-us1/citizens-advice-privacy-policy/using-our-debt-relief-order-service/'>Using our Debt Relief Order (DRO) service - our privacy policy - Citizens Advice</a>"
+                    }
+                  }
+                ]
+              },
+              {
+                "widgets": [
+                  {
+                    "buttonList": {
+                      "buttons": [
+                        {
+                          "text": "👍",
+                          "onClick": {
+                            "action": {
+                              "function": "Approved",
+                              "parameters": [
+                                {
+                                  "key": "aiResponse",
+                                  "value": "{\"cardsV2\": [{\"cardId\": \"aiResponseCard\", \"card\": {\"sections\": [{\"widgets\": [{\"textParagraph\": {\"text\": \" Based on the documents provided, here are the key details about what a debt relief order (DRO) is:nn- A DRO is an agreement you make with a DRO adviser, also known as an 'approved intermediary', if you cannot pay your debts. nn- The DRO adviser will help determine if you are eligible to apply for a DRO. They will look at your income, outgoings, debts and assets. nn- To apply for a DRO, you need to pay a £90 fee. The application is sent to an official receiver at the Insolvency Service who will make a decision.nn- If approved, the DRO lasts usually for 1 year. During this time, your debts are frozen. After the DRO period ends, the debts are cancelled. nn- You need to be honest in your DRO application. If you get a refund over £1000 for mis-sold PPI while under a DRO, your DRO could be cancelled.nn- Citizens Advice is authorized to help clients apply for DROs on their behalf.nnIn summary, a DRO is an agreement made through an adviser to freeze and eventually cancel debts if you cannot afford to pay\"}}]}, {\"header\": \"Reference links\", \"widgets\": [{\"textParagraph\": {\"text\": \"<a href='https://www.citizensadvice.org.uk/cymraeg/Dyled-ac-arian/debt-solutions/debt-relief-orders/getting-a-debt-relief-order/how-to-get-a-debt-relief-order/'>How to get a debt relief order - Home</a>\"}}, {\"textParagraph\": {\"text\": \"<a href='https://www.citizensadvice.org.uk/wales/consumer/insurance/problems-with-insurance-policies/payment-protection-insurance/check-if-you-can-complain-about-mis-sold-ppi/'>Check if you can complain about mis-sold PPI - Citizens Advice</a>\"}}, {\"textParagraph\": {\"text\": \"<a href='https://www.citizensadvice.org.uk/about-us/about-us1/citizens-advice-privacy-policy/using-our-debt-relief-order-service/'>Using our Debt Relief Order (DRO) service - our privacy policy - Citizens Advice</a>\"}}]}]}}"
+                                },
+                                {
+                                  "key": "conversationId",
+                                  "value": "123456"
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "text": "👎",
+                          "onClick": {
+                            "action": {
+                              "function": "Rejected",
+                              "parameters": [
+                                {
+                                  "key": "conversationId",
+                                  "value": "123456"
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "retentionSettings": {
+        "state": "PERMANENT"
+      },
+      "messageHistoryState": "HISTORY_ON"
+    },
+    "user": {
+      "name": "users/123456789",
+      "displayName": "Event Tester",
+      "avatarUrl": "https://storage.googleapis.com/sort_assets/CA_Logo.png",
+      "email": "test@tester.com",
+      "type": "HUMAN",
+      "domainId": "12345"
+    },
+    "space": {
+      "name": "spaces/ABCDEFG",
+      "type": "ROOM",
+      "displayName": "Event Test Space",
+      "spaceThreadingState": "THREADED_MESSAGES",
+      "spaceType": "SPACE",
+      "spaceHistoryState": "HISTORY_ON"
+    },
+    "action": {
+      "actionMethodName": "Approved",
+      "parameters": [
+        {
+          "key": "aiResponse",
+          "value": "{\"cardsV2\": [{\"cardId\": \"aiResponseCard\", \"card\": {\"sections\": [{\"widgets\": [{\"textParagraph\": {\"text\": \" Based on the documents provided, here are the key details about what a debt relief order (DRO) is:nn- A DRO is an agreement you make with a DRO adviser, also known as an 'approved intermediary', if you cannot pay your debts. nn- The DRO adviser will help determine if you are eligible to apply for a DRO. They will look at your income, outgoings, debts and assets. nn- To apply for a DRO, you need to pay a £90 fee. The application is sent to an official receiver at the Insolvency Service who will make a decision.nn- If approved, the DRO lasts usually for 1 year. During this time, your debts are frozen. After the DRO period ends, the debts are cancelled. nn- You need to be honest in your DRO application. If you get a refund over £1000 for mis-sold PPI while under a DRO, your DRO could be cancelled.nn- Citizens Advice is authorized to help clients apply for DROs on their behalf.nnIn summary, a DRO is an agreement made through an adviser to freeze and eventually cancel debts if you cannot afford to pay\"}}]}, {\"header\": \"Reference links\", \"widgets\": [{\"textParagraph\": {\"text\": \"<a href='https://www.citizensadvice.org.uk/cymraeg/Dyled-ac-arian/debt-solutions/debt-relief-orders/getting-a-debt-relief-order/how-to-get-a-debt-relief-order/'>How to get a debt relief order - Home</a>\"}}, {\"textParagraph\": {\"text\": \"<a href='https://www.citizensadvice.org.uk/wales/consumer/insurance/problems-with-insurance-policies/payment-protection-insurance/check-if-you-can-complain-about-mis-sold-ppi/'>Check if you can complain about mis-sold PPI - Citizens Advice</a>\"}}, {\"textParagraph\": {\"text\": \"<a href='https://www.citizensadvice.org.uk/about-us/about-us1/citizens-advice-privacy-policy/using-our-debt-relief-order-service/'>Using our Debt Relief Order (DRO) service - our privacy policy - Citizens Advice</a>\"}}]}]}}"
+        },
+        {
+          "key": "conversationId",
+          "value": "123456"
+        },
+        {
+          "key": "responseId",
+          "value": "503aa2cfc71f4aeda224f673ae4bf044"
+        }
+      ]
+    },
+    "common": {
+      "userLocale": "en-GB",
+      "hostApp": "CHAT",
+      "timeZone": {
+        "id": "Europe/London"
+      },
+      "parameters": {
+        "conversationId": "123456",
+        "aiResponse": "{\"cardsV2\": [{\"cardId\": \"aiResponseCard\", \"card\": {\"sections\": [{\"widgets\": [{\"textParagraph\": {\"text\": \" Based on the documents provided, here are the key details about what a debt relief order (DRO) is:- A DRO is an agreement you make with a DRO adviser, also known as an 'approved intermediary', if you cannot pay your debts. The DRO adviser will help determine if you are eligible to apply for a DRO. They will look at your income, outgoings, debts and assets.  To apply for a DRO, you need to pay a £90 fee. The application is sent to an official receiver at the Insolvency Service who will make a decision. If approved, the DRO lasts usually for 1 year. During this time, your debts are frozen. After the DRO period ends, the debts are cancelled. You need to be honest in your DRO application. If you get a refund over £1000 for mis-sold PPI while under a DRO, your DRO could be cancelled. Citizens Advice is authorized to help clients apply for DROs on their behalf.In summary, a DRO is an agreement made through an adviser to freeze and eventually cancel debts if you cannot afford to pay\"}}]}, {\"header\": \"Reference links\", \"widgets\": [{\"textParagraph\": {\"text\": \"<a href=\\\"https://www.citizensadvice.org.uk/cymraeg/Dyled-ac-arian/debt-solutions/debt-relief-orders/getting-a-debt-relief-order/how-to-get-a-debt-relief-order/\\\">How to get a debt relief order - Home</a>\"}}, {\"textParagraph\": {\"text\": \"<a href=\\\"https://www.citizensadvice.org.uk/wales/consumer/insurance/problems-with-insurance-policies/payment-protection-insurance/check-if-you-can-complain-about-mis-sold-ppi/\\\">Check if you can complain about mis-sold PPI - Citizens Advice</a>\"}}, {\"textParagraph\": {\"text\": \"<a href=\\\"https://www.citizensadvice.org.uk/about-us/about-us1/citizens-advice-privacy-policy/using-our-debt-relief-order-service/\\\">Using our Debt Relief Order (DRO) service - our privacy policy - Citizens Advice</a>\"}}]}]}}",
+        "responseId": "030958e1-b0de-4789-9044-ee89af23672c"
+      },
+      "invokedFunction": "Approved"
+    }
+  }

@@ -1,0 +1,461 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  10ds-advice-bot
+
+  Sample SAM Template for advice-bot
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 100
+
+# Define your parameters
+Parameters:
+  AnthropicApiKey:
+    Type: String
+    Description: API Key for Anthropic
+  UserTableName:
+    Type: String
+    Description: Name of the DynamoDB table for users
+  MessageTableName:
+    Type: String
+    Description: Name of the DynamoDB table for messages
+  ResponsesTableName:
+    Type: String
+    Description: Name of the DynamoDB table for responses
+  IdempotencyTableName:
+    Type: String
+    Description: Name of the DynamoDB table for idempotency
+  OpensearchUrl:
+    Type: String
+    Description: Url of Opensearch Index
+
+Globals:
+  Api:
+    OpenApiVersion: 3.0.1  # to avoid default stage creation
+
+Resources:
+
+  CaddyApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: 'caddy-api-gateway'
+      StageName: 'dev'
+      Variables:
+        LAMBDA_ALIAS: 'dev'
+  # CaddyApiMethod:
+  #   Type: AWS::ApiGateway::Method
+  #   Properties:
+  #     HttpMethod: POST
+  #     AuthorizationType: NONE
+  #     Integration:
+  #       Type: AWS
+  #       Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ConversationsFunction.Arn}/invocations"
+  #       IntegrationHttpMethod: POST
+  #       PassthroughBehavior: WHEN_NO_TEMPLATES
+  #     ResourceId: !GetAtt CaddyApi.RootResourceId
+  #     RestApiId: !Ref CaddyApi
+
+  CaddyApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    Properties:
+      RestApiId: !Ref CaddyApi
+    Description: "CaddyApi Deployment"
+
+  CaddyApiProdStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      StageName: 'prod'
+      RestApiId: !Ref CaddyApi
+      DeploymentId: !Ref CaddyApiDeployment
+      Variables:
+        LAMBDA_ALIAS: 'prod'
+
+  CaddyECR:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: caddy-ecr-repo
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ECRLambdaPolicy
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - "ecr:BatchGetImage"
+              - "ecr:GetDownloadUrlForLayer"
+
+  ConversationsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: conversations
+      PackageType: Image
+      ImageConfig:
+        Command: ["chat.lambda_handler"]
+      ImageUri: !GetAtt CaddyECR.RepositoryUri
+      Timeout: 120
+      MemorySize: 1024
+      EphemeralStorage:
+        Size: 1024
+      Role: !GetAtt ConversationsFunctionIamRole.Arn
+      Environment:
+        Variables:
+          ANTHROPIC_API_KEY: !Ref AnthropicApiKey
+          MESSAGES_TABLE_NAME: !Ref MessageTableName
+          RESPONSES_TABLE_NAME: !Ref ResponsesTableName
+          USERS_TABLE_NAME: !Ref UserTableName
+          IDEMPOTENCY_TABLE_NAME: !Ref IdempotencyTableName
+      Events:
+        Conversations:
+          Type: Api
+          Properties:
+            Path: /chat
+            Method: post
+            RestApiId: !Ref CaddyApi
+    Metadata:
+      DockerContext: conversations/
+      Dockerfile: Dockerfile
+
+  ConversationsFunctionIamRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: ConversationsFunctionRole
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action:
+                - sts:AssumeRole
+        Policies:
+          - PolicyName: ConversationsLambdaLoggingPolicy
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - logs:CreateLogGroup
+                    - logs:CreateLogStream
+                    - logs:PutLogEvents
+                  Resource: '*'
+          - PolicyName: ConversationsDynamoPolicy
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:GetItem
+                    - dynamodb:PutItem
+                    - dynamodb:UpdateItem
+                    - dynamodb:Scan
+                    - dynamodb:Query
+                  Resource: !GetAtt ResponsesTable.Arn
+          - PolicyName: ConversationsLambdaInvokerPolicy
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - lambda:InvokeFunction
+                  Resource: !GetAtt LlmFunction.Arn
+          - PolicyName: ConversationsCaddySecrets
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - secretsmanager:GetSecretValue
+                  Resource: '*'
+          - PolicyName: ConversationsIdempotencyDynamoPolicy
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:PutItem
+                    - dynamodb:GetItem
+                    - dynamodb:UpdateItem
+                    - dynamodb:DeleteItem
+                  Resource: !GetAtt IdempotencyTable.Arn
+
+  LlmFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      FunctionName: llm
+      PackageType: Image
+      ImageConfig:
+        Command: ["answer.lambda_handler"]
+      ImageUri: !GetAtt CaddyECR.RepositoryUri
+      Timeout: 120
+      MemorySize: 1024
+      EphemeralStorage:
+        Size: 1024
+      Role: !GetAtt LlmFunctionIamRole.Arn
+      Environment:
+        Variables:
+          ANTHROPIC_API_KEY: !Ref AnthropicApiKey
+          MESSAGES_TABLE_NAME: !Ref MessageTableName
+          RESPONSES_TABLE_NAME: !Ref ResponsesTableName
+          USERS_TABLE_NAME: !Ref UserTableName
+          IDEMPOTENCY_TABLE_NAME: !Ref IdempotencyTableName
+          HF_HOME: "/tmp"
+          XDG_CACHE_HOME: "/tmp"
+          OPENSEARCH_HTTPS: !Ref OpensearchUrl
+          OPENSEARCH_INDEX: "caddy_vector_index"
+    Metadata:
+      DockerContext: llm/
+      Dockerfile: Dockerfile
+
+  LlmFunctionIamRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: LlmFunctionRole
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action:
+                - sts:AssumeRole
+        Policies:
+          - PolicyName: LlmLambdaLoggingPolicy
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - logs:CreateLogGroup
+                    - logs:CreateLogStream
+                    - logs:PutLogEvents
+                  Resource: '*'
+          - PolicyName: LlmDynamoPolicy
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:GetItem
+                    - dynamodb:PutItem
+                    - dynamodb:UpdateItem
+                    - dynamodb:Scan
+                    - dynamodb:Query
+                  Resource: !GetAtt MessagesTable.Arn
+                - Effect: Allow
+                  Action:
+                    - dynamodb:GetItem
+                    - dynamodb:PutItem
+                    - dynamodb:UpdateItem
+                    - dynamodb:Scan
+                    - dynamodb:Query
+                  Resource: !GetAtt ResponsesTable.Arn
+          - PolicyName: LlmLambdaInvokerPolicy
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - lambda:InvokeFunction
+                  Resource: !GetAtt SuperviseFunction.Arn
+          - PolicyName: LlmCaddySecrets
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - secretsmanager:GetSecretValue
+                  Resource: '*'
+          - PolicyName: LlmIdempotencyDynamoPolicy
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:PutItem
+                    - dynamodb:GetItem
+                    - dynamodb:UpdateItem
+                    - dynamodb:DeleteItem
+                  Resource: !GetAtt IdempotencyTable.Arn
+
+  SuperviseFunctionIamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: SuperviseFunctionRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: SuperviseLambdaLoggingPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+        - PolicyName: SuperviseSecrets
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: '*'
+        - PolicyName: UserManagementPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Scan
+                Resource: !GetAtt UsersTable.Arn
+        - PolicyName: ResponseUpdatePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Scan
+                Resource: !GetAtt ResponsesTable.Arn
+
+  SuperviseFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource:
+    Properties:
+      FunctionName: supervise
+      PackageType: Image
+      ImageConfig:
+        Command: ["supervise.lambda_handler"]
+      ImageUri: !GetAtt CaddyECR.RepositoryUri
+      Timeout: 120
+      Role: !GetAtt SuperviseFunctionIamRole.Arn
+      Environment:
+        Variables:
+          DB_ACCESS_KEY_ID: some_key
+          DB_SECRET_ACCESS_KEY: other_key
+          DB_ENDPOINT: db_endpoint
+          MESSAGES_TABLE_NAME: !Ref MessageTableName
+          RESPONSES_TABLE_NAME: !Ref ResponsesTableName
+          USERS_TABLE_NAME: !Ref UserTableName
+      Events:
+        ProcessSupervisionResponse:
+          Type: Api
+          Properties:
+            Path: /supervision
+            Method: post
+            RestApiId: !Ref CaddyApi
+    Metadata:
+      DockerContext: supervise/
+      Dockerfile: Dockerfile
+
+  UsersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: !Ref UserTableName
+        AttributeDefinitions:
+          - AttributeName: userEmail
+            AttributeType: S
+        KeySchema:
+          - AttributeName: userEmail
+            KeyType: HASH
+        ProvisionedThroughput:
+            ReadCapacityUnits: 1
+            WriteCapacityUnits: 1
+
+  MessagesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+          TableName: !Ref MessageTableName
+          AttributeDefinitions:
+          - AttributeName: threadId
+            AttributeType: S
+          KeySchema:
+          - AttributeName: threadId
+            KeyType: HASH
+          ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
+          StreamSpecification:
+              StreamViewType: NEW_AND_OLD_IMAGES
+
+  ResponsesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+          TableName: !Ref ResponsesTableName
+          AttributeDefinitions:
+          - AttributeName: threadId
+            AttributeType: S
+          KeySchema:
+          - AttributeName: threadId
+            KeyType: HASH
+          ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
+          StreamSpecification:
+              StreamViewType: NEW_AND_OLD_IMAGES
+
+  IdempotencyTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref IdempotencyTableName
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiration
+        Enabled: true
+      BillingMode: PAY_PER_REQUEST
+
+Outputs:
+  ChatAPI:
+    Description: "API Gateway endpoint URL for chat function"
+    Value: !Sub "https://${CaddyApi}.execute-api.${AWS::Region}.amazonaws.com/dev/chat/"
+  SupervisionAPI:
+    Description: "API Gateway endpoint URL for chat function"
+    Value: !Sub "https://${CaddyApi}.execute-api.${AWS::Region}.amazonaws.com/dev/supervision/"
+  ConversationsFunction:
+    Description: "ConversationsFunction ARN"
+    Value: !GetAtt ConversationsFunction.Arn
+  ConversationsFunctionIamRole:
+    Description: "Implicit IAM Role created for ConversationsFunction function"
+    Value: !GetAtt ConversationsFunctionIamRole.Arn
+  SuperviseFunction:
+    Description: "SuperviseFunction ARN"
+    Value: !GetAtt SuperviseFunction.Arn
+  SuperviseFunctionIamRole:
+    Description: "Implicit IAM Role created for SuperviseFunction function"
+    Value: !GetAtt SuperviseFunctionIamRole.Arn
+  MessagesTable:
+    Description: "Mesages Table ARN"
+    Value: !GetAtt MessagesTable.Arn
+  UsersTable:
+    Description: "Users Table ARN"
+    Value: !GetAtt UsersTable.Arn
+  IdempotencyTable:
+    Description: "Idempotency Table ARN"
+    Value: !GetAtt IdempotencyTable.Arn
