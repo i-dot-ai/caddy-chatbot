@@ -1,6 +1,6 @@
-# 10ds-advice-bot
+# Caddy Chatbot
 
-This repository stores the project for the LLM enabled advisor support bot.
+This repository stores the project for the LLM enabled advisor support bot. This contains the logic for the chatbot and responses, and also relies on storage of the data using [caddy_scraper](https://github.com/i-dot-ai/caddy_scraper).
 
 ## How to Run
 
