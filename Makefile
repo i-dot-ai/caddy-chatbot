@@ -2,18 +2,6 @@
 
 MSG ?= hello world
 
-hanna-build-lambda:
-	DOCKER_HOST=unix:///Users/hanna.harding/.docker/run/docker.sock sam build -t template.yaml --use-container
-
-hanna-test-chat-lambda:
-	DOCKER_HOST=unix:///Users/hanna.harding/.docker/run/docker.sock sam local invoke ConversationsFunction --event events/gChatMessageEvent.json --env-vars env.json
-
-hanna-test-supervision-lambda:
-	DOCKER_HOST=unix:///Users/hanna.harding/.docker/run/docker.sock sam local invoke SuperviseFunction --event events/supervision.json --env-vars env.json
-
-hanna-test-card-clicked-lambda:
-	DOCKER_HOST=unix:///Users/hanna.harding/.docker/run/docker.sock sam local invoke SuperviseFunction --event events/cardClicked.json --env-vars env.json
-
 test-lambda-func:
 	@source define_env_vars.sh && python conversations/chat.py lambda_handler '{"message_string": "$(MSG)"}'
 
