@@ -12,9 +12,6 @@ Globals:
 
 # Define your parameters
 Parameters:
-  AnthropicApiKey:
-    Type: String
-    Description: API Key for Anthropic
   UserTableName:
     Type: String
     Description: Name of the DynamoDB table for users
@@ -105,7 +102,6 @@ Resources:
       Role: !GetAtt ConversationsFunctionIamRole.Arn
       Environment:
         Variables:
-          ANTHROPIC_API_KEY: !Ref AnthropicApiKey
           MESSAGES_TABLE_NAME: !Ref MessageTableName
           RESPONSES_TABLE_NAME: !Ref ResponsesTableName
           USERS_TABLE_NAME: !Ref UserTableName
@@ -200,7 +196,6 @@ Resources:
       Role: !GetAtt LlmFunctionIamRole.Arn
       Environment:
         Variables:
-          ANTHROPIC_API_KEY: !Ref AnthropicApiKey
           MESSAGES_TABLE_NAME: !Ref MessageTableName
           RESPONSES_TABLE_NAME: !Ref ResponsesTableName
           USERS_TABLE_NAME: !Ref UserTableName
@@ -257,6 +252,14 @@ Resources:
                     - dynamodb:Scan
                     - dynamodb:Query
                   Resource: !GetAtt ResponsesTable.Arn
+          - PolicyName: BedrockInvokerPolicy
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - bedrock:InvokeModel
+                  Resource: '*'
           - PolicyName: LlmLambdaInvokerPolicy
             PolicyDocument:
               Version: '2012-10-17'

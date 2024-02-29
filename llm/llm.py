@@ -1,4 +1,4 @@
-from langchain.chat_models import ChatAnthropic
+from langchain_community.llms import Bedrock
 from prompt import *
 from langchain.retrievers import ContextualCompressionRetriever
 from langchain.retrievers.merger_retriever import MergerRetriever
@@ -8,12 +8,12 @@ from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
 from typing import List
 
-from langchain.document_transformers import EmbeddingsClusteringFilter
-from langchain.vectorstores import OpenSearchVectorSearch
+from langchain_community.document_transformers import EmbeddingsClusteringFilter
+from langchain_community.vectorstores import OpenSearchVectorSearch
 from opensearchpy import RequestsHttpConnection
 from requests_aws4auth import AWS4Auth
 from langchain.chains import RetrievalQA
-from langchain.embeddings import HuggingFaceEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from datetime import datetime
 import os
 import boto3
@@ -82,7 +82,6 @@ def find_most_recent_caddy_vector_index():
 
 
 def build_chain():
-    anthropic_key = os.environ["ANTHROPIC_API_KEY"]
     opensearch_index = find_most_recent_caddy_vector_index()
     opensearch_https = os.environ.get('OPENSEARCH_HTTPS')
 
@@ -159,11 +158,13 @@ def build_chain():
         base_compressor=pipeline, base_retriever=lotr
     )
 
-    claude_llm = ChatAnthropic(
-        temperature=0.2,
-        max_tokens=750,
-        anthropic_api_key=anthropic_key,
-        verbose=True
+    claude_llm = Bedrock(
+        model_id="anthropic.claude-v2:1",
+        region_name="eu-central-1",
+        model_kwargs={
+            "temperature": 0.2,
+            "max_tokens_to_sample": 750
+        }
         )
 
     chain = RetrievalQA.from_chain_type(
@@ -177,3 +178,9 @@ def build_chain():
 
     ai_prompt_timestamp = datetime.now()
     return chain, ai_prompt_timestamp
+
+def run_chain(chain, prompt: str, history:[]):
+    ai_response = chain({"query": prompt, "chat_history": history})
+    ai_response_timestamp = datetime.now()
+
+    return ai_response, ai_response_timestamp
