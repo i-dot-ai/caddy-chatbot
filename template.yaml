@@ -252,13 +252,13 @@ Resources:
                     - dynamodb:Scan
                     - dynamodb:Query
                   Resource: !GetAtt ResponsesTable.Arn
-          - PolicyName: BedrockPolicy
+          - PolicyName: BedrockInvokerPolicy
             PolicyDocument:
               Version: '2012-10-17'
               Statement:
                 - Effect: Allow
                   Action:
-                    - bedrock:*
+                    - bedrock:InvokeModel
                   Resource: '*'
           - PolicyName: LlmLambdaInvokerPolicy
             PolicyDocument:
