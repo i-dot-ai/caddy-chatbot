@@ -38,7 +38,7 @@ def find_most_recent_caddy_vector_index():
         refreshable_credentials=credentials
     )
 
-    embeddings = HuggingFaceEmbeddings(model_name='embedding_model')
+    embeddings = HuggingFaceEmbeddings(model_name='model')
 
     vectorstore = OpenSearchVectorSearch(
         index_name=opensearch_index,
@@ -92,7 +92,7 @@ def build_chain():
         refreshable_credentials=credentials
         )
 
-    embeddings = HuggingFaceEmbeddings(model_name='embedding_model')
+    embeddings = HuggingFaceEmbeddings(model_name='model')
 
     vectorstore = OpenSearchVectorSearch(
         index_name=opensearch_index,
