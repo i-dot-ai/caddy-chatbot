@@ -14,7 +14,6 @@ patch_all()
 serverless = boto3.client('lambda')
 
 @xray_recorder.capture()
-@idempotent
 def process_chat_message(event: ProcessChatMessageEvent):
     """Takes a chat message, and converts it to a UserQuery
 

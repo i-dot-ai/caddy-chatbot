@@ -96,6 +96,7 @@ Resources:
         Command: ["chat.lambda_handler"]
       ImageUri: !GetAtt CaddyECR.RepositoryUri
       Timeout: 120
+      Tracing: Active
       MemorySize: 1024
       EphemeralStorage:
         Size: 1024
@@ -191,6 +192,7 @@ Resources:
       ImageUri: !GetAtt CaddyECR.RepositoryUri
       Timeout: 120
       MemorySize: 2048
+      Tracing: Active
       EphemeralStorage:
         Size: 2048
       Role: !GetAtt LlmFunctionIamRole.Arn
@@ -353,6 +355,7 @@ Resources:
         Command: ["supervise.lambda_handler"]
       ImageUri: !GetAtt CaddyECR.RepositoryUri
       Timeout: 120
+      Tracing: Active
       Role: !GetAtt SuperviseFunctionIamRole.Arn
       Environment:
         Variables:
