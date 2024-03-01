@@ -190,9 +190,9 @@ Resources:
         Command: ["answer.lambda_handler"]
       ImageUri: !GetAtt CaddyECR.RepositoryUri
       Timeout: 120
-      MemorySize: 1024
+      MemorySize: 2048
       EphemeralStorage:
-        Size: 1024
+        Size: 2048
       Role: !GetAtt LlmFunctionIamRole.Arn
       Environment:
         Variables:
