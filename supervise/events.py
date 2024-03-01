@@ -7,10 +7,15 @@ from datetime import datetime
 from responses import send_message_to_supervisor_space, send_message_to_adviser_space, update_message_in_supervisor_space, update_message_in_adviser_space, delete_message_in_adviser_space, respond_to_supervisor_thread
 from utils import create_supervision_card, create_updated_supervision_card, create_supervision_request_card, create_approved_card, create_rejected_card, success_dialog, failed_dialog, get_user_to_add_details_dialog, get_user_to_remove_details_dialog, user_list_dialog, get_supervisor_response_dialog
 from models import User, SupervisionEvent, ApprovalEvent, store_approver_received_timestamp, store_approver_event, responses_table
+from aws_xray_sdk.core import xray_recorder
+from aws_xray_sdk.core import patch_all
+
+patch_all()
 
 dynamodb = boto3.resource('dynamodb')
 users = dynamodb.Table(os.getenv('USERS_TABLE_NAME'))
 
+@xray_recorder.capture()
 def receive_new_ai_response(event: SupervisionEvent):
 
     initial_query = event['llmPrompt']
@@ -62,6 +67,7 @@ def receive_new_ai_response(event: SupervisionEvent):
 
             store_approver_received_timestamp(event=event, timestamp=datetime.now(), table=responses_table)
 
+@xray_recorder.capture()
 def received_approval(event):
     card = json.loads(event['common']['parameters']['aiResponse'])
     users_space = event['common']['parameters']['conversationId']
@@ -119,6 +125,7 @@ def received_approval(event):
     )
     store_approver_event(approval_event, table=responses_table)
 
+@xray_recorder.capture()
 def received_rejection(event):
     supervisor_card = { "cardsV2": event["message"]["cardsV2"] }
     users_space = event['common']['parameters']['conversationId']
@@ -173,6 +180,7 @@ def received_rejection(event):
 
     return success_dialog()
 
+@xray_recorder.capture()
 def get_user_details(type: str):
 
     match type:
@@ -181,6 +189,7 @@ def get_user_details(type: str):
         case 'Remove':
             return get_user_to_remove_details_dialog()
 
+@xray_recorder.capture()
 def add_user(event):
     userEmail = event['common']['formInputs']['email']['stringInputs']['value'][0]
     userRole = event['common']['formInputs']['role']['stringInputs']['value'][0]
@@ -216,6 +225,7 @@ def add_user(event):
     except Exception as error:
         return failed_dialog(error)
 
+@xray_recorder.capture()
 def remove_user(event):
     userEmail = event['common']['formInputs']['email']['stringInputs']['value'][0]
 
@@ -225,6 +235,7 @@ def remove_user(event):
     except Exception as error:
         return failed_dialog(error)
 
+@xray_recorder.capture()
 def list_users(event):
     supervisionSpaceId = event['space']['name'].split('/')[1]
     supervision_space_name = event['space']['displayName']
@@ -250,6 +261,7 @@ def list_users(event):
 
     return user_list_dialog(supervision_users=supervision_users, space_display_name=supervision_space_name)
 
+@xray_recorder.capture()
 def get_designated_supervisor_space(userId: str):
     user_details_response = users.get_item(Key={"userEmail": userId})
 
@@ -259,6 +271,7 @@ def get_designated_supervisor_space(userId: str):
       print("No supervisor space found for user")
       return "Unknown"
 
+@xray_recorder.capture()
 def get_supervisor_response(event):
     conversation_id = event['common']['parameters']['conversationId']
     response_id = event['common']['parameters']['responseId']
@@ -269,6 +282,7 @@ def get_supervisor_response(event):
 
     return get_supervisor_response_dialog(conversation_id, response_id, message_id, thread_id, new_request_message_id, request_rejected)
 
+@xray_recorder.capture()
 def introduce_caddy_supervisor(event):
     match event['space']['type']:
         case 'DM':

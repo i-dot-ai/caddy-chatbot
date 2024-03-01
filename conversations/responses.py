@@ -2,7 +2,12 @@ import boto3
 import json
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from aws_xray_sdk.core import xray_recorder
+from aws_xray_sdk.core import patch_all
 
+patch_all()
+
+@xray_recorder.capture()
 def get_google_creds(recepient: str):
   secret_manager = boto3.client('secretsmanager')
   scopes_list = [
@@ -17,6 +22,7 @@ def get_google_creds(recepient: str):
 caddy = build('chat', 'v1', credentials=get_google_creds('CaddyCred'))
 
 # Send message to the adviser space
+@xray_recorder.capture()
 def send_message_to_adviser_space(space_id: str, message, thread_id):
     response = caddy.spaces().messages().create(
         parent=f"spaces/{space_id}",
@@ -35,6 +41,7 @@ def send_message_to_adviser_space(space_id: str, message, thread_id):
     return thread_id, message_id
 
 # Update message in the adviser space
+@xray_recorder.capture()
 def update_message_in_adviser_space(space_id: str, message_id: str, message):
     caddy.spaces().messages().patch(
         name=f"spaces/{space_id}/messages/{message_id}",

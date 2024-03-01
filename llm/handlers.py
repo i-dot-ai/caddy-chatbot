@@ -6,11 +6,14 @@ from models import UserMessage, LlmResponse, SupervisionEvent, ProcessChatMessag
 from utils import create_card, get_chat_history, idempotent
 from llm import run_chain, build_chain
 from responses import send_message_to_adviser_space, update_message_in_adviser_space
-
 from utils import bcolors
+from aws_xray_sdk.core import xray_recorder
+from aws_xray_sdk.core import patch_all
+patch_all()
 
 serverless = boto3.client('lambda')
 
+@xray_recorder.capture()
 def process_chat_message(event: ProcessChatMessageEvent):
     """Takes a chat message, and converts it to a UserQuery
 
