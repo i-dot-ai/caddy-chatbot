@@ -1,8 +1,5 @@
-fastapi
 pydantic
-uvicorn
-langchain
 pydantic-settings
-anthropic
 google-auth
 google-api-python-client
+aws-xray-sdk

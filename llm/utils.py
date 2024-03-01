@@ -1,6 +1,10 @@
 from models import responses_table, idempotent_table
 from boto3.dynamodb.conditions import Key
+from aws_xray_sdk.core import xray_recorder
+from aws_xray_sdk.core import patch_all
+patch_all()
 
+@xray_recorder.capture()
 def get_chat_history(message):
     # retrieve list of messages with same conversation_id from message database
     # change to get thread messages from API
@@ -10,7 +14,7 @@ def get_chat_history(message):
     history = format_chat_history(response['Items'])
     return history
 
-
+@xray_recorder.capture()
 def format_chat_history(user_messages):
     """ Formats chat messages for LangChain """
     history_langchain_format = []
@@ -20,7 +24,7 @@ def format_chat_history(user_messages):
         history_langchain_format.append((human, ai))
     return history_langchain_format
 
-
+@xray_recorder.capture()
 def create_card(ai_response):
     card = {
         "cardsV2": [
@@ -65,6 +69,7 @@ def create_card(ai_response):
 
     return card
 
+@xray_recorder.capture()
 def similar_question_dialog(similar_question, question_answer, similarity):
   question_dialog = {
       "action_response": {
@@ -96,6 +101,7 @@ def similar_question_dialog(similar_question, question_answer, similarity):
     }
   return question_dialog
 
+@xray_recorder.capture()
 def idempotent():
     def decorator(func):
       def wrapper(event, *args, **kwargs):

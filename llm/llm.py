@@ -3,11 +3,6 @@ from prompt import *
 from langchain.retrievers import ContextualCompressionRetriever
 from langchain.retrievers.merger_retriever import MergerRetriever
 from langchain.retrievers.document_compressors import DocumentCompressorPipeline
-from langchain_core.retrievers import BaseRetriever
-from langchain_core.callbacks import CallbackManagerForRetrieverRun
-from langchain_core.documents import Document
-from typing import List
-
 from langchain_community.document_transformers import EmbeddingsClusteringFilter
 from langchain_community.vectorstores import OpenSearchVectorSearch
 from opensearchpy import RequestsHttpConnection
@@ -15,14 +10,17 @@ from requests_aws4auth import AWS4Auth
 from langchain.chains import RetrievalQA
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from datetime import datetime
-import os
-import boto3
-from retrievers import LLMPriorityRetriever
 from langchain.vectorstores.elasticsearch import ElasticsearchStore
+import boto3
 import re
+import os
 from datetime import datetime
 
+from aws_xray_sdk.core import xray_recorder
+from aws_xray_sdk.core import patch_all
+patch_all()
 
+@xray_recorder.capture()
 def find_most_recent_caddy_vector_index():
     """Attempts to find one of the rolling Caddy vector indexes, and returns the most recent one.
     If no such index is found, the original index name is returned."""
@@ -80,7 +78,7 @@ def find_most_recent_caddy_vector_index():
 
     return most_recent_index
 
-
+@xray_recorder.capture()
 def build_chain():
     opensearch_index = find_most_recent_caddy_vector_index()
     opensearch_https = os.environ.get('OPENSEARCH_HTTPS')
@@ -179,6 +177,7 @@ def build_chain():
     ai_prompt_timestamp = datetime.now()
     return chain, ai_prompt_timestamp
 
+@xray_recorder.capture()
 def run_chain(chain, prompt: str, history:[]):
     ai_response = chain({"query": prompt, "chat_history": history})
     ai_response_timestamp = datetime.now()

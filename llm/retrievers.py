@@ -6,7 +6,11 @@ from langchain.retrievers.merger_retriever import MergerRetriever
 from typing import Any
 from langchain.retrievers.self_query.base import SelfQueryRetriever
 from langchain_core.language_models.chat_models import BaseChatModel
+from aws_xray_sdk.core import xray_recorder
+from aws_xray_sdk.core import patch_all
+patch_all()
 
+@xray_recorder.capture()
 class LLMPriorityRetriever(BaseRetriever):
     """Retriever that merges the results of multiple retrievers."""
 

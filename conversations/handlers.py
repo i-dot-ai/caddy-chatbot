@@ -4,10 +4,14 @@ import json
 from models import ProcessChatMessageEvent, responses_table
 from utils import idempotent, similar_question_dialog
 from responses import send_message_to_adviser_space
+from aws_xray_sdk.core import xray_recorder
+from aws_xray_sdk.core import patch_all
+
+patch_all()
 
 serverless = boto3.client('lambda')
 
-@idempotent()
+@xray_recorder.capture()
 def handle_incoming_message(event):
 
     try:
@@ -56,6 +60,7 @@ def handle_incoming_message(event):
 
     return
 
+@xray_recorder.capture()
 def get_similar_question_dialog(event):
     similar_question = event['common']['parameters']['llmPrompt']
     question_answer = event['common']['parameters']['llmAnswer']
@@ -63,6 +68,7 @@ def get_similar_question_dialog(event):
 
     return similar_question_dialog(similar_question, question_answer, similarity)
 
+@xray_recorder.capture()
 def introduce_caddy(event):
 
     match event['space']['type']:

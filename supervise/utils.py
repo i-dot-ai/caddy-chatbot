@@ -1,6 +1,11 @@
 from collections import deque
 import json
+from aws_xray_sdk.core import xray_recorder
+from aws_xray_sdk.core import patch_all
 
+patch_all()
+
+@xray_recorder.capture()
 def create_supervision_request_card(user_identifier, initial_query):
 
     request_awaiting = {
@@ -96,6 +101,7 @@ def create_supervision_request_card(user_identifier, initial_query):
 
     return request_awaiting, request_approved, request_rejected
 
+@xray_recorder.capture()
 def create_supervision_card(card_for_approval, conversation_id, response_id, message_id, thread_id, new_request_message_id, request_approved, request_rejected):
 
     approval_buttons_section = {
@@ -191,7 +197,7 @@ def create_supervision_card(card_for_approval, conversation_id, response_id, mes
 
     return card_for_approval
 
-
+@xray_recorder.capture()
 def create_updated_supervision_card(supervision_card, approver, approved, supervisor_message):
 
     if approved:
@@ -225,7 +231,7 @@ def create_updated_supervision_card(supervision_card, approver, approved, superv
 
     return supervision_card
 
-
+@xray_recorder.capture()
 def create_approved_card(card, approver):
     approval_json =  {
                 "widgets": [
@@ -241,7 +247,7 @@ def create_approved_card(card, approver):
 
     return card
 
-
+@xray_recorder.capture()
 def create_rejected_card(card, approver):
     rejection_json =  {
                 "widgets": [
@@ -257,7 +263,7 @@ def create_rejected_card(card, approver):
 
     return card
 
-
+@xray_recorder.capture()
 def get_user_to_add_details_dialog():
     input_dialog = {
       "action_response": {
@@ -325,6 +331,7 @@ def get_user_to_add_details_dialog():
     }
     return input_dialog
 
+@xray_recorder.capture()
 def get_user_to_remove_details_dialog():
     input_dialog = {
       "action_response": {
@@ -373,6 +380,7 @@ def get_user_to_remove_details_dialog():
     }
     return input_dialog
 
+@xray_recorder.capture()
 def user_list_dialog(supervision_users: str, space_display_name: str):
     list_dialog = {
       "action_response": {
@@ -399,6 +407,7 @@ def user_list_dialog(supervision_users: str, space_display_name: str):
     }
     return list_dialog
 
+@xray_recorder.capture()
 def helper_dialog():
     helper_dialog = {
       "action_response": {
@@ -425,6 +434,7 @@ def helper_dialog():
     }
     return helper_dialog
 
+@xray_recorder.capture()
 def success_dialog():
     success_dialog = {
         "action_response": {
@@ -436,9 +446,11 @@ def success_dialog():
     }
     return success_dialog
 
+@xray_recorder.capture()
 def failed_dialog(error):
     print(f"### FAILED: {error} ###")
 
+@xray_recorder.capture()
 def get_supervisor_response_dialog(conversation_id, response_id, message_id, thread_id, new_request_message_id, request_rejected):
     supervisor_response_dialog = {
       "action_response": {
