@@ -9,7 +9,8 @@
 		"ghcr.io/devcontainers-contrib/features/pre-commit:2": {},
 		"ghcr.io/customink/codespaces-features/sam-cli:1": {},
 		"ghcr.io/devcontainers/features/docker-in-docker:2": {},
-		"ghcr.io/dhoeric/features/google-cloud-cli:1": {}
+		"ghcr.io/dhoeric/features/google-cloud-cli:1": {},
+		"git-lfs": "latest"
 	},
 	"postCreateCommand": "make setup-dev-container",
 	"runArgs": ["--add-host=host.docker.internal:host-gateway"]
