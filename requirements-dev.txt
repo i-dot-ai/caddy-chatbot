@@ -18,3 +18,5 @@ sentence_transformers
 lark
 requests-aws4auth
 elasticsearch
+presidio-analyzer
+presidio-anonymizer
