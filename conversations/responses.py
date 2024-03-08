@@ -48,3 +48,71 @@ def update_message_in_adviser_space(space_id: str, message_id: str, message):
         body=message,
         updateMask='text'
     ).execute()
+
+# Send message to the adviser space
+@xray_recorder.capture()
+def send_pii_warning_to_adviser_space(space_id: str, message, thread_id, message_event):
+    caddy.spaces().messages().create(
+        parent=f"spaces/{space_id}",
+        body={
+           "cardsV2": [
+          {
+            "cardId": "PIIDetected",
+            "card": {
+              "sections": [
+                    {
+                "widgets": [
+                    {
+                    "textParagraph": {
+                        "text": message
+                        }
+                    },
+                ],
+                },{
+                "widgets": [
+                  {
+                    "buttonList": {
+                    "buttons": [
+                    {
+                        "text": "Proceed without redaction",
+                        "onClick": {
+                            "action": {
+                            "function": "Proceed",
+                            "parameters": [
+                                {
+                                "key": 'message_event',
+                                "value": json.dumps(message_event)
+                                },
+                            ]
+                            }
+                        }
+                    }, {
+                        "text": "Edit original query",
+                        "onClick": {
+                            "action": {
+                            "function": "edit_query_dialog",
+                            "interaction": "OPEN_DIALOG",
+                            "parameters": [
+                                {
+                                "key": 'message_event',
+                                "value": json.dumps(message_event)
+                                },
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                    }
+                  ],
+                }
+              ],
+            },
+          },
+        ],
+        "thread": {
+            "name": f"spaces/{space_id}/threads/{thread_id}"
+        }
+        },
+        messageReplyOption='REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD'
+    ).execute()

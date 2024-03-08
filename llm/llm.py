@@ -156,8 +156,8 @@ def build_chain():
         base_compressor=pipeline, base_retriever=lotr
     )
 
-    claude_llm = Bedrock(
-        model_id="anthropic.claude-v2:1",
+    llm = Bedrock(
+        model_id="anthropic.claude-instant-v1",
         region_name="eu-central-1",
         model_kwargs={
             "temperature": 0.2,
@@ -166,7 +166,7 @@ def build_chain():
         )
 
     chain = RetrievalQA.from_chain_type(
-        llm=claude_llm,
+        llm=llm,
         retriever=compression_retriever,
         return_source_documents=True,
         chain_type_kwargs={
