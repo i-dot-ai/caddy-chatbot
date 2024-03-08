@@ -2,11 +2,11 @@ from datetime import datetime
 import boto3
 import json
 from models import ProcessChatMessageEvent, responses_table
-from utils import idempotent, similar_question_dialog
-from responses import send_message_to_adviser_space
+from utils import idempotent, similar_question_dialog, edit_query_dialog
+from responses import send_message_to_adviser_space, send_pii_warning_to_adviser_space
+from anonymise import analyse, redact
 from aws_xray_sdk.core import xray_recorder
 from aws_xray_sdk.core import patch_all
-
 patch_all()
 
 serverless = boto3.client('lambda')
@@ -14,42 +14,47 @@ serverless = boto3.client('lambda')
 @xray_recorder.capture()
 def handle_incoming_message(event):
 
-    try:
-        message_string = event['message']['text']
-        source_client = "Google Chat"
-        user = event['user']['email']
-        space_id = event['space']['name'].split('/')[1]
-        name = event['user']['name']
-        timestamp = event['eventTime']
-        thread_id = None
-        if "thread" in event['message']:
-            thread_id = event['message']['thread']['name'].split('/')[3]
-    except KeyError:
-        message_string = event['message_string']
-        source_client = "Unknown"
-        user = "unknown@unknown.com"
-        space_id = "Unknown"
-        name = "Unknown"
-        timestamp = "Unknown"
+    source_client = "Google Chat"
+    message_string = event['message']['text']
+    user = event['user']['email']
+    space_id = event['space']['name'].split('/')[1]
+    name = event['user']['name']
+    timestamp = event['eventTime']
+    thread_id = None
+    if "thread" in event['message']:
+        thread_id = event['message']['thread']['name'].split('/')[3]
+
+    if "proceed" not in event:
+        pii_identified = analyse(message_string)
+
+        if pii_identified:
+            message_string = redact(message_string, pii_identified)
+
+            send_pii_warning_to_adviser_space(
+            space_id=space_id,
+            message="<b><font color=\"#FF0000\">PII DETECTED</font><b> <i>Please ensure all queries to Caddy are anonymised. \n\n Choose whether to proceed anyway or edit your original query<i>",
+            thread_id=thread_id,
+            message_event=event
+            )
+
+            return
 
     thread_id, message_id = send_message_to_adviser_space(
-        space_id=space_id,
-        message="*Status:* _*Processing*_",
-        thread_id=thread_id
-        )
-
-    message_string = message_string.replace('@Caddy', '')
+    space_id=space_id,
+    message="*Status:* _*Processing*_",
+    thread_id=thread_id
+    )
 
     message_event = ProcessChatMessageEvent(
-        type="PROCESS_CHAT_MESSAGE",
-        user=user,
-        name=name,
-        space_id=space_id,
-        thread_id=thread_id,
-        message_id=message_id,
-        message_string=message_string,
-        source_client=source_client,
-        timestamp=timestamp
+    type="PROCESS_CHAT_MESSAGE",
+    user=user,
+    name=name,
+    space_id=space_id,
+    thread_id=thread_id,
+    message_id=message_id,
+    message_string=message_string.replace('@Caddy', ''),
+    source_client=source_client,
+    timestamp=timestamp
     ).model_dump_json()
 
     serverless.invoke(
@@ -59,6 +64,13 @@ def handle_incoming_message(event):
     )
 
     return
+
+@xray_recorder.capture()
+def get_edit_query_dialog(event):
+    message_string = event['message']['text']
+    message_string = message_string.replace('@Caddy', '')
+
+    return edit_query_dialog(event, message_string)
 
 @xray_recorder.capture()
 def get_similar_question_dialog(event):

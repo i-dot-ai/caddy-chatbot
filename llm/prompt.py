@@ -49,6 +49,7 @@ need to claim this within 6 weeks of receiving the service charge demand.
 "
 
 In your answer, use <b>bold</b> to highlight the most question-relevant parts in your response.
+If any PII is present in the query please remind the adviser to anonymise their messages to Caddy.
 
 Assistant:
 """
