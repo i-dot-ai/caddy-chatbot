@@ -24,6 +24,9 @@ Parameters:
   IdempotencyTableName:
     Type: String
     Description: Name of the DynamoDB table for idempotency
+  OfficesTableName:
+    Type: String
+    Description: Name of the DynamoDB table for responses
   OpensearchUrl:
     Type: String
     Description: Url of Opensearch Index
@@ -107,6 +110,7 @@ Resources:
           RESPONSES_TABLE_NAME: !Ref ResponsesTableName
           USERS_TABLE_NAME: !Ref UserTableName
           IDEMPOTENCY_TABLE_NAME: !Ref IdempotencyTableName
+          OFFICES_TABLE_NAME: !Ref OfficesTableName
       Events:
         Conversations:
           Type: Api
@@ -181,6 +185,22 @@ Resources:
                     - dynamodb:UpdateItem
                     - dynamodb:DeleteItem
                   Resource: !GetAtt IdempotencyTable.Arn
+          - PolicyName: ConversationsOfficesDynamoPolicy
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:GetItem
+                  Resource: !GetAtt OfficesTable.Arn
+          - PolicyName: ConversationsUsersDynamoPolicy
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:GetItem
+                  Resource: !GetAtt UsersTable.Arn
 
   LlmFunction:
     Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
@@ -345,6 +365,22 @@ Resources:
                   - dynamodb:DeleteItem
                   - dynamodb:Scan
                 Resource: !GetAtt ResponsesTable.Arn
+        - PolicyName: SuperviseOfficesDynamoPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                Resource: !GetAtt OfficesTable.Arn
+        - PolicyName: SuperviseUsersDynamoPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                Resource: !GetAtt UsersTable.Arn
 
   SuperviseFunction:
     Type: AWS::Serverless::Function # More info about Function Resource:
@@ -365,6 +401,7 @@ Resources:
           MESSAGES_TABLE_NAME: !Ref MessageTableName
           RESPONSES_TABLE_NAME: !Ref ResponsesTableName
           USERS_TABLE_NAME: !Ref UserTableName
+          OFFICES_TABLE_NAME: !Ref OfficesTableName
       Events:
         ProcessSupervisionResponse:
           Type: Api
@@ -437,31 +474,18 @@ Resources:
         Enabled: true
       BillingMode: PAY_PER_REQUEST
 
-Outputs:
-  ChatAPI:
-    Description: "API Gateway endpoint URL for chat function"
-    Value: !Sub "https://${CaddyApi}.execute-api.${AWS::Region}.amazonaws.com/dev/chat/"
-  SupervisionAPI:
-    Description: "API Gateway endpoint URL for chat function"
-    Value: !Sub "https://${CaddyApi}.execute-api.${AWS::Region}.amazonaws.com/dev/supervision/"
-  ConversationsFunction:
-    Description: "ConversationsFunction ARN"
-    Value: !GetAtt ConversationsFunction.Arn
-  ConversationsFunctionIamRole:
-    Description: "Implicit IAM Role created for ConversationsFunction function"
-    Value: !GetAtt ConversationsFunctionIamRole.Arn
-  SuperviseFunction:
-    Description: "SuperviseFunction ARN"
-    Value: !GetAtt SuperviseFunction.Arn
-  SuperviseFunctionIamRole:
-    Description: "Implicit IAM Role created for SuperviseFunction function"
-    Value: !GetAtt SuperviseFunctionIamRole.Arn
-  MessagesTable:
-    Description: "Mesages Table ARN"
-    Value: !GetAtt MessagesTable.Arn
-  UsersTable:
-    Description: "Users Table ARN"
-    Value: !GetAtt UsersTable.Arn
-  IdempotencyTable:
-    Description: "Idempotency Table ARN"
-    Value: !GetAtt IdempotencyTable.Arn
+  OfficesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+        TableName: !Ref OfficesTableName
+        AttributeDefinitions:
+        - AttributeName: emailDomain
+          AttributeType: S
+        KeySchema:
+        - AttributeName: emailDomain
+          KeyType: HASH
+        ProvisionedThroughput:
+            ReadCapacityUnits: 1
+            WriteCapacityUnits: 1
+        StreamSpecification:
+            StreamViewType: NEW_AND_OLD_IMAGES
