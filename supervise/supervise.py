@@ -7,6 +7,7 @@ def lambda_handler(event, context):
 
     if event['type'] == 'SUPERVISION_REQUIRED':
         receive_new_ai_response(event)
+        return
 
     user = event['user']['email']
     domain = user.split('@')[1]
