@@ -11,6 +11,9 @@ def lambda_handler(event, context):
     user = event['user']['email']
     domain = user.split('@')[1]
 
+    if domain == 'gmail.com':
+        return json.dumps({"text": "Caddy is not currently available for personal use."})
+
     user_registered = users_table.get_item(Key={"userEmail": user})
     office_registered = offices_table.get_item(Key={"emailDomain": domain})
 
