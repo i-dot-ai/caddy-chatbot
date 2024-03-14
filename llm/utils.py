@@ -1,7 +1,8 @@
-from models import responses_table, idempotent_table
+from models import responses_table, idempotent_table, offices_table
 from boto3.dynamodb.conditions import Key
 from aws_xray_sdk.core import xray_recorder
 from aws_xray_sdk.core import patch_all
+import json
 patch_all()
 
 @xray_recorder.capture()
@@ -13,6 +14,43 @@ def get_chat_history(message):
     )
     history = format_chat_history(response['Items'])
     return history
+
+def get_user_workspace_variables(user_email : str):
+  """ Takes a user table, and retrieves variables for user workspace """
+
+  email_domain = user_email.split('@')[1]
+
+  # find the relevant office in the table, and return their variable dictionary
+
+  response = offices_table.get_item(
+    Key={
+      'emailDomain': email_domain
+    }
+  )
+
+  # Convert the JSON string back to dictionary
+  workspace_vars = json.loads(response['Item']['workspaceVars'])
+
+  return workspace_vars
+
+
+def add_workspace_variables_to_table(email_domain : str, workspace_vars : dict):
+  """Finds the relevant office in the office table and adds the workspace variables"""
+
+  workspace_vars_json = json.dumps(workspace_vars)
+
+  response = offices_table.update_item(
+    Key={
+      'emailDomain': email_domain
+    },
+    UpdateExpression="set workspaceVars=:w",
+    ExpressionAttributeValues={
+      ':w': workspace_vars_json
+    },
+    ReturnValues="UPDATED_NEW"
+  )
+
+  return response
 
 @xray_recorder.capture()
 def format_chat_history(user_messages):

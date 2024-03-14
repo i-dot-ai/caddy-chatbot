@@ -6,7 +6,8 @@ from models import UserMessage, LlmResponse, SupervisionEvent, ProcessChatMessag
 from utils import create_card, get_chat_history, idempotent
 from llm import run_chain, build_chain
 from responses import send_message_to_adviser_space, update_message_in_adviser_space
-from utils import bcolors
+from utils import bcolors, get_user_workspace_variables
+from modules import *
 from aws_xray_sdk.core import xray_recorder
 from aws_xray_sdk.core import patch_all
 patch_all()
@@ -21,7 +22,31 @@ def process_chat_message(event: ProcessChatMessageEvent):
         AiResponse: The llm output
     """
 
+    # look for any modules linked to the user workspace, and execute it.
+    user_email = event['user']
+    user_workspace_variables = get_user_workspace_variables(user_email)
+    modules_to_use = user_workspace_variables['before_message']
+
+    module_outputs = {}
+    for module in modules_to_use['before_message']:
+        module_name = module['module_name']
+        module_arguments = module['module_arguments']
+
+        try:
+            module_func = globals()[module_name]
+        except KeyError:
+            print(f"Module function '{module_name}' not found.")
+            continue
+
+        try:
+            result = module_func(event=event, **module_arguments)
+            module_outputs[module_name] = result
+        except Exception as e:
+            print(f"Error occurred while executing module '{module_name}': {str(e)}")
+
     # this will be received from API
+    module_outputs_json = json.dumps(module_outputs)
+
     message_query = UserMessage(
         conversation_id=event['space_id'],
         thread_id=event['thread_id'],
@@ -30,8 +55,18 @@ def process_chat_message(event: ProcessChatMessageEvent):
         user_email=event['user'],
         message=event['message_string'],
         message_sent_timestamp=event['timestamp'],
-        message_received_timestamp=datetime.now()
+        message_received_timestamp=datetime.now(),
+        user_arguments=modules_to_use,
+        argument_output=module_outputs_json
     )
+
+    # store user message in db
+    store_message(message_query, message_table)
+
+    # Check if any of the module_outputs returned "end_interaction"
+    for output in module_outputs.values():
+        if isinstance(output, dict) and output.get('end_interaction'):
+            return
 
     chat_history = get_chat_history(message_query)
 
@@ -62,9 +97,6 @@ def process_chat_message(event: ProcessChatMessageEvent):
         llm_prompt_timestamp=ai_prompt_timestamp,
         llm_response_timestamp=ai_response_timestamp,
     )
-
-    # store user message in db
-    store_message(message_query, message_table)
 
     # store ai response in db
     store_response(ai_answer, responses_table)
