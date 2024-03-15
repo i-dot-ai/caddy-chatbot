@@ -35,9 +35,13 @@ def get_user_workspace_variables(user_email : str):
   return workspace_vars
 
 
-def execute_optional_modules(event, execution_time = ['before_message_processed','after_message_processed','end_of_conversation']):
+def execute_optional_modules(event, execution_time ):
   """ Executes optional modules linked to the user workspace"""
+  
+  suitable_time_strings = ['before_message_processed','after_message_processed','end_of_conversation']
 
+  if execution_time not in suitable_time_strings:
+    raise ValueError(f"Invalid execution time: {execution_time}. Must be one of {suitable_time_strings}")
   continue_conversation = True
 
   user_email = event['user']

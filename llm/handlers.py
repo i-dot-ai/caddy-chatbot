@@ -22,14 +22,14 @@ def process_chat_message(event: ProcessChatMessageEvent):
     """
 
     # look for any modules linked to the user workspace, and execute it.
-    modules_to_use, module_outputs_json, continue_conversation = execute_optional_modules(event)
+    modules_to_use, module_outputs_json, continue_conversation = execute_optional_modules(event, execution_time='before_message_processed')
 
     if continue_conversation == False:
         return
 
     message_query = UserMessage(
         conversation_id=event['space_id'],
-        thread_id=event['thread_id'],
+        thread_id=event['thread_id'],    
         message_id=event['message_id'],
         client=event['source_client'],
         user_email=event['user'],
