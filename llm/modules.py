@@ -18,11 +18,11 @@ def randomisation(event, split, control_group_message):
 
     if random_number < split:
         send_message_to_adviser_space(space_id, control_group_message, thread_id)
-        return "control", "end_interaction"
+        return "end_interaction", "control"
 
     else:
         return "continue_interaction", "treatment"
-    
+
 module_registry = {
     "randomisation": randomisation,
 }

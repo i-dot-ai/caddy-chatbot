@@ -29,19 +29,21 @@ def process_chat_message(event: ProcessChatMessageEvent):
 
     message_query = UserMessage(
         conversation_id=event['space_id'],
-        thread_id=event['thread_id'],    
+        thread_id=event['thread_id'],
         message_id=event['message_id'],
         client=event['source_client'],
         user_email=event['user'],
         message=event['message_string'],
         message_sent_timestamp=event['timestamp'],
         message_received_timestamp=datetime.now(),
-        user_arguments=modules_to_use,
+        user_arguments=json.dumps(modules_to_use[0]),
         argument_output=module_outputs_json
     )
 
     # store user message in db
     store_message(message_query, message_table)
+
+    module_outputs_json = json.loads(module_outputs_json)
 
     # Check if any of the module_outputs returned "end_interaction"
     for output in module_outputs_json.values():
