@@ -48,6 +48,8 @@ need to claim this within 6 weeks of receiving the service charge demand.
  So in summary, there are several options your client could explore to get assistance with paying service charges, including loans, their landlord purchasing a share in the property, extra money from the council, or Universal Credit budgeting advances. Let me know if you need any clarification or have additional questions.
 "
 
+YOU MUST ANSWERT THE QUESTION FIRST AS BEST AS YOU CAN BEFORE SUGGESTING QUESTIONS TO ASK THE CLIENT.
+
 In your answer, use <b>bold</b> to highlight the most question-relevant parts in your response.
 If any PII is present in the query please remind the adviser to anonymise their messages to Caddy.
 
