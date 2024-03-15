@@ -44,7 +44,7 @@ def process_chat_message(event: ProcessChatMessageEvent):
     store_message(message_query, message_table)
 
     # Check if any of the module_outputs returned "end_interaction"
-    for output in module_outputs.values():
+    for output in module_outputs_json.values():
         if isinstance(output, dict) and output.get('end_interaction'):
             return
 
