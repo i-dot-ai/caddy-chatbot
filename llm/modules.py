@@ -1,5 +1,5 @@
 import random
-from responses import send_message_to_adviser_space
+from responses import update_message_in_adviser_space
 
 # the module file includes optional plugins called during the conversation. Each must be passed an event, as well as optional kwargs
 # the module must return a tuple of (status, message) where status is either "end_interaction" or "continue_interaction"
@@ -10,14 +10,14 @@ from responses import send_message_to_adviser_space
 def randomisation(event, split, control_group_message):
     """ Randomly assign users to a control group, and send them a message """
     space_id = event['space_id']
-    thread_id = event['thread_id']
+    message_id = event['message_id']
 
     random_number = random.random()
 
     # TODO store randomisation in a database
 
     if random_number < split:
-        send_message_to_adviser_space(space_id, control_group_message, thread_id)
+        update_message_in_adviser_space(space_id, message_id, {"text": control_group_message})
         return "end_interaction", "control"
 
     else:
