@@ -6,8 +6,7 @@ from models import UserMessage, LlmResponse, SupervisionEvent, ProcessChatMessag
 from utils import create_card, get_chat_history, idempotent
 from llm import run_chain, build_chain
 from responses import send_message_to_adviser_space, update_message_in_adviser_space
-from utils import bcolors, get_user_workspace_variables
-from modules import *
+from utils import bcolors, get_user_workspace_variables, execute_optional_modules
 from aws_xray_sdk.core import xray_recorder
 from aws_xray_sdk.core import patch_all
 patch_all()
@@ -23,29 +22,10 @@ def process_chat_message(event: ProcessChatMessageEvent):
     """
 
     # look for any modules linked to the user workspace, and execute it.
-    user_email = event['user']
-    user_workspace_variables = get_user_workspace_variables(user_email)
-    modules_to_use = user_workspace_variables['before_message']
+    modules_to_use, module_outputs_json, continue_conversation = execute_optional_modules(event)
 
-    module_outputs = {}
-    for module in modules_to_use['before_message']:
-        module_name = module['module_name']
-        module_arguments = module['module_arguments']
-
-        try:
-            module_func = globals()[module_name]
-        except KeyError:
-            print(f"Module function '{module_name}' not found.")
-            continue
-
-        try:
-            result = module_func(event=event, **module_arguments)
-            module_outputs[module_name] = result
-        except Exception as e:
-            print(f"Error occurred while executing module '{module_name}': {str(e)}")
-
-    # this will be received from API
-    module_outputs_json = json.dumps(module_outputs)
+    if continue_conversation == False:
+        return
 
     message_query = UserMessage(
         conversation_id=event['space_id'],
