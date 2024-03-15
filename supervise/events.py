@@ -9,6 +9,7 @@ from utils import create_supervision_card, create_updated_supervision_card, crea
 from models import User, SupervisionEvent, ApprovalEvent, store_approver_received_timestamp, store_approver_event, responses_table
 from aws_xray_sdk.core import xray_recorder
 from aws_xray_sdk.core import patch_all
+from survey import run_survey
 
 patch_all()
 
@@ -56,7 +57,8 @@ def receive_new_ai_response(event: SupervisionEvent):
                       thread_id=thread_id,
                       new_request_message_id=new_request_message_id,
                       request_approved=request_approved,
-                      request_rejected=request_rejected
+                      request_rejected=request_rejected,
+                      user_email=user
                     )
 
             respond_to_supervisor_thread(
@@ -80,6 +82,7 @@ def received_approval(event):
     user_message_id = event['common']['parameters']['messageId']
     request_message_id = event['common']['parameters']['newRequestId']
     request_card = json.loads(event['common']['parameters']['requestApproved'])
+    user_email = event['common']['parameters']['userEmail']
 
     approved_card = create_approved_card(card=card, approver=approver)
 
@@ -125,6 +128,8 @@ def received_approval(event):
     )
     store_approver_event(approval_event, table=responses_table)
 
+    run_survey(user_email=user_email, adviser_space_id=users_space, thread_id=thread_id)
+
 @xray_recorder.capture()
 def received_rejection(event):
     supervisor_card = { "cardsV2": event["message"]["cardsV2"] }
@@ -138,6 +143,7 @@ def received_rejection(event):
     thread_id = event['common']['parameters']['threadId']
     request_message_id = event['common']['parameters']['newRequestId']
     request_card = json.loads(event['common']['parameters']['requestRejected'])
+    user_email = event['common']['parameters']['userEmail']
 
     update_message_in_supervisor_space(
         space_id=supervisor_space,
@@ -177,6 +183,8 @@ def received_rejection(event):
         supervisor_message=supervisor_message
     )
     store_approver_event(rejection_event, table=responses_table)
+
+    run_survey(user_email=user_email, adviser_space_id=users_space, thread_id=thread_id)
 
     return success_dialog()
 
