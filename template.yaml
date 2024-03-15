@@ -222,6 +222,7 @@ Resources:
           RESPONSES_TABLE_NAME: !Ref ResponsesTableName
           USERS_TABLE_NAME: !Ref UserTableName
           IDEMPOTENCY_TABLE_NAME: !Ref IdempotencyTableName
+          OFFICES_TABLE_NAME: !Ref OfficesTableName
           HF_HOME: "/tmp"
           XDG_CACHE_HOME: "/tmp"
           OPENSEARCH_HTTPS: !Ref OpensearchUrl
@@ -309,6 +310,15 @@ Resources:
                     - dynamodb:UpdateItem
                     - dynamodb:DeleteItem
                   Resource: !GetAtt IdempotencyTable.Arn
+          - PolicyName: LlmOfficesDynamoPolicy
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:GetItem
+                    - dynamodb:UpdateItem
+                  Resource: !GetAtt OfficesTable.Arn
 
   SuperviseFunctionIamRole:
     Type: AWS::IAM::Role

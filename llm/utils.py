@@ -37,7 +37,7 @@ def get_user_workspace_variables(user_email : str):
 
 def execute_optional_modules(event, execution_time ):
   """ Executes optional modules linked to the user workspace"""
-  
+
   suitable_time_strings = ['before_message_processed','after_message_processed','end_of_conversation']
 
   if execution_time not in suitable_time_strings:
@@ -148,37 +148,37 @@ def create_card(ai_response):
 
     return card
 
-@xray_recorder.capture()
-def similar_question_dialog(similar_question, question_answer, similarity):
-  question_dialog = {
-      "action_response": {
-        "type": "DIALOG",
-        "dialog_action": {
-          "dialog": {
-            "body": {
-              "sections": [
-                {
-                  "header": f"<font color=\"#004f88\"><b>{similar_question}</b></font>",
-                  "widgets": [
-                    {
-                      "textParagraph": {
-                        "text": question_answer
-                      }
-                    },
-                    {
-                      "textParagraph": {
-                        "text": f"<font color=\"#004f88\"><b>{similarity}% Match</b></font>"
-                      }
-                    }
-                  ],
-                }
-              ]
-            }
-          }
-        }
-      }
-    }
-  return question_dialog
+# @xray_recorder.capture()
+# def similar_question_dialog(similar_question, question_answer, similarity):
+#   question_dialog = {
+#       "action_response": {
+#         "type": "DIALOG",
+#         "dialog_action": {
+#           "dialog": {
+#             "body": {
+#               "sections": [
+#                 {
+#                   "header": f"<font color=\"#004f88\"><b>{similar_question}</b></font>",
+#                   "widgets": [
+#                     {
+#                       "textParagraph": {
+#                         "text": question_answer
+#                       }
+#                     },
+#                     {
+#                       "textParagraph": {
+#                         "text": f"<font color=\"#004f88\"><b>{similarity}% Match</b></font>"
+#                       }
+#                     }
+#                   ],
+#                 }
+#               ]
+#             }
+#           }
+#         }
+#       }
+#     }
+#   return question_dialog
 
 @xray_recorder.capture()
 def idempotent():
