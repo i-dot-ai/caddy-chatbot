@@ -88,3 +88,13 @@ def introduce_caddy(event):
             return json.dumps({"text": "Hi, I'm Caddy! I'm an AI support for Citizens Advice advisers, I'm here to help give advice to support in resolving your client queries. \n *To get started just send me a query*"})
         case 'ROOM':
             return json.dumps({"text": f"Hi, thank you for adding me to {event['space']['displayName']}, I'm Caddy! I'm an AI support for Citizens Advice advisers, I'm here to help give advice to support in resolving your client queries. \n\n *Just remember to type `@Caddy` at the start of your query if you would like my help.*"})
+
+@xray_recorder.capture()
+def handle_survey_response(event):
+    question = event['common']['parameters']['question']
+    response = event['common']['parameters']['response']
+    threadId = event['thread']['name'].split('/')[3]
+
+    print(question, response, threadId)
+
+    # TODO: implement survey response saving to DynamoDB

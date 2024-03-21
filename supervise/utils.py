@@ -102,7 +102,7 @@ def create_supervision_request_card(user_identifier, initial_query):
     return request_awaiting, request_approved, request_rejected
 
 @xray_recorder.capture()
-def create_supervision_card(card_for_approval, conversation_id, response_id, message_id, thread_id, new_request_message_id, request_approved, request_rejected):
+def create_supervision_card(card_for_approval, conversation_id, response_id, message_id, thread_id, new_request_message_id, request_approved, request_rejected, user_email):
 
     approval_buttons_section = {
                 "widgets": [
@@ -142,6 +142,10 @@ def create_supervision_card(card_for_approval, conversation_id, response_id, mes
                                 {
                                 "key": "requestApproved",
                                 "value": json.dumps(request_approved)
+                                },
+                                {
+                                "key": "userEmail",
+                                "value": user_email
                                 }
                             ]
                             }
@@ -176,6 +180,10 @@ def create_supervision_card(card_for_approval, conversation_id, response_id, mes
                                 {
                                 "key": "requestRejected",
                                 "value": json.dumps(request_rejected)
+                                },
+                                {
+                                "key": "userEmail",
+                                "value": user_email
                                 }
                               ]
                             }

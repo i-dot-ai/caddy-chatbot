@@ -27,6 +27,9 @@ Parameters:
   OfficesTableName:
     Type: String
     Description: Name of the DynamoDB table for responses
+  EvaluationTableName:
+    Type: String
+    Description: Name of the DynamoDB table for evaluation
   OpensearchUrl:
     Type: String
     Description: Url of Opensearch Index
@@ -111,6 +114,7 @@ Resources:
           USERS_TABLE_NAME: !Ref UserTableName
           IDEMPOTENCY_TABLE_NAME: !Ref IdempotencyTableName
           OFFICES_TABLE_NAME: !Ref OfficesTableName
+          EVALUATION_TABLE_NAME: !Ref EvaluationTableName
       Events:
         Conversations:
           Type: Api
@@ -201,6 +205,14 @@ Resources:
                   Action:
                     - dynamodb:GetItem
                   Resource: !GetAtt UsersTable.Arn
+          - PolicyName: ConversationsEvaluationDynamoPolicy
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:UpdateItem
+                  Resource: !GetAtt EvaluationTable.Arn
 
   LlmFunction:
     Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
@@ -391,6 +403,14 @@ Resources:
                 Action:
                   - dynamodb:GetItem
                 Resource: !GetAtt UsersTable.Arn
+        - PolicyName: SuperviseEvaluationDynamoPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                Resource: !GetAtt EvaluationTable.Arn
 
   SuperviseFunction:
     Type: AWS::Serverless::Function # More info about Function Resource:
@@ -412,6 +432,7 @@ Resources:
           RESPONSES_TABLE_NAME: !Ref ResponsesTableName
           USERS_TABLE_NAME: !Ref UserTableName
           OFFICES_TABLE_NAME: !Ref OfficesTableName
+          EVALUATION_TABLE_NAME: !Ref EvaluationTableName
       Events:
         ProcessSupervisionResponse:
           Type: Api
@@ -493,6 +514,22 @@ Resources:
           AttributeType: S
         KeySchema:
         - AttributeName: emailDomain
+          KeyType: HASH
+        ProvisionedThroughput:
+            ReadCapacityUnits: 1
+            WriteCapacityUnits: 1
+        StreamSpecification:
+            StreamViewType: NEW_AND_OLD_IMAGES
+
+  EvaluationTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+        TableName: !Ref EvaluationTableName
+        AttributeDefinitions:
+        - AttributeName: threadId
+          AttributeType: S
+        KeySchema:
+        - AttributeName: threadId
           KeyType: HASH
         ProvisionedThroughput:
             ReadCapacityUnits: 1
