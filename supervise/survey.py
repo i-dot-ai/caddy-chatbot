@@ -93,6 +93,10 @@ def get_post_call_survey_card(post_call_survey_questions):
                         "key": 'question',
                         "value": question
                         },
+                        {
+                        "key": 'response',
+                        "value": value
+                        },
                     ]
                     }
                 }

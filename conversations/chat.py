@@ -1,4 +1,4 @@
-from handlers import handle_incoming_message, get_similar_question_dialog, introduce_caddy, get_edit_query_dialog
+from handlers import handle_incoming_message, get_similar_question_dialog, introduce_caddy, get_edit_query_dialog, handle_survey_response
 from utils import success_dialog
 from models import offices_table, users_table
 import json
@@ -34,6 +34,8 @@ def lambda_handler(event, context):
                             event['message']['text'] = edited_message
                             handle_incoming_message(event)
                             return success_dialog()
+                        case 'survey_response':
+                            handle_survey_response(event)
                 case 'MESSAGE':
                     return handle_incoming_message(event)
                 case 'ADDED_TO_SPACE':
