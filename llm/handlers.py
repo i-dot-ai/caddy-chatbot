@@ -6,7 +6,7 @@ from models import UserMessage, LlmResponse, SupervisionEvent, ProcessChatMessag
 from utils import create_card, get_chat_history, idempotent
 from llm import run_chain, build_chain
 from responses import send_message_to_adviser_space, update_message_in_adviser_space
-from utils import bcolors
+from utils import bcolors, get_user_workspace_variables, execute_optional_modules
 from aws_xray_sdk.core import xray_recorder
 from aws_xray_sdk.core import patch_all
 patch_all()
@@ -21,7 +21,12 @@ def process_chat_message(event: ProcessChatMessageEvent):
         AiResponse: The llm output
     """
 
-    # this will be received from API
+    # look for any modules linked to the user workspace, and execute it.
+    modules_to_use, module_outputs_json, continue_conversation = execute_optional_modules(event, execution_time='before_message_processed')
+
+    if continue_conversation == False:
+        return
+
     message_query = UserMessage(
         conversation_id=event['space_id'],
         thread_id=event['thread_id'],
@@ -30,8 +35,20 @@ def process_chat_message(event: ProcessChatMessageEvent):
         user_email=event['user'],
         message=event['message_string'],
         message_sent_timestamp=event['timestamp'],
-        message_received_timestamp=datetime.now()
+        message_received_timestamp=datetime.now(),
+        user_arguments=json.dumps(modules_to_use[0]),
+        argument_output=module_outputs_json
     )
+
+    # store user message in db
+    store_message(message_query, message_table)
+
+    module_outputs_json = json.loads(module_outputs_json)
+
+    # Check if any of the module_outputs returned "end_interaction"
+    for output in module_outputs_json.values():
+        if isinstance(output, dict) and output.get('end_interaction'):
+            return
 
     chat_history = get_chat_history(message_query)
 
@@ -62,9 +79,6 @@ def process_chat_message(event: ProcessChatMessageEvent):
         llm_prompt_timestamp=ai_prompt_timestamp,
         llm_response_timestamp=ai_response_timestamp,
     )
-
-    # store user message in db
-    store_message(message_query, message_table)
 
     # store ai response in db
     store_response(ai_answer, responses_table)

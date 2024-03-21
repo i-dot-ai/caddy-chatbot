@@ -17,6 +17,8 @@ class UserMessage(pydantic.BaseModel):
     message: str
     message_sent_timestamp: str
     message_received_timestamp: datetime
+    user_arguments: Union[pydantic.Json, None] = None
+    argument_output: Union[pydantic.Json, None] = None
 
 class LlmResponse(pydantic.BaseModel):
     response_id: str = str(uuid.uuid4())
@@ -191,3 +193,4 @@ message_table = dynamodb.Table(os.getenv('MESSAGES_TABLE_NAME'))
 users_table = dynamodb.Table(os.getenv('USERS_TABLE_NAME'))
 responses_table = dynamodb.Table(os.getenv('RESPONSES_TABLE_NAME'))
 idempotent_table = dynamodb.Table(os.getenv('IDEMPOTENCY_TABLE_NAME'))
+offices_table = dynamodb.Table(os.getenv('OFFICES_TABLE_NAME'))

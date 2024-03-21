@@ -2,7 +2,7 @@ import boto3
 import json
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from utils import similar_question_dialog
+# from utils import similar_question_dialog
 from aws_xray_sdk.core import xray_recorder
 from aws_xray_sdk.core import patch_all
 patch_all()
@@ -49,10 +49,10 @@ def update_message_in_adviser_space(space_id: str, message_id: str, message):
         updateMask='text'
     ).execute()
 
-@xray_recorder.capture()
-def get_similar_question_dialog(event):
-    similar_question = event['common']['parameters']['llmPrompt']
-    question_answer = event['common']['parameters']['llmAnswer']
-    similarity = event['common']['parameters']['similarity']
+# @xray_recorder.capture()
+# def get_similar_question_dialog(event):
+#     similar_question = event['common']['parameters']['llmPrompt']
+#     question_answer = event['common']['parameters']['llmAnswer']
+#     similarity = event['common']['parameters']['similarity']
 
-    return similar_question_dialog(similar_question, question_answer, similarity)
+#     return similar_question_dialog(similar_question, question_answer, similarity)
