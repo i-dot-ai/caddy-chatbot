@@ -8,8 +8,9 @@ def run_survey(user_email, adviser_space_id, thread_id):
     post_call_module = user_workspace_variables['end_of_conversation'][0]['module_arguments']
 
     post_call_survey_questions = post_call_module['questions']
+    post_call_survey_values = post_call_module['values']
 
-    survey_card = get_post_call_survey_card(post_call_survey_questions)
+    survey_card = get_post_call_survey_card(post_call_survey_questions, post_call_survey_values)
 
     send_message_to_adviser_space(
         response_type="cardsV2",
@@ -36,7 +37,7 @@ def get_user_workspace_variables(user_email : str):
 
   return workspace_vars
 
-def get_post_call_survey_card(post_call_survey_questions):
+def get_post_call_survey_card(post_call_survey_questions, post_call_survey_values):
     card = {
         "cardsV2": [
           {
@@ -49,41 +50,26 @@ def get_post_call_survey_card(post_call_survey_questions):
         ],
       }
 
-    button_section = {
-                "widgets": [
-                  {
-                    "buttonList": {
-                    "buttons": [
-                      ]
-                    }
-                    }
-                  ],
-                }
-
     for question in post_call_survey_questions:
+        section = {
+                "widgets": []
+              }
+
         question_section = {
-              "widgets": [
-              {
                 "textParagraph": {
                     "text": question
                 }
-            },
-          ],
-        }
+            }
 
         button_section = {
-                "widgets": [
-                  {
                     "buttonList": {
                     "buttons": [
                       ]
                     }
-                    }
-                  ],
-                }
+                  }
 
-        for value in ["1", "2", "3", "4", "5"]:
-            button_section['widgets'][0]['buttonList']['buttons'].append({
+        for value in post_call_survey_values:
+            button_section['buttonList']['buttons'].append({
                 "text": value,
                 "onClick": {
                     "action": {
@@ -102,7 +88,9 @@ def get_post_call_survey_card(post_call_survey_questions):
                 }
             })
 
-        card['cardsV2'][0]['card']['sections'].append(question_section)
-        card['cardsV2'][0]['card']['sections'].append(button_section)
+        section['widgets'].append(question_section)
+        section['widgets'].append(button_section)
+
+        card['cardsV2'][0]['card']['sections'].append(section)
 
     return card
