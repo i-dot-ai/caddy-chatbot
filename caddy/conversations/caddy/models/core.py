@@ -1,9 +1,7 @@
 from typing import Union
 from datetime import datetime
 import json
-import os
 import uuid
-import boto3
 import pydantic
 
 # === Data Models ===
@@ -46,7 +44,7 @@ class ApprovalEvent(pydantic.BaseModel):
     user_response_timestamp: datetime
     supervisor_message: Union[str, None] = None
 
-class ProcessChatMessageEvent(pydantic.BaseModel):
+class CaddyMessageEvent(pydantic.BaseModel):
     type: str
     user: str
     name: str
@@ -114,102 +112,3 @@ def store_awaiting_approval_timestamp(ai_answer: LlmResponse, timestamp, table):
         'statusCode': 200,
         'body': json.dumps({'message': 'Timestamp stored successfully!'})
     }
-
-
-def create_db_message_table(connection):
-    """Creates the messages table in the database"""
-
-    table = connection.create_table(
-        TableName='caddyMessages',
-        KeySchema=[
-            {'AttributeName': 'messageId', 'KeyType': 'HASH'},  # Partition key
-            {'AttributeName': 'threadId', 'KeyType': 'RANGE'},  # Sort key
-        ],
-        AttributeDefinitions=[
-            {'AttributeName': 'messageId', 'AttributeType': 'S'},
-            {'AttributeName': 'threadId', 'AttributeType': 'S'},
-        ],
-        GlobalSecondaryIndexes=[
-            {
-                "IndexName": "gsiIndex",
-                "KeySchema": [
-                    {"AttributeName": "threadId", "KeyType": "HASH"},
-                ],
-                "Projection": {"ProjectionType": "ALL"},
-                "ProvisionedThroughput": {
-                    'ReadCapacityUnits': 10,
-                    'WriteCapacityUnits': 10
-                },
-            },
-        ],
-        ProvisionedThroughput={
-            'ReadCapacityUnits': 10,
-            'WriteCapacityUnits': 10
-        },
-        StreamSpecification={
-            'StreamEnabled': True,
-            'StreamViewType': 'NEW_AND_OLD_IMAGES'
-        }
-    )
-
-
-def create_db_responses_table(connection):
-    """Creates the responses table in the database"""
-
-    table = connection.create_table(
-        TableName='caddyResponses',
-        KeySchema=[
-            {'AttributeName': 'threadId', 'KeyType': 'HASH'},
-        ],
-        AttributeDefinitions=[
-            {'AttributeName': 'threadId', 'AttributeType': 'S'},
-        ],
-        ProvisionedThroughput={
-            'ReadCapacityUnits': 10,
-            'WriteCapacityUnits': 10
-        }
-    )
-
-def create_db_offices_table(connection):
-    """Creates the offices table in the database"""
-
-    table = connection.create_table(
-        TableName='caddyOffices',
-        KeySchema=[
-            {'AttributeName': 'emailDomain', 'KeyType': 'HASH'},
-        ],
-        AttributeDefinitions=[
-            {'AttributeName': 'emailDomain', 'AttributeType': 'S'},
-        ],
-        ProvisionedThroughput={
-            'ReadCapacityUnits': 1,
-            'WriteCapacityUnits': 1
-        }
-    )
-
-
-# === Database Connections ===
-dynamodb = boto3.resource('dynamodb', region_name='eu-west-2')
-
-try:
-    create_db_message_table(dynamodb)
-except:
-    print('message table already exists')
-
-try:
-    create_db_responses_table(dynamodb)
-except:
-    print('response table already exists')
-
-try:
-    create_db_offices_table(dynamodb)
-except:
-    print('office table already exists')
-
-
-message_table = dynamodb.Table(os.getenv('MESSAGES_TABLE_NAME'))
-users_table = dynamodb.Table(os.getenv('USERS_TABLE_NAME'))
-responses_table = dynamodb.Table(os.getenv('RESPONSES_TABLE_NAME'))
-idempotent_table = dynamodb.Table(os.getenv('IDEMPOTENCY_TABLE_NAME'))
-offices_table = dynamodb.Table(os.getenv('OFFICES_TABLE_NAME'))
-evaluation_table = dynamodb.Table(os.getenv('EVALUATION_TABLE_NAME'))

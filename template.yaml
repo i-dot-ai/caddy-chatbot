@@ -99,7 +99,7 @@ Resources:
       FunctionName: conversations
       PackageType: Image
       ImageConfig:
-        Command: ["chat.lambda_handler"]
+        Command: ["conversations.lambda_handler"]
       ImageUri: !GetAtt CaddyECR.RepositoryUri
       Timeout: 120
       Tracing: Active
@@ -123,7 +123,7 @@ Resources:
             Method: post
             RestApiId: !Ref CaddyApi
     Metadata:
-      DockerContext: conversations/
+      DockerContext: caddy/conversations/
       Dockerfile: Dockerfile
 
   ConversationsFunctionIamRole:
@@ -242,7 +242,7 @@ Resources:
           OPENSEARCH_INDEX: "caddy_vector_index"
           EVALUATION_TABLE_NAME: !Ref EvaluationTableName
     Metadata:
-      DockerContext: llm/
+      DockerContext: caddy/llm/
       Dockerfile: Dockerfile
 
   LlmFunctionIamRole:
@@ -451,7 +451,7 @@ Resources:
             Method: post
             RestApiId: !Ref CaddyApi
     Metadata:
-      DockerContext: supervise/
+      DockerContext: caddy/supervise/
       Dockerfile: Dockerfile
 
   UsersTable:
