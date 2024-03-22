@@ -96,7 +96,6 @@ def received_approval(event):
     )
     update_message_in_supervisor_space(space_id=supervisor_space, message_id=message_id, new_message=updated_supervision_card)
 
-
     update_message_in_supervisor_space(
         space_id=supervisor_space,
         message_id=request_message_id,
@@ -287,8 +286,9 @@ def get_supervisor_response(event):
     thread_id = event['common']['parameters']['threadId']
     new_request_message_id = event['common']['parameters']['newRequestId']
     request_rejected = event['common']['parameters']['requestRejected']
+    user_email = event['common']['parameters']['userEmail']
 
-    return get_supervisor_response_dialog(conversation_id, response_id, message_id, thread_id, new_request_message_id, request_rejected)
+    return get_supervisor_response_dialog(conversation_id, response_id, message_id, thread_id, new_request_message_id, request_rejected, user_email)
 
 @xray_recorder.capture()
 def introduce_caddy_supervisor(event):

@@ -459,7 +459,7 @@ def failed_dialog(error):
     print(f"### FAILED: {error} ###")
 
 @xray_recorder.capture()
-def get_supervisor_response_dialog(conversation_id, response_id, message_id, thread_id, new_request_message_id, request_rejected):
+def get_supervisor_response_dialog(conversation_id, response_id, message_id, thread_id, new_request_message_id, request_rejected, user_email):
     supervisor_response_dialog = {
       "action_response": {
         "type": "DIALOG",
@@ -509,6 +509,10 @@ def get_supervisor_response_dialog(conversation_id, response_id, message_id, thr
                                     {
                                     "key": "requestRejected",
                                     "value": request_rejected
+                                    },
+                                    {
+                                    "key": "userEmail",
+                                    "value": user_email
                                     }
                                   ]
                                 }
