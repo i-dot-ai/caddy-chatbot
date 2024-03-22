@@ -49,6 +49,14 @@ def update_message_in_adviser_space(space_id: str, message_id: str, message):
         updateMask='text'
     ).execute()
 
+@xray_recorder.capture()
+def update_survey_card_in_adviser_space(space_id: str, message_id: str, card):
+    caddy.spaces().messages().patch(
+        name=f"spaces/{space_id}/messages/{message_id}",
+        body=card,
+        updateMask='cardsV2'
+    ).execute()
+
 # Send message to the adviser space
 @xray_recorder.capture()
 def send_pii_warning_to_adviser_space(space_id: str, message, thread_id, message_event):

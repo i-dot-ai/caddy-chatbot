@@ -1,4 +1,4 @@
-from models import responses_table, idempotent_table, offices_table
+from models import responses_table, idempotent_table, offices_table, evaluation_table
 from boto3.dynamodb.conditions import Key
 from aws_xray_sdk.core import xray_recorder
 from aws_xray_sdk.core import patch_all
@@ -92,6 +92,17 @@ def add_workspace_variables_to_table(email_domain : str, workspace_vars : dict):
   )
 
   return response
+
+def store_evaluation_module(thread_id, user_arguments, argument_output):
+    # Handles DynamoDB TypeError: Float types are not supported.
+    user_arguments['module_arguments']['split'] = str(user_arguments['module_arguments']['split'])
+
+    evaluation_table.put_item(
+        Item={
+        "threadId": thread_id,
+        "modulesUsed": user_arguments,
+        "moduleOutputs": argument_output
+    })
 
 @xray_recorder.capture()
 def format_chat_history(user_messages):

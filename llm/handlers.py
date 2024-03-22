@@ -3,7 +3,7 @@ import sys
 from datetime import datetime
 import boto3
 from models import UserMessage, LlmResponse, SupervisionEvent, ProcessChatMessageEvent, store_message, store_response, store_user_thanked_timestamp, message_table, responses_table
-from utils import create_card, get_chat_history, idempotent
+from utils import create_card, get_chat_history, idempotent, store_evaluation_module
 from llm import run_chain, build_chain
 from responses import send_message_to_adviser_space, update_message_in_adviser_space
 from utils import bcolors, get_user_workspace_variables, execute_optional_modules
@@ -42,6 +42,7 @@ def process_chat_message(event: ProcessChatMessageEvent):
 
     # store user message in db
     store_message(message_query, message_table)
+    store_evaluation_module(thread_id=message_query.thread_id, user_arguments=message_query.user_arguments, argument_output=message_query.argument_output)
 
     module_outputs_json = json.loads(module_outputs_json)
 

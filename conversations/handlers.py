@@ -1,9 +1,9 @@
 from datetime import datetime
 import boto3
 import json
-from models import ProcessChatMessageEvent, responses_table
+from models import ProcessChatMessageEvent, responses_table, evaluation_table
 from utils import idempotent, similar_question_dialog, edit_query_dialog
-from responses import send_message_to_adviser_space, send_pii_warning_to_adviser_space
+from responses import send_message_to_adviser_space, send_pii_warning_to_adviser_space, update_survey_card_in_adviser_space
 from anonymise import analyse, redact
 from aws_xray_sdk.core import xray_recorder
 from aws_xray_sdk.core import patch_all
@@ -91,10 +91,39 @@ def introduce_caddy(event):
 
 @xray_recorder.capture()
 def handle_survey_response(event):
+    card = event['message']['cardsV2']
     question = event['common']['parameters']['question']
     response = event['common']['parameters']['response']
-    threadId = event['thread']['name'].split('/')[3]
+    threadId = event['message']['thread']['name'].split('/')[3]
+    spaceId = event['space']['name'].split('/')[1]
+    messageId = event['message']['name'].split('/')[3]
 
-    print(question, response, threadId)
+    survey_response = [{
+        question: response
+    }]
 
-    # TODO: implement survey response saving to DynamoDB
+    evaluation_entry = evaluation_table.get_item(Key={"threadId": str(threadId)})
+
+    if 'Item' in evaluation_entry and 'surveyResponse' in evaluation_entry['Item']:
+        evaluation_table.update_item(
+            Key={"threadId": str(threadId)},
+            UpdateExpression="set surveyResponse = list_append(surveyResponse, :surveyResponse)",
+            ExpressionAttributeValues={":surveyResponse": survey_response},
+            ReturnValues="UPDATED_NEW"
+        )
+    else:
+        evaluation_table.update_item(
+            Key={"threadId": str(threadId)},
+            UpdateExpression="set surveyResponse = :surveyResponse",
+            ExpressionAttributeValues={":surveyResponse": survey_response},
+            ReturnValues="UPDATED_NEW"
+        )
+
+    response_received = { "textParagraph": { "text": "<font color=\"#00ba01\"><b>✅ survey response received</b></font>" } }
+
+    for section in card[0]['card']['sections']:
+        if section['widgets'][0]['textParagraph']['text'] == question:
+            del section['widgets'][1]['buttonList']
+            section['widgets'].append(response_received)
+
+    update_survey_card_in_adviser_space(space_id=spaceId, message_id=messageId, card={'cardsV2': card})
