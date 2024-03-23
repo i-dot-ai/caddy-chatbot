@@ -28,7 +28,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
       - name: Install pytest
-        run: pip install pytest
+        run: pip install pytest boto3 botocore
       - name: Start lambda endpoint and run tests
         run: |
           sam local start-lambda 2> /dev/null &
