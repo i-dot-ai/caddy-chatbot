@@ -84,7 +84,7 @@ def lambda_handler(event, context):
             caddy_message = caddy_local.format_message(event)
 
             if caddy_message == "PII Detected":
-                return "PII_DETECTEDS"
+                return "PII_DETECTED"
 
             return caddy_message.model_dump_json()
         case other:

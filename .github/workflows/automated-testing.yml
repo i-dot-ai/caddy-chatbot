@@ -27,7 +27,7 @@ jobs:
         run: sam build -t template.yaml --use-container
       - name: Setup Python
         uses: actions/setup-python@v4
-      - name: Install pytest
+      - name: Install test dependencies
         run: pip install pytest boto3 botocore
       - name: Start lambda endpoint and run tests
         run: |
