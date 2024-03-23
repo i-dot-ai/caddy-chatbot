@@ -5,7 +5,7 @@ on:
       - dev
       - lambdas-refactor
 jobs:
-  start-lambdas:
+  build-test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -25,20 +25,13 @@ jobs:
           aws-region: eu-west-2
       - name: Build Lambda
         run: sam build -t template.yaml --use-container
-      - name: Start lambda endpoint
-        run: sam local start-lambda
-
-  run-tests:
-    needs: start-lambdas
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
-        with:
-          lfs: true
       - name: Setup Python
         uses: actions/setup-python@v4
       - name: Install pytest
         run: pip install pytest
-      - name: Run pytest
-        run: pytest -v
+      - name: Start lambda endpoint and run tests
+        run: |
+          sam local start-lambda 2> /dev/null &
+          sleep 5
+          pytest -v
+          pkill -f "sam local start-lambda"
