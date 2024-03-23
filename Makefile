@@ -1,9 +1,8 @@
-.PHONY: test-lambda-func
-
-MSG ?= hello world
-
-test-lambda-func:
-	@source define_env_vars.sh && python conversations/chat.py lambda_handler '{"message_string": "$(MSG)"}'
+run-tests:
+	sam local start-lambda 2> /dev/null & #Disable SAM output
+	sleep 5 # Wait for the lambda to start
+	pytest -v
+	pkill -f "sam local start-lambda"
 
 requirements-dev:
 	pip install -r requirements-dev.txt
@@ -11,8 +10,11 @@ requirements-dev:
 build-lambda:
 	sam build -t template.yaml --use-container
 
-test-chat-lambda:
-	sam local invoke ConversationsFunction --event events/gChatMessageEvent.json --env-vars env.json
+test-conversations-lambda:
+	sam local invoke ConversationsFunction --event tests/events/CaddyLocalMessageEvent.json --env-vars env.json
+
+test-pii-detection:
+	sam local invoke ConversationsFunction --event tests/events/CaddyLocalMessageEvent_PII.json --env-vars env.json
 
 test-llm-lambda:
 	sam local invoke LlmFunction --event events/ProcessChatMessageEvent.json --env-vars env.json

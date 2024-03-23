@@ -1,11 +1,12 @@
 import json
-from integrations.google_chat.content import MESSAGES
+
 from caddy.models.core import CaddyMessageEvent
 from caddy.services.anonymise import analyse
 from caddy.utils.tables import evaluation_table
+from integrations.google_chat.content import MESSAGES
+from integrations.google_chat.auth import get_google_creds
 
 from googleapiclient.discovery import build
-from integrations.google_chat.auth import get_google_creds
 
 from aws_xray_sdk.core import xray_recorder
 from aws_xray_sdk.core import patch_all

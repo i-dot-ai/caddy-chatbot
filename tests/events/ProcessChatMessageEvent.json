@@ -1,0 +1,11 @@
+{
+    "type":"PROCESS_CHAT_MESSAGE",
+    "user":"john.doe@test.com",
+    "name":"John Doe",
+    "space_id":"Caddy Local Space",
+    "thread_id":"12345",
+    "message_id":"12345",
+    "message_string":"My client would like to claim universal credit, how do they do this?",
+    "source_client":"Caddy Local",
+    "timestamp":"2024-01-01T12:01:45.132511Z"
+}

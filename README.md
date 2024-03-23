@@ -82,6 +82,23 @@ $ DOCKER_HOST=unix:///Users/user_name/.docker/run/docker.sock
 ```
 Further details [here](https://github.com/aws/aws-sam-cli/issues/4329#issuecomment-1289588827).
 
+## Testing
+
+Running tests on platform agnostic Caddy components with pytest. Tests are stored in tests/caddy_components, and can be invoked by running either of the below:
+
+This automatically starts the sam local endpoint and runs pytest -v
+```bash
+$ make run-tests
+```
+
+For a manual approach run the below and then once running open a new terminal and run pytest
+```bash
+$ sam local start-lambda
+```
+```bash
+$ pytest
+```
+
 ## Deployment
 
 We'll use AWS SAM to create and deploy all the relevant resources.  You will require your AWS CLI configured with the correct permissions.

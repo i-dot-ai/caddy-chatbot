@@ -2,18 +2,26 @@ import json
 from caddy import core as caddy
 from caddy.services import enrolment
 from integrations.google_chat.core import GoogleChat
+from integrations.local import core as caddy_local
 
 def lambda_handler(event, context):
 
     chat_client = ''
 
+    # --- Determine the chat client ---
     if 'common' in event and event['common']['hostApp'] == 'CHAT':
+        chat_client = 'Google Chat'
+    elif 'type' in event and event['type'] == 'ADDED_TO_SPACE':
         chat_client = 'Google Chat'
     elif 'channelId' in event and event['channelId'] == 'msteams':
         chat_client = 'Microsoft Teams'
-    elif 'type' in event and event['type'] == 'ADDED_TO_SPACE':
-        chat_client = 'Google Chat'
+    elif 'source' in event and event['source'] == 'CADDY_LOCAL':
+        """
+        TEST RUNNER FOR LOCAL SAM TESTING OF PLATFORM AGNOSTIC CADDY COMPONENTS
+        """
+        chat_client = 'Caddy Local'
 
+    # --- Handle the chat client ---
     match chat_client:
         case 'Google Chat':
             """
@@ -69,5 +77,15 @@ def lambda_handler(event, context):
             TODO - Add Microsoft Teams support
             """
             return json.dumps({"text": "Caddy is not currently available for this platform."})
+        case 'Caddy Local':
+            """
+            TODO - SPLIT INTO PLATFORM AGNOSTIC CADDY COMPONENTS
+            """
+            caddy_message = caddy_local.format_message(event)
+
+            if caddy_message == "PII Detected":
+                return "PII_DETECTED"
+
+            return caddy_message.model_dump_json()
         case other:
             return json.dumps({"text": "Caddy is not currently available for this platform."})

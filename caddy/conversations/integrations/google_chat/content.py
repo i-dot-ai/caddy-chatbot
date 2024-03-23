@@ -1,5 +1,7 @@
 import json
 
+# --- Google Chat Messages ---
+
 MESSAGES = {
     "domain_not_enrolled": json.dumps({"text": "Caddy is not currently available for this domain. Please contact your administrator for more information."}),
     "user_not_registered": json.dumps({"text": "User is not registered, please contact your administrator for support in onboarding to Caddy"}),
