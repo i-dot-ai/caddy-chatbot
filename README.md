@@ -1,5 +1,9 @@
 # Caddy Chatbot
 
+[![GitHub Actions badge](https://github.com/i-dot-ai/caddy_chatbot/actions/workflows/Deployment/badge.svg)](https://github.com/i-dot-ai/caddy_chatbot/actions/workflows/Deployment)
+[![GitHub Actions badge](https://github.com/i-dot-ai/caddy_chatbot/actions/workflows/Tests/badge.svg)](https://github.com/i-dot-ai/caddy_chatbot/actions/workflows/Tests)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
 This repository stores the project for the LLM enabled advisor support bot. This contains the logic for the chatbot and responses, and also relies on storage of the data using [caddy_scraper](https://github.com/i-dot-ai/caddy_scraper).
 
 ## How to Run
