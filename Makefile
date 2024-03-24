@@ -1,5 +1,5 @@
 run-tests:
-	sam local start-lambda --env-vars env.json 2> /dev/null & #Disable SAM output
+	sam local start-lambda --parameter-overrides ParameterKey=MessageTableName,ParameterValue=caddyMessages ParameterKey=ResponsesTableName,ParameterValue=caddyResponses ParameterKey=UserTableName,ParameterValue=caddyUsers ParameterKey=OfficesTableName,ParameterValue=caddyOffices ParameterKey=EvaluationTableName,ParameterValue=caddyEvaluation 2> /dev/null & #Disable SAM output
 	sleep 5 # Wait for the lambda to start
 	pytest -vv
 	pkill -f "sam local start-lambda"
