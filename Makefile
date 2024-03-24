@@ -4,6 +4,12 @@ run-tests:
 	pytest -vv
 	pkill -f "sam local start-lambda"
 
+run-tests-dev:
+	sam local start-lambda --parameter-overrides ParameterKey=MessageTableName,ParameterValue=caddyMessages-dev ParameterKey=ResponsesTableName,ParameterValue=caddyResponses-dev ParameterKey=UserTableName,ParameterValue=caddyUsers-dev ParameterKey=OfficesTableName,ParameterValue=caddyOffices-dev ParameterKey=EvaluationTableName,ParameterValue=caddyEvaluation-dev 2> /dev/null & #Disable SAM output
+	sleep 5 # Wait for the lambda to start
+	pytest -vv
+	pkill -f "sam local start-lambda"
+
 requirements-dev:
 	pip install -r requirements-dev.txt
 
@@ -45,3 +51,6 @@ setup-local-environment: requirements-dev setup-local-env-vars setup-pre-commit 
 
 deploy:
 	sam build -t template.yaml --use-container && sam deploy --guided --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND CAPABILITY_NAMED_IAM --resolve-image-repos
+
+deploy-dev:
+	sam build -t template.yaml --use-container && sam deploy --guided --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND CAPABILITY_NAMED_IAM --config-env develop

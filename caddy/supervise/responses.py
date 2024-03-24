@@ -1,3 +1,4 @@
+import os
 import boto3
 import json
 from google.oauth2 import service_account
@@ -22,8 +23,14 @@ def get_google_creds(recepient: str):
 
 
 # Build the Chat API clients
-supervisor = build("chat", "v1", credentials=get_google_creds("GCPCred"))
-caddy = build("chat", "v1", credentials=get_google_creds("CaddyCred"))
+supervisor = build(
+    "chat",
+    "v1",
+    credentials=get_google_creds(os.getenv("CADDY_SUPERVISOR_SERVICE_ACCOUNT_ID")),
+)
+caddy = build(
+    "chat", "v1", credentials=get_google_creds(os.getenv("CADDY_SERVICE_ACCOUNT_ID"))
+)
 
 
 # Send message to the supervisor space

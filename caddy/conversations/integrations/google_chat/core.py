@@ -1,3 +1,4 @@
+import os
 import json
 
 from caddy.models.core import CaddyMessageEvent
@@ -18,7 +19,11 @@ class GoogleChat:
     def __init__(self):
         self.client = "Google Chat"
         self.messages = MESSAGES
-        self.caddy = build("chat", "v1", credentials=get_google_creds("CaddyCred"))
+        self.caddy = build(
+            "chat",
+            "v1",
+            credentials=get_google_creds(os.getenv("CADDY_SERVICE_ACCOUNT_ID")),
+        )
 
     @xray_recorder.capture()
     def format_message(self, event):

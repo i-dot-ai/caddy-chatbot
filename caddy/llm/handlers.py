@@ -1,3 +1,4 @@
+import os
 import json
 import sys
 from datetime import datetime
@@ -139,5 +140,7 @@ def process_chat_message(event: ProcessChatMessageEvent):
     )
 
     serverless.invoke(
-        FunctionName="supervise", InvocationType="Event", Payload=supervision_event
+        FunctionName=f'supervise-{os.getenv("STAGE")}',
+        InvocationType="Event",
+        Payload=supervision_event,
     )

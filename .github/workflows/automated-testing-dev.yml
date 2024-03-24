@@ -3,9 +3,9 @@ name: Tests
 on:
   push:
     branches:
-      - main
-      - dev
+      - develop
       - lambdas-refactor
+
 jobs:
   run-tests:
     runs-on: ubuntu-latest
@@ -35,7 +35,7 @@ jobs:
         run: pip install pytest boto3 botocore
       - name: Start lambda endpoint and run tests
         run: |
-          sam local start-lambda --parameter-overrides ParameterKey=MessageTableName,ParameterValue=caddyMessages ParameterKey=ResponsesTableName,ParameterValue=caddyResponses ParameterKey=UserTableName,ParameterValue=caddyUsers ParameterKey=OfficesTableName,ParameterValue=caddyOffices ParameterKey=EvaluationTableName,ParameterValue=caddyEvaluation 2> /dev/null &
+          sam local start-lambda --parameter-overrides ParameterKey=MessageTableName,ParameterValue=caddyMessages-dev ParameterKey=ResponsesTableName,ParameterValue=caddyResponses-dev ParameterKey=UserTableName,ParameterValue=caddyUsers-dev ParameterKey=OfficesTableName,ParameterValue=caddyOffices-dev ParameterKey=EvaluationTableName,ParameterValue=caddyEvaluation-dev 2> /dev/null &
           sleep 5
           pytest -v
           pkill -f "sam local start-lambda"
