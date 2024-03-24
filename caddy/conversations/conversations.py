@@ -4,6 +4,8 @@ from caddy.services import enrolment
 from integrations.google_chat.core import GoogleChat
 from integrations.local import core as caddy_local
 
+google_chat = GoogleChat()
+
 def lambda_handler(event, context):
 
     chat_client = ''
@@ -27,7 +29,6 @@ def lambda_handler(event, context):
             """
             Handles inbound requests from Google Chat
             """
-            google_chat = GoogleChat()
             user = event['user']['email']
             domain = user.split('@')[1]
             domain_enrolled = enrolment.check_domain_status(domain)
@@ -81,11 +82,23 @@ def lambda_handler(event, context):
             """
             TODO - SPLIT INTO PLATFORM AGNOSTIC CADDY COMPONENTS
             """
-            caddy_message = caddy_local.format_message(event)
+            user = event['user']
+            domain = user.split('@')[1]
+            domain_enrolled = enrolment.check_domain_status(domain)
+            match domain_enrolled:
+                case True:
+                    user_enrolled = enrolment.check_user_status(user)
+                    match user_enrolled:
+                        case True:
+                            caddy_message = caddy_local.format_message(event)
 
-            if caddy_message == "PII Detected":
-                return "PII_DETECTED"
+                            if caddy_message == "PII Detected":
+                                return "PII_DETECTED"
 
-            return caddy_message.model_dump_json()
+                            return caddy_message.model_dump_json()
+                        case False:
+                            return json.dumps({"text": "User is not registered, please contact your administrator for support in onboarding to Caddy"})
+                case False:
+                    return json.dumps({"text": "Your domain is not enrolled in Caddy. Please contact your administrator."})
         case other:
             return json.dumps({"text": "Caddy is not currently available for this platform."})

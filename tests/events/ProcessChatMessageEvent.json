@@ -1,6 +1,6 @@
 {
     "type":"PROCESS_CHAT_MESSAGE",
-    "user":"john.doe@test.com",
+    "user":"john.doe@caddy.casort.org",
     "name":"John Doe",
     "space_id":"Caddy Local Space",
     "thread_id":"12345",
