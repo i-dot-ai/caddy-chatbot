@@ -29,6 +29,7 @@ class LlmResponse(pydantic.BaseModel):
     llm_prompt_timestamp: datetime
     llm_response_timestamp: datetime
 
+
 class SupervisionEvent(pydantic.BaseModel):
     type: str
     user: str
@@ -41,6 +42,7 @@ class SupervisionEvent(pydantic.BaseModel):
     approver_received_timestamp: Union[datetime, None] = None
     response_id: str
 
+
 class ApprovalEvent(pydantic.BaseModel):
     response_id: str
     thread_id: str
@@ -49,6 +51,7 @@ class ApprovalEvent(pydantic.BaseModel):
     approval_timestamp: Union[datetime, None] = None
     user_response_timestamp: datetime
     supervisor_message: Union[str, None] = None
+
 
 class User(pydantic.BaseModel):
     user_email: str
@@ -63,20 +66,20 @@ def store_message(message: UserMessage, table):
     # Storing in DynamoDB
     response = table.put_item(
         Item={
-            'messageId': str(message.message_id),
-            'conversationId': str(message.conversation_id),
-            'threadId': str(message.thread_id),
-            'client': message.client,
-            'userEmail': str(message.user_email),
-            'message': message.message,
-            'messageSentTimestamp': message.message_sent_timestamp,
-            'messageReceivedTimestamp': str(message.message_received_timestamp),
+            "messageId": str(message.message_id),
+            "conversationId": str(message.conversation_id),
+            "threadId": str(message.thread_id),
+            "client": message.client,
+            "userEmail": str(message.user_email),
+            "message": message.message,
+            "messageSentTimestamp": message.message_sent_timestamp,
+            "messageReceivedTimestamp": str(message.message_received_timestamp),
         }
     )
 
     return {
-        'statusCode': 200,
-        'body': json.dumps({'message': 'Message stored successfully!'})
+        "statusCode": 200,
+        "body": json.dumps({"message": "Message stored successfully!"}),
     }
 
 
@@ -84,19 +87,19 @@ def store_response(response: LlmResponse, table):
     # Storing in DynamoDB
     response = table.put_item(
         Item={
-            'responseId': str(response.response_id),
-            'messageId': str(response.message_id),
-            'llmPrompt': response.llm_prompt,
-            'llmAnswer': response.llm_answer,
-            'llmResponseJSon': response.llm_response_json,
-            'llmPromptTimestamp': str(response.llm_prompt_timestamp),
-            'llmResponseTimestamp': str(response.llm_response_timestamp),
+            "responseId": str(response.response_id),
+            "messageId": str(response.message_id),
+            "llmPrompt": response.llm_prompt,
+            "llmAnswer": response.llm_answer,
+            "llmResponseJSon": response.llm_response_json,
+            "llmPromptTimestamp": str(response.llm_prompt_timestamp),
+            "llmResponseTimestamp": str(response.llm_response_timestamp),
         }
     )
 
     return {
-        'statusCode': 200,
-        'body': json.dumps({'message': 'Response stored successfully!'})
+        "statusCode": 200,
+        "body": json.dumps({"message": "Response stored successfully!"}),
     }
 
 
@@ -110,8 +113,8 @@ def store_approver_received_timestamp(event: SupervisionEvent, timestamp, table)
     )
 
     return {
-        'statusCode': 200,
-        'body': json.dumps({'message': 'Timestamp stored successfully!'})
+        "statusCode": 200,
+        "body": json.dumps({"message": "Timestamp stored successfully!"}),
     }
 
 
@@ -120,22 +123,30 @@ def store_approver_event(approval_event: ApprovalEvent, table):
     response = table.update_item(
         Key={"threadId": str(approval_event.thread_id)},
         UpdateExpression="set approverEmail=:email, approved=:approved, approvalTimestamp=:atime, userResponseTimestamp=:utime, supervisorMessage=:sMessage",
-        ExpressionAttributeValues={":email": approval_event.approver_email, ":approved": approval_event.approved, ":atime":str(approval_event.approval_timestamp), ":utime":str(approval_event.user_response_timestamp), ":sMessage":approval_event.supervisor_message},
+        ExpressionAttributeValues={
+            ":email": approval_event.approver_email,
+            ":approved": approval_event.approved,
+            ":atime": str(approval_event.approval_timestamp),
+            ":utime": str(approval_event.user_response_timestamp),
+            ":sMessage": approval_event.supervisor_message,
+        },
         ReturnValues="UPDATED_NEW",
     )
 
     return {
-        'statusCode': 200,
-        'body': json.dumps({'message': 'Supervisor approval/ rejection stored successfully!'})
+        "statusCode": 200,
+        "body": json.dumps(
+            {"message": "Supervisor approval/ rejection stored successfully!"}
+        ),
     }
 
 
 # === Database Connections ===
 
-dynamodb = boto3.resource('dynamodb', region_name='eu-west-2')
+dynamodb = boto3.resource("dynamodb", region_name="eu-west-2")
 
-message_table = dynamodb.Table(os.getenv('MESSAGES_TABLE_NAME'))
-responses_table = dynamodb.Table(os.getenv('RESPONSES_TABLE_NAME'))
-offices_table = dynamodb.Table(os.getenv('OFFICES_TABLE_NAME'))
-users_table = dynamodb.Table(os.getenv('USERS_TABLE_NAME'))
-evaluation_table = dynamodb.Table(os.getenv('EVALUATION_TABLE_NAME'))
+message_table = dynamodb.Table(os.getenv("MESSAGES_TABLE_NAME"))
+responses_table = dynamodb.Table(os.getenv("RESPONSES_TABLE_NAME"))
+offices_table = dynamodb.Table(os.getenv("OFFICES_TABLE_NAME"))
+users_table = dynamodb.Table(os.getenv("USERS_TABLE_NAME"))
+evaluation_table = dynamodb.Table(os.getenv("EVALUATION_TABLE_NAME"))

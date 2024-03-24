@@ -1,5 +1,6 @@
 from caddy.utils.tables import offices_table, users_table
 
+
 def check_domain_status(domain):
     """
     Checks if the domain is enrolled with Caddy
@@ -9,6 +10,7 @@ def check_domain_status(domain):
         return True
     else:
         return False
+
 
 def check_user_status(user):
     """

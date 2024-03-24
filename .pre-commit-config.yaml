@@ -8,3 +8,8 @@ repos:
     rev: 3.1.0
     hooks:
     -   id: nb-clean
+-   repo: https://github.com/psf/black
+    rev: stable
+    hooks:
+    - id: black
+      language_version: python3.11

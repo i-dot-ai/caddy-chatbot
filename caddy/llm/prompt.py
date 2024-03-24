@@ -57,6 +57,5 @@ Assistant:
 """
 
 CORE_PROMPT = PromptTemplate(
-    template=_core_caddy_prompt,
-    input_variables=["context", "question"]
+    template=_core_caddy_prompt, input_variables=["context", "question"]
 )
