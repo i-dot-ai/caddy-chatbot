@@ -1,15 +1,15 @@
 repos:
 -   repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v2.3.0
+    rev: v4.5.0
     hooks:
     -   id: end-of-file-fixer
     -   id: trailing-whitespace
 -   repo: https://github.com/srstevenson/nb-clean
-    rev: 3.1.0
+    rev: 3.2.0
     hooks:
     -   id: nb-clean
 -   repo: https://github.com/psf/black
-    rev: stable
+    rev: 24.3.0
     hooks:
     - id: black
       language_version: python3.11

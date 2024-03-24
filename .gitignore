@@ -10,3 +10,6 @@ cachedir
 .idea
 .vscode
 .venv
+.pytest_cache
+junit
+*.cache/*
