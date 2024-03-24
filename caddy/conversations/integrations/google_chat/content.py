@@ -19,5 +19,5 @@ MESSAGES = {
         }
     ),
     "introduce_caddy_SPACE": "Hi, thank you for adding me to {space}, I'm Caddy! I'm an AI support for Citizens Advice advisers, I'm here to help give advice to support in resolving your client queries. \n\n *Just remember to type `@Caddy` at the start of your query if you would like my help.*",
-    "pii_detected": '<b><font color="#FF0000">PII DETECTED</font><b> <i>Please ensure all queries to Caddy are anonymised. \n\n Choose whether to proceed anyway or edit your original query<i>',
+    "pii_detected": '<b><font color="#FF0000">DEV DEPLOY TEST - PII DETECTED</font><b> <i>Please ensure all queries to Caddy are anonymised. \n\n Choose whether to proceed anyway or edit your original query<i>',
 }
