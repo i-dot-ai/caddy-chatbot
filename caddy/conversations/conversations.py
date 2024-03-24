@@ -4,8 +4,6 @@ from caddy.services import enrolment
 from integrations.google_chat.core import GoogleChat
 from integrations.local import core as caddy_local
 
-google_chat = GoogleChat()
-
 def lambda_handler(event, context):
 
     chat_client = ''
@@ -29,6 +27,7 @@ def lambda_handler(event, context):
             """
             Handles inbound requests from Google Chat
             """
+            google_chat = GoogleChat()
             user = event['user']['email']
             domain = user.split('@')[1]
             domain_enrolled = enrolment.check_domain_status(domain)
