@@ -3,8 +3,6 @@ from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
 from typing import List
 from langchain.retrievers.merger_retriever import MergerRetriever
-from typing import Any
-from langchain.retrievers.self_query.base import SelfQueryRetriever
 from langchain_core.language_models.chat_models import BaseChatModel
 from aws_xray_sdk.core import xray_recorder
 from aws_xray_sdk.core import patch_all
@@ -54,7 +52,7 @@ class LLMPriorityRetriever(BaseRetriever):
                 for index in response_as_list[: self.max_retrieved_documents]
             ]
 
-        except:
+        except Exception:
             # if it fails, return all the docs
             top_docs = self.alternative_retriever.get_relevant_documents(query)
 

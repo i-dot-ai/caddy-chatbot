@@ -64,7 +64,7 @@ class User(pydantic.BaseModel):
 # === Database functions ===
 def store_message(message: UserMessage, table):
     # Storing in DynamoDB
-    response = table.put_item(
+    table.put_item(
         Item={
             "messageId": str(message.message_id),
             "conversationId": str(message.conversation_id),
@@ -105,7 +105,7 @@ def store_response(response: LlmResponse, table):
 
 def store_approver_received_timestamp(event: SupervisionEvent, timestamp, table):
     # Updating response in DynamoDB
-    response = table.update_item(
+    table.update_item(
         Key={"threadId": str(event["thread_id"])},
         UpdateExpression="set approverReceivedTimestamp=:t",
         ExpressionAttributeValues={":t": str(timestamp)},
@@ -120,7 +120,7 @@ def store_approver_received_timestamp(event: SupervisionEvent, timestamp, table)
 
 def store_approver_event(approval_event: ApprovalEvent, table):
     # Updating response in DynamoDB
-    response = table.update_item(
+    table.update_item(
         Key={"threadId": str(approval_event.thread_id)},
         UpdateExpression="set approverEmail=:email, approved=:approved, approvalTimestamp=:atime, userResponseTimestamp=:utime, supervisorMessage=:sMessage",
         ExpressionAttributeValues={

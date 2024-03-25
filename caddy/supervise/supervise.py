@@ -65,7 +65,7 @@ def lambda_handler(event, context):
                                     return helper_dialog()
                 case "ADDED_TO_SPACE":
                     return introduce_caddy_supervisor(event)
-                case other:
+                case _:
                     print("Case not handled")
         else:
             return json.dumps(

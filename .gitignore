@@ -13,3 +13,4 @@ cachedir
 .pytest_cache
 junit
 *.cache/*
+notebooks/*

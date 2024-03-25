@@ -1,5 +1,4 @@
 from models import idempotent_table
-import json
 
 
 def idempotent():

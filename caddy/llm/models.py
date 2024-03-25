@@ -12,7 +12,6 @@ class UserMessage(pydantic.BaseModel):
     message_id: Union[str, None] = None
     conversation_id: Union[str, None] = None
     thread_id: Union[str, None] = None
-    message_id: Union[str, None] = None
     client: str
     user_email: str
     message: str
@@ -70,7 +69,7 @@ class ProcessChatMessageEvent(pydantic.BaseModel):
 # === Database functions ===
 def store_message(message: UserMessage, table):
     # Storing in DynamoDB
-    response = table.put_item(
+    table.put_item(
         Item={
             "messageId": str(message.message_id),
             "conversationId": str(message.conversation_id),
@@ -112,7 +111,7 @@ def store_response(response: LlmResponse, table):
 
 def store_user_thanked_timestamp(ai_answer: LlmResponse, timestamp, table):
     # Updating response in DynamoDB
-    response = table.update_item(
+    table.update_item(
         Key={"threadId": ai_answer.thread_id},
         UpdateExpression="set userThankedTimestamp=:t",
         ExpressionAttributeValues={":t": str(timestamp)},
@@ -128,7 +127,7 @@ def store_user_thanked_timestamp(ai_answer: LlmResponse, timestamp, table):
 def create_db_message_table(connection):
     """Creates the messages table in the database"""
 
-    table = connection.create_table(
+    connection.create_table(
         TableName="caddyMessages",
         KeySchema=[
             {"AttributeName": "messageId", "KeyType": "HASH"},  # Partition key
@@ -162,7 +161,7 @@ def create_db_message_table(connection):
 def create_db_responses_table(connection):
     """Creates the responses table in the database"""
 
-    table = connection.create_table(
+    connection.create_table(
         TableName="caddyResponses",
         KeySchema=[
             {"AttributeName": "threadId", "KeyType": "HASH"},
@@ -179,13 +178,19 @@ dynamodb = boto3.resource("dynamodb", region_name="eu-west-2")
 
 try:
     create_db_message_table(dynamodb)
-except:
-    print("message table already exists")
+except boto3.exceptions.botocore.exceptions.ClientError as e:
+    if e.response["Error"]["Code"] == "ResourceInUseException":
+        print("message table already exists")
+    else:
+        raise
 
 try:
     create_db_responses_table(dynamodb)
-except:
-    print("response table already exists")
+except boto3.exceptions.botocore.exceptions.ClientError as e:
+    if e.response["Error"]["Code"] == "ResourceInUseException":
+        print("response table already exists")
+    else:
+        raise
 
 
 message_table = dynamodb.Table(os.getenv("MESSAGES_TABLE_NAME"))

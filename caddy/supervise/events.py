@@ -2,14 +2,12 @@ import os
 import json
 from datetime import datetime
 import boto3
-from boto3.dynamodb.conditions import Key, Attr
-from datetime import datetime
+from boto3.dynamodb.conditions import Attr
 from responses import (
     send_message_to_supervisor_space,
     send_message_to_adviser_space,
     update_message_in_supervisor_space,
     update_message_in_adviser_space,
-    delete_message_in_adviser_space,
     respond_to_supervisor_thread,
 )
 from utils import (
@@ -17,7 +15,6 @@ from utils import (
     create_updated_supervision_card,
     create_supervision_request_card,
     create_approved_card,
-    create_rejected_card,
     success_dialog,
     failed_dialog,
     get_user_to_add_details_dialog,
@@ -46,7 +43,6 @@ users = dynamodb.Table(os.getenv("USERS_TABLE_NAME"))
 @xray_recorder.capture()
 def receive_new_ai_response(event: SupervisionEvent):
     initial_query = event["llmPrompt"]
-    ai_response = event["llm_answer"]
     user = event["user"]
     llm_response_json = event["llm_response_json"]
     conversation_id = event["conversation_id"]
@@ -66,7 +62,7 @@ def receive_new_ai_response(event: SupervisionEvent):
                     "text": "For this query my response requires your supervisors approval before I can send it to you but it doesn't look like your supervisor has registered you to use my support yet, *please speak to a supervisor in order to get set up*"
                 },
             )
-        case other:
+        case _:
             (
                 request_awaiting,
                 request_approved,
