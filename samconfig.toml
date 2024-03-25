@@ -14,13 +14,6 @@ parallel = true
 lint = true
 
 [default.deploy.parameters]
-resolve_s3 = true
-s3_prefix = "CaddyStack"
-resolve_image_repos = true
-region = "eu-west-2"
-confirm_changeset = true
-capabilities = "CAPABILITY_IAM CAPABILITY_AUTO_EXPAND CAPABILITY_NAMED_IAM"
-parameter_overrides = "StageName=\"prod\" UserTableName=\"caddyUsers\" MessageTableName=\"caddyMessages\" ResponsesTableName=\"caddyResponses\" IdempotencyTableName=\"caddyIdempotency\" OfficesTableName=\"caddyOffices\" EvaluationTableName=\"caddyEvaluation\" CaddyServiceAccountId=\"caddy-cred-prod\" CaddySupervisorServiceAccountId=\"caddy-supervisor-cred-prod\""
 
 [default.package.parameters]
 
@@ -37,9 +30,8 @@ warm_containers = "EAGER"
 [develop.deploy.parameters]
 stack_name = "caddy-develop"
 region = "eu-west-2"
-resolve_s3 = true
-s3_prefix = "caddy-develop"
-resolve_image_repos = true
-confirm_changeset = true
-capabilities = "CAPABILITY_IAM CAPABILITY_AUTO_EXPAND CAPABILITY_NAMED_IAM"
-parameter_overrides = "StageName=\"dev\" UserTableName=\"caddyUsers-dev\" MessageTableName=\"caddyMessages-dev\" ResponsesTableName=\"caddyResponses-dev\" IdempotencyTableName=\"caddyIdempotency-dev\" OfficesTableName=\"caddyOffices-dev\" EvaluationTableName=\"caddyEvaluation-dev\" CaddyServiceAccountId=\"caddy-cred-dev\" CaddySupervisorServiceAccountId=\"caddy-supervisor-cred-dev\""
+
+[prod]
+[prod.deploy.parameters]
+stack_name = "caddy-prod"
+region = "eu-west-2"

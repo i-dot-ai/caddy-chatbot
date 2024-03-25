@@ -1,11 +1,5 @@
 run-tests:
-	sam local start-lambda --parameter-overrides ParameterKey=MessageTableName,ParameterValue=caddyMessages ParameterKey=ResponsesTableName,ParameterValue=caddyResponses ParameterKey=UserTableName,ParameterValue=caddyUsers ParameterKey=OfficesTableName,ParameterValue=caddyOffices ParameterKey=EvaluationTableName,ParameterValue=caddyEvaluation 2> /dev/null & #Disable SAM output
-	sleep 5 # Wait for the lambda to start
-	pytest -vv
-	pkill -f "sam local start-lambda"
-
-run-tests-dev:
-	sam local start-lambda --parameter-overrides ParameterKey=MessageTableName,ParameterValue=caddyMessages-dev ParameterKey=ResponsesTableName,ParameterValue=caddyResponses-dev ParameterKey=UserTableName,ParameterValue=caddyUsers-dev ParameterKey=OfficesTableName,ParameterValue=caddyOffices-dev ParameterKey=EvaluationTableName,ParameterValue=caddyEvaluation-dev 2> /dev/null & #Disable SAM output
+	sam local start-lambda --env-vars env.json 2> /dev/null & #Disable SAM output
 	sleep 5 # Wait for the lambda to start
 	pytest -vv
 	pkill -f "sam local start-lambda"
@@ -49,8 +43,8 @@ setup-dev-container: requirements-dev setup-cloud-env-vars setup-pre-commit crea
 
 setup-local-environment: requirements-dev setup-local-env-vars setup-pre-commit create-docker-network
 
-deploy:
-	sam build -t template.yaml --use-container && sam deploy --guided --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND CAPABILITY_NAMED_IAM --resolve-image-repos
+deploy-prod:
+	sam build -t template.yaml --use-container && sam deploy --guided --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND CAPABILITY_NAMED_IAM --config-env prod
 
 deploy-dev:
 	sam build -t template.yaml --use-container && sam deploy --guided --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND CAPABILITY_NAMED_IAM --config-env develop
