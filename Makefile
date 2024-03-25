@@ -1,9 +1,14 @@
-.PHONY: test-lambda-func
+run-tests:
+	sam local start-lambda --parameter-overrides ParameterKey=MessageTableName,ParameterValue=caddyMessages ParameterKey=ResponsesTableName,ParameterValue=caddyResponses ParameterKey=UserTableName,ParameterValue=caddyUsers ParameterKey=OfficesTableName,ParameterValue=caddyOffices ParameterKey=EvaluationTableName,ParameterValue=caddyEvaluation 2> /dev/null & #Disable SAM output
+	sleep 5 # Wait for the lambda to start
+	pytest -vv
+	pkill -f "sam local start-lambda"
 
-MSG ?= hello world
-
-test-lambda-func:
-	@source define_env_vars.sh && python conversations/chat.py lambda_handler '{"message_string": "$(MSG)"}'
+run-tests-dev:
+	sam local start-lambda --parameter-overrides ParameterKey=MessageTableName,ParameterValue=caddyMessages-dev ParameterKey=ResponsesTableName,ParameterValue=caddyResponses-dev ParameterKey=UserTableName,ParameterValue=caddyUsers-dev ParameterKey=OfficesTableName,ParameterValue=caddyOffices-dev ParameterKey=EvaluationTableName,ParameterValue=caddyEvaluation-dev 2> /dev/null & #Disable SAM output
+	sleep 5 # Wait for the lambda to start
+	pytest -vv
+	pkill -f "sam local start-lambda"
 
 requirements-dev:
 	pip install -r requirements-dev.txt
@@ -11,8 +16,11 @@ requirements-dev:
 build-lambda:
 	sam build -t template.yaml --use-container
 
-test-chat-lambda:
-	sam local invoke ConversationsFunction --event events/gChatMessageEvent.json --env-vars env.json
+test-conversations-lambda:
+	sam local invoke ConversationsFunction --event tests/events/CaddyLocalMessageEvent.json --env-vars env.json
+
+test-pii-detection:
+	sam local invoke ConversationsFunction --event tests/events/CaddyLocalMessageEvent_PII.json --env-vars env.json
 
 test-llm-lambda:
 	sam local invoke LlmFunction --event events/ProcessChatMessageEvent.json --env-vars env.json
@@ -43,3 +51,6 @@ setup-local-environment: requirements-dev setup-local-env-vars setup-pre-commit 
 
 deploy:
 	sam build -t template.yaml --use-container && sam deploy --guided --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND CAPABILITY_NAMED_IAM --resolve-image-repos
+
+deploy-dev:
+	sam build -t template.yaml --use-container && sam deploy --guided --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND CAPABILITY_NAMED_IAM --config-env develop

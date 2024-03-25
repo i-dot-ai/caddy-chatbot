@@ -5,7 +5,11 @@ env.json
 .DS_Store
 docker/
 __pychache__/
+__pycache__/
 cachedir
 .idea
 .vscode
 .venv
+.pytest_cache
+junit
+*.cache/*
