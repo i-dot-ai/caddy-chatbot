@@ -37,7 +37,6 @@ setup-pre-commit:
 setup-cloud-env-vars:
 	@cp env.json.example env.json
 	@sed -i 's/"securi5key"/"$(ANTHROPIC_API_KEY)"/' env.json
-	@sed -i 's/"some_index"/"$(KENDRA_INDEX_ID)"/' env.json
 
 setup-local-env-vars:
 	@cp env.json.example env.json
