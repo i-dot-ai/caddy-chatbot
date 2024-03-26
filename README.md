@@ -28,13 +28,7 @@ $ 	uv venv
 $ 	uv pip sync requirements.txt
 ```
 
-Prior to deployment, you can run the below to ensure all dependencies are installed and locked for each lambda.
-
-```bash
-$ 	make prepare_deployment_dependencies
-```
-
-This will c
+When you PR into main or develop, a github workflow will automatically generate a requirements-lock file on each lambda to ensure consistency across environments.
 
 ### With AWS SAM CLI
 
