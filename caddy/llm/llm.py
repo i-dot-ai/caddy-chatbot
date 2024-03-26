@@ -14,12 +14,10 @@ def lambda_handler(event, context):
                 modules_to_use,
                 module_outputs_json,
                 continue_conversation,
+                control_group_message,
             ) = execute_optional_modules(
                 event, execution_time="before_message_processed"
             )
-
-            if continue_conversation is False:
-                return
 
             message_query = caddy.format_chat_message(
                 event, modules_to_use, module_outputs_json
@@ -31,6 +29,14 @@ def lambda_handler(event, context):
                 user_arguments=message_query.user_arguments,
                 argument_output=message_query.argument_output,
             )
+
+            if continue_conversation is False:
+                google_chat.update_message_in_adviser_space(
+                    message_query.space_id,
+                    message_query.message_id,
+                    {"text": control_group_message},
+                )
+                return
 
             module_outputs_json = json.loads(module_outputs_json)
             for output in module_outputs_json.values():

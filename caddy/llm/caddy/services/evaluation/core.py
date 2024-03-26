@@ -32,6 +32,7 @@ def execute_optional_modules(event, execution_time):
             f"Invalid execution time: {execution_time}. Must be one of {suitable_time_strings}"
         )
     continue_conversation = True
+    control_group_message = None
 
     user_email = event["user"]
 
@@ -50,18 +51,24 @@ def execute_optional_modules(event, execution_time):
             continue
 
         try:
-            result = module_func(event=event, **module_arguments)
+            result = module_func(**module_arguments)
             module_outputs[module_name] = result
 
             if result[0] == "end_interaction":
                 continue_conversation = False
+                control_group_message = result[2]
         except Exception as e:
             print(f"Error occurred while executing module '{module_name}': {str(e)}")
 
     # this will be received from API
     module_outputs_json = json.dumps(module_outputs)
 
-    return modules_to_use, module_outputs_json, continue_conversation
+    return (
+        modules_to_use,
+        module_outputs_json,
+        continue_conversation,
+        control_group_message,
+    )
 
 
 def add_workspace_variables_to_table(email_domain: str, workspace_vars: dict):
