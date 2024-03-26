@@ -1,64 +1,15 @@
-import os
-import boto3
-import json
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
 from aws_xray_sdk.core import xray_recorder
 from aws_xray_sdk.core import patch_all
 
 patch_all()
 
 
-@xray_recorder.capture()
-def get_google_creds(recepient: str):
-    secret_manager = boto3.client("secretsmanager")
-    scopes_list = ["https://www.googleapis.com/auth/chat.bot"]
-    credentials_dict = secret_manager.get_secret_value(SecretId=recepient)
-    credentials_json = json.loads(credentials_dict["SecretString"])
-    credentials = service_account.Credentials.from_service_account_info(
-        credentials_json, scopes=scopes_list
-    )
-
-    return credentials
+class supervisor:
+    pass
 
 
-# Build the Chat API clients
-supervisor = build(
-    "chat",
-    "v1",
-    credentials=get_google_creds(os.getenv("CADDY_SUPERVISOR_SERVICE_ACCOUNT_ID")),
-)
-caddy = build(
-    "chat", "v1", credentials=get_google_creds(os.getenv("CADDY_SERVICE_ACCOUNT_ID"))
-)
-
-
-# Send message to the supervisor space
-@xray_recorder.capture()
-def send_message_to_supervisor_space(space_id, message):
-    response = (
-        supervisor.spaces()
-        .messages()
-        .create(parent=f"spaces/{space_id}", body=message)
-        .execute()
-    )
-
-    thread_id = response["thread"]["name"].split("/")[3]
-    message_id = response["name"].split("/")[3]
-
-    return thread_id, message_id
-
-
-@xray_recorder.capture()
-def respond_to_supervisor_thread(space_id, message, thread_id):
-    supervisor.spaces().messages().create(
-        parent=f"spaces/{space_id}",
-        body={
-            "cardsV2": message["cardsV2"],
-            "thread": {"name": f"spaces/{space_id}/threads/{thread_id}"},
-        },
-        messageReplyOption="REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD",
-    ).execute()
+class caddy:
+    pass
 
 
 # Send message to the adviser space

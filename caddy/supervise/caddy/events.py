@@ -344,20 +344,3 @@ def get_supervisor_response(event):
         request_rejected,
         user_email,
     )
-
-
-@xray_recorder.capture()
-def introduce_caddy_supervisor(event):
-    match event["space"]["type"]:
-        case "DM":
-            return json.dumps(
-                {
-                    "text": "Hi, I'm the supervisor assistant for Caddy! Caddy is an AI support for Citizens Advice advisers. \n *To get started you will need to register the advisers into your supervision space so their messages come to you, you can do this by typing `/addUser` into the chat, other user management functionality can be seen using /help*"
-                }
-            )
-        case "ROOM":
-            return json.dumps(
-                {
-                    "text": f"Hi, thank you for adding me to {event['space']['displayName']}, I'm the supervisor assistant for Caddy! Caddy is an AI support for Citizens Advice advisers. \n\nCaddy uses information from the below sites to form answers: \nGOV UK \nCitizens Advice \nAdviserNet \n\n*To get started you will need to register the advisers into your supervision space so their messages come to you, you can do this by typing `/addUser` into the chat, other user management functionality can be seen using `/help`*"
-                }
-            )

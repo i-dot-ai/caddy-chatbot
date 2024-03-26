@@ -7,7 +7,6 @@ from caddy.events import (
     remove_user,
     list_users,
     get_supervisor_response,
-    introduce_caddy_supervisor,
 )
 from caddy.utils.core import helper_dialog
 from caddy.services import enrolment
@@ -52,6 +51,18 @@ def lambda_handler(event, context):
                 return google_chat.messages["user_not_registered"]
 
             match event["type"]:
+                case "ADDED_TO_SPACE":
+                    match event["space"]["type"]:
+                        case "DM":
+                            return google_chat.messages["introduce_caddy_supervisor_DM"]
+                        case "ROOM":
+                            return json.dumps(
+                                {
+                                    "text": google_chat.messages[
+                                        "introduce_caddy_supervisor_SPACE"
+                                    ].format(space=event["space"]["displayName"])
+                                }
+                            )
                 case "CARD_CLICKED":
                     match event["action"]["actionMethodName"]:
                         case "Approved":
@@ -82,8 +93,6 @@ def lambda_handler(event, context):
                                     return list_users(event)
                                 case "/help":
                                     return helper_dialog()
-                case "ADDED_TO_SPACE":
-                    return introduce_caddy_supervisor(event)
         case "Microsoft Teams":
             """
             TODO - Add Microsoft Teams support
