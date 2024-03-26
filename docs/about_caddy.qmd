@@ -1,0 +1,43 @@
+---
+title: "Quickstart"
+format: html
+---
+
+Here is how you start using Caddy
+
+```{mermaid}
+
+classDiagram
+    class Messages {
+        messageId
+        message
+        conversationId
+        userEmail
+        client
+        messageRecievedTimestamp
+        messageSentTimestamp
+    }
+    class Responses {
+        responseId
+        llmResponseJson
+        llmPrompt
+        messageId
+        llmAnswer
+        userThankedTimestamp
+        llmPromptTimestamp
+        llmResponseTimestamp
+        approverEmail
+        approved
+        approvalTimestamp
+        userResponseTimestamp
+    }
+    class Users {
+        userEmail
+        supervisionSpaceId
+        createdAt
+        isApprover
+        isSuperUser
+    }
+    Users -- Messages : UserId
+    Messages -- Responses : MessageId
+```
