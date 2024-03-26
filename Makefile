@@ -58,13 +58,25 @@ freeze-dev-requirements:
 	uv pip freeze > requirements-lock.txt
 
 setup_lambda_venv:
-	cd $(dir) && \
-	uv venv && \
-	source .venv/bin/activate && \
-	uv pip sync requirements.txt && \
-	uv pip freeze > requirements-lock.txt && \
-	deactivate && \
-	cd ..
+ifeq ($(OS),Windows_NT)
+    cd $(dir) && \
+    python -m venv .venv && \
+    .venv\Scripts\activate && \
+    python -m pip install --upgrade pip && \
+    python -m pip sync requirements.txt && \
+    python -m pip freeze > requirements-lock.txt && \
+    deactivate && \
+    cd ..
+else
+    cd $(dir) && \
+    python3 -m venv .venv && \
+    source .venv/bin/activate && \
+    python3 -m pip install --upgrade pip && \
+    python3 -m pip sync requirements.txt && \
+    python3 -m pip freeze > requirements-lock.txt && \
+    deactivate && \
+    cd ..
+endif
 
 setup_venv_conversations:
 	$(MAKE) setup_lambda_venv dir=caddy/conversations
