@@ -47,3 +47,32 @@ deploy-prod:
 
 deploy-dev:
 	sam build -t template.yaml --use-container && sam deploy --guided --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND CAPABILITY_NAMED_IAM --config-env develop
+
+setup-dev-venv:
+	uv venv
+
+install-dev-requirements:
+	uv pip sync requirements.txt  # Install from a requirements.txt file.
+
+freeze-dev-requirements:
+	uv pip freeze > requirements-lock.txt
+
+setup_lambda_venv:
+	cd $(dir) && \
+	uv venv && \
+	source .venv/bin/activate && \
+	uv pip sync requirements.txt && \
+	uv pip freeze > requirements-lock.txt && \
+	deactivate && \
+	cd ..
+
+setup_venv_conversations:
+	$(MAKE) setup_lambda_venv dir=caddy/conversations
+
+setup_venv_llm:
+	$(MAKE) setup_lambda_venv dir=caddy/llm
+
+setup_venv_supervise:
+	$(MAKE) setup_lambda_venv dir=caddy/supervise
+
+prepare_deployment_dependencies: freeze-dev-requirements setup_venv_conversations setup_venv_llm setup_venv_supervise

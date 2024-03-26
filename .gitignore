@@ -15,3 +15,5 @@ junit
 *.cache/*
 notebooks/*
 .pre-commit-trivy-cache
+# Ignore virtual environments
+**/venv/

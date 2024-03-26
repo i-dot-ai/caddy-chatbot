@@ -1,0 +1,10 @@
+aws-xray-sdk==2.13.0
+google-api-python-client==2.122.0
+google-auth==2.28.2
+langchain==0.1.12
+langchain-community==0.0.29
+opensearch-py==2.4.2
+pydantic==2.6.4
+pydantic-settings==2.2.1
+requests-aws4auth==1.2.3
+sentence-transformers==2.5.1

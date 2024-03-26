@@ -18,6 +18,24 @@ Ensure you have installed Python3.11, and created a virtual environment in your 
 $ make requirements-dev
 ```
 
+## Environment Management
+We recommend using [uv](https://github.com/astral-sh/uv) for managing environments and dependencies. Given each lambda has bespoke requirements, we also provide helpful functions to separate these out.
+
+To create your virtual environment, run
+
+```bash
+$ 	uv venv
+$ 	uv pip sync requirements.txt
+```
+
+Prior to deployment, you can run the below to ensure all dependencies are installed and locked for each lambda.
+
+```bash
+$ 	make prepare_deployment_dependencies
+```
+
+This will c
+
 ### With AWS SAM CLI
 
 Local development is easier running AWS SAM, either [installed directly](https://aws.amazon.com/serverless/aws-sam/) or through [pip](https://pypi.org/project/aws-sam-cli/).
