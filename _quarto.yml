@@ -23,3 +23,6 @@ website:
 format:
   html:
     toc: true
+
+execute:
+  freeze: "auto"
