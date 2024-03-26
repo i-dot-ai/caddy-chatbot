@@ -64,7 +64,7 @@ setup_lambda_venv:
 	uv pip sync requirements.txt && \
 	uv pip freeze > requirements-lock.txt && \
 	deactivate && \
-	cd ..
+	cd -
 
 setup_venv_conversations:
 	$(MAKE) setup_lambda_venv dir=caddy/conversations
