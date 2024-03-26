@@ -18,3 +18,5 @@ notebooks/*
 # Ignore virtual environments
 **/venv/
 .ruff_cache
+_site
+/.quarto/
