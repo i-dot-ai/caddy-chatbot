@@ -22,6 +22,7 @@ jobs:
           python -m pip install --upgrade pip
           pip uv
           uv pip sync requirements.txt
+          uv pip freeze > requirements-lock.txt
 
       - name: Generate deployment dependencies
         run: |
