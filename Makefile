@@ -55,26 +55,18 @@ install-dev-requirements:
 	uv pip sync requirements.txt
 
 freeze-dev-requirements:
-	uv pip freeze > requirements-lock.txt
+	uv pip freeze > requirements.txt
 
-setup_lambda_venv:
-	@current_dir=$$(pwd) && \
-	cd $(dir) && \
-	uv venv && \
-	chmod +x .venv/bin/activate && \
-	. .venv/bin/activate && \
-	uv pip sync requirements.txt && \
-	uv pip freeze > requirements-lock.txt && \
-	. .venv/bin/activate && \
-	cd $$current_dir
+setup_lambda_requirements:
+	uv pip compile --output-file $(dir)/requirements.txt $(dir)/requirements.in
 
 setup_venv_conversations:
-	$(MAKE) setup_lambda_venv dir=caddy/conversations
+	$(MAKE) setup_lambda_requirements dir=caddy/conversations
 
 setup_venv_llm:
-	$(MAKE) setup_lambda_venv dir=caddy/llm
+	$(MAKE) setup_lambda_requirements dir=caddy/llm
 
 setup_venv_supervise:
-	$(MAKE) setup_lambda_venv dir=caddy/supervise
+	$(MAKE) setup_lambda_requirements dir=caddy/supervise
 
 prepare_deployment_dependencies: freeze-dev-requirements setup_venv_conversations setup_venv_llm setup_venv_supervise
