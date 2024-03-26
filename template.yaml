@@ -190,7 +190,7 @@ Resources:
       FunctionName: !Sub 'llm-${StageName}'
       PackageType: Image
       ImageConfig:
-        Command: ["answer.lambda_handler"]
+        Command: ["llm.lambda_handler"]
       ImageUri: !GetAtt CaddyECR.RepositoryUri
       Timeout: 120
       MemorySize: 2048

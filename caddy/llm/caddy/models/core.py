@@ -14,14 +14,17 @@ class UserMessage(pydantic.BaseModel):
     message: str
     message_sent_timestamp: str
     message_received_timestamp: datetime
+    user_arguments: Union[pydantic.Json, None] = None
+    argument_output: Union[pydantic.Json, None] = None
 
 
 class LlmResponse(pydantic.BaseModel):
     response_id: str = str(uuid.uuid4())
     message_id: str
+    thread_id: str
     llm_prompt: str
     llm_answer: str
-    llm_response_json: pydantic.Json
+    llm_response_json: Union[pydantic.Json, None] = None
     llm_prompt_timestamp: datetime
     llm_response_timestamp: datetime
 
@@ -49,7 +52,7 @@ class ApprovalEvent(pydantic.BaseModel):
     supervisor_message: Union[str, None] = None
 
 
-class CaddyMessageEvent(pydantic.BaseModel):
+class ProcessChatMessageEvent(pydantic.BaseModel):
     type: str
     user: str
     name: str

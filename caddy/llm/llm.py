@@ -1,171 +1,84 @@
-from langchain_community.llms import Bedrock
-from prompt import CORE_PROMPT
-from langchain.retrievers import ContextualCompressionRetriever
-from langchain.retrievers.merger_retriever import MergerRetriever
-from langchain.retrievers.document_compressors import DocumentCompressorPipeline
-from langchain_community.document_transformers import EmbeddingsClusteringFilter
-from langchain_community.vectorstores import OpenSearchVectorSearch
-from opensearchpy import RequestsHttpConnection
-from requests_aws4auth import AWS4Auth
-from langchain.chains import RetrievalQA
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from datetime import datetime
-from langchain.vectorstores.elasticsearch import ElasticsearchStore
-import boto3
-from typing import List, Any
-import re
-import os
+import json
 
-from aws_xray_sdk.core import xray_recorder
-from aws_xray_sdk.core import patch_all
-
-patch_all()
+from caddy import core as caddy
+from caddy.services.evaluation.core import execute_optional_modules
+from integrations.google_chat.core import GoogleChat
 
 
-@xray_recorder.capture()
-def find_most_recent_caddy_vector_index():
-    """Attempts to find one of the rolling Caddy vector indexes, and returns the most recent one.
-    If no such index is found, the original index name is returned."""
+def lambda_handler(event, context):
+    match event["source_client"]:
+        case "Google Chat":
+            google_chat = GoogleChat()
 
-    # Retrieve the original index name from the environment variable
-    opensearch_index = os.environ.get("OPENSEARCH_INDEX")
-    opensearch_https = os.environ.get("OPENSEARCH_HTTPS")
-    credentials = boto3.Session().get_credentials()
+            (
+                modules_to_use,
+                module_outputs_json,
+                continue_conversation,
+                control_group_message,
+            ) = execute_optional_modules(
+                event, execution_time="before_message_processed"
+            )
 
-    auth = AWS4Auth(
-        service="es",
-        region=os.environ.get("AWS_REGION"),
-        refreshable_credentials=credentials,
-    )
+            message_query = caddy.format_chat_message(
+                event, modules_to_use, module_outputs_json
+            )
 
-    embeddings = HuggingFaceEmbeddings(model_name="model")
+            caddy.store_message(message_query)
+            caddy.store_evaluation_module(
+                thread_id=message_query.thread_id,
+                user_arguments=message_query.user_arguments,
+                argument_output=message_query.argument_output,
+            )
 
-    vectorstore = OpenSearchVectorSearch(
-        index_name=opensearch_index,
-        opensearch_url=opensearch_https,
-        embedding_function=embeddings,
-        http_auth=auth,
-        use_ssl=True,
-        verify_certs=True,
-        connection_class=RequestsHttpConnection,
-    )
+            if continue_conversation is False:
+                google_chat.update_message_in_adviser_space(
+                    message_query.space_id,
+                    message_query.message_id,
+                    {"text": control_group_message},
+                )
+                return
 
-    client = vectorstore.client
+            module_outputs_json = json.loads(module_outputs_json)
+            for output in module_outputs_json.values():
+                if isinstance(output, dict) and output.get("end_interaction"):
+                    return
 
-    # Initialize most_recent_index with the original index name as a fallback
-    most_recent_index = opensearch_index
+            chat_history = caddy.get_chat_history(message_query)
 
-    # Pattern to match indexes of interest
-    pattern = re.compile(r"caddy_vector_index_(\d{8})$")
+            google_chat.update_message_in_adviser_space(
+                space_id=message_query.conversation_id,
+                message_id=message_query.message_id,
+                message=google_chat.messages["GENERATING_RESPONSE"],
+            )
 
-    # Fetch all indexes
-    index_list = client.cat.indices(format="json")
-    most_recent_date = None
+            llm_response = caddy.query_llm(message_query, chat_history)
 
-    for index_info in index_list:
-        index_name = index_info["index"]
-        match = pattern.match(index_name)
-        if match:
-            # Extract date from the index name
-            extracted_date_str = match.group(1)
-            try:
-                extracted_date = datetime.strptime(extracted_date_str, "%Y%m%d")
-                # Update most recent date and index name if this index is more recent
-                if most_recent_date is None or extracted_date > most_recent_date:
-                    most_recent_date = extracted_date
-                    most_recent_index = index_name
-            except ValueError:
-                # If the date is not valid, ignore this index
-                continue
+            response_card = google_chat.create_card(llm_response)
+            response_card = json.dumps(response_card)
 
-    return most_recent_index
+            llm_response.response_card = response_card
 
+            caddy.store_response(llm_response)
 
-@xray_recorder.capture()
-def build_chain():
-    opensearch_index = find_most_recent_caddy_vector_index()
-    opensearch_https = os.environ.get("OPENSEARCH_HTTPS")
+            supervision_event = caddy.format_supervision_event(
+                message_query, llm_response
+            )
 
-    credentials = boto3.Session().get_credentials()
-    auth = AWS4Auth(
-        service="es",
-        region=os.environ.get("AWS_REGION"),
-        refreshable_credentials=credentials,
-    )
+            google_chat.update_message_in_adviser_space(
+                space_id=message_query.conversation_id,
+                message_id=message_query.message_id,
+                message=google_chat.messages["AWAITING_APPROVAL"],
+            )
 
-    embeddings = HuggingFaceEmbeddings(model_name="model")
+            caddy.store_user_thanked_timestamp(llm_response)
 
-    vectorstore = OpenSearchVectorSearch(
-        index_name=opensearch_index,
-        opensearch_url=opensearch_https,
-        embedding_function=embeddings,
-        http_auth=auth,
-        use_ssl=True,
-        verify_certs=True,
-        connection_class=RequestsHttpConnection,
-    )
-
-    advisernet_retriever = vectorstore.as_retriever(
-        k="5",
-        strategy=ElasticsearchStore.ApproxRetrievalStrategy(hybrid=True),
-        search_kwargs={
-            "filter": {"match": {"metadata.domain_description": "AdvisorNet"}}
-        },
-    )
-
-    gov_retriever = vectorstore.as_retriever(
-        k="5",
-        strategy=ElasticsearchStore.ApproxRetrievalStrategy(hybrid=True),
-        search_kwargs={"filter": {"match": {"metadata.domain_description": "GOV.UK"}}},
-    )
-
-    ca_retriever = vectorstore.as_retriever(
-        k="5",
-        strategy=ElasticsearchStore.ApproxRetrievalStrategy(hybrid=True),
-        search_kwargs={
-            "filter": {"match": {"metadata.domain_description": "Citizens Advice"}}
-        },
-    )
-
-    lotr = MergerRetriever(
-        retrievers=[gov_retriever, advisernet_retriever, ca_retriever]
-    )
-
-    filter_ordered_by_retriever = EmbeddingsClusteringFilter(
-        embeddings=embeddings,
-        num_clusters=3,
-        num_closest=2,
-        sorted=True,
-        remove_duplicates=True,
-    )
-
-    pipeline = DocumentCompressorPipeline(transformers=[filter_ordered_by_retriever])
-    compression_retriever = ContextualCompressionRetriever(
-        base_compressor=pipeline, base_retriever=lotr
-    )
-
-    llm = Bedrock(
-        model_id="anthropic.claude-instant-v1",
-        region_name="eu-central-1",
-        model_kwargs={"temperature": 0.2, "max_tokens_to_sample": 750},
-    )
-
-    chain = RetrievalQA.from_chain_type(
-        llm=llm,
-        retriever=compression_retriever,
-        return_source_documents=True,
-        chain_type_kwargs={
-            "prompt": CORE_PROMPT,
-        },
-    )
-
-    ai_prompt_timestamp = datetime.now()
-    return chain, ai_prompt_timestamp
-
-
-@xray_recorder.capture()
-def run_chain(chain, prompt: str, history: List[Any]):
-    ai_response = chain({"query": prompt, "chat_history": history})
-    ai_response_timestamp = datetime.now()
-
-    return ai_response, ai_response_timestamp
+            caddy.send_for_supervisor_approval(supervision_event)
+        case "Microsoft Teams":
+            raise Exception("Unsupported Source Client")
+        case "Caddy Local":
+            """
+            TODO - Add Caddy tests
+            """
+            return "LLM Invoke Test"
+        case _:
+            raise Exception("Unsupported Source Client")
