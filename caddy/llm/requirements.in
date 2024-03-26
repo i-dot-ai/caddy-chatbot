@@ -1,0 +1,10 @@
+pydantic
+pydantic-settings
+langchain
+google-auth
+google-api-python-client
+opensearch-py
+requests-aws4auth
+sentence-transformers
+langchain-community
+aws-xray-sdk

@@ -57,5 +57,11 @@ repos:
           - ./tests
           - --skip-dirs
           - .venv
+          - --skip-dirs
+          - caddy/conversations/.venv
+          - --skip-dirs
+          - caddy/llm/.venv
+          - --skip-dirs
+          - caddy/supervise/.venv
           - --ignore-unfixed
           - . # last arg indicates the path/file to scan
