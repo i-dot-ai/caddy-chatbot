@@ -14,3 +14,4 @@ cachedir
 junit
 *.cache/*
 notebooks/*
+.pre-commit-trivy-cache
