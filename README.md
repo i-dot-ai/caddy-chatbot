@@ -28,7 +28,11 @@ $ 	uv venv
 $ 	uv pip sync requirements.txt
 ```
 
-When you PR into main or develop, a github workflow will automatically generate a requirements-lock file on each lambda to ensure consistency across environments.
+Before deploying into main, you will need to generate a locked requirements file.
+
+```bash
+$ 	make prepare_deployment_dependencies
+```
 
 ### With AWS SAM CLI
 

@@ -1,48 +1,39 @@
-name: Generate Locked Requirements
-
-permissions:
-  contents: read
-  pull-requests: write
+name: Check Locked Requirements
 
 on:
   pull_request:
     branches: [main, develop]
 
 jobs:
-  generate-requirements-lock:
+  check-requirements-lock:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.x'
-
-      - name: Install uv dependencies
+      - name: Check Caddy Conversations requirements-lock.txt existence
         run: |
-          python -m pip install --upgrade pip
-          pip install uv
-          uv venv
-          uv pip sync requirements.txt
-          uv pip freeze > requirements-lock.txt
+          if compgen -G caddy/conversations/requirements-lock.txt" > /dev/null; then
+            echo "Caddy Conversations requirements-lock.txt files exist."
+          else
+            echo "Caddy Conversations requirements-lock.txt files do not exist."
+            exit 1
+          fi
 
-      - name: Generate deployment dependencies
+      - name: Check Caddy LLM requirements-lock.txt existence
         run: |
-          make prepare_deployment_dependencies
+          if compgen -G caddy/llm/requirements-lock.txt" > /dev/null; then
+            echo "Caddy LLM requirements-lock.txt files exist."
+          else
+            echo "Caddy LLM requirements-lock.txt files do not exist."
+            exit 1
+          fi
 
-      - name: Commit requirements-lock.txt
+      - name: Check Caddy Supervise requirements-lock.txt existence
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add **/requirements-lock*.txt
-          git commit -m "Generate requirements-lock.txt"
-
-      - name: Push changes
-        uses: ad-m/github-push-action@master
-        with:
-            github_token: ${{ secrets.GITHUB_TOKEN }}
-            branch: ${{ github.head_ref }}
-        if: github.event_name == 'pull_request'
+          if compgen -G caddy/supervise/requirements-lock.txt" > /dev/null; then
+            echo "Caddy Supervise requirements-lock.txt files exist."
+          else
+            echo "Caddy Supervise requirements-lock.txt files do not exist."
+            exit 1
+          fi
