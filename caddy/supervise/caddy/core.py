@@ -4,7 +4,7 @@ from caddy.utils.tables import responses_table
 from datetime import datetime
 
 
-def store_approver_received_timestamp(event: SupervisionEvent, timestamp):
+def store_approver_received_timestamp(event: SupervisionEvent):
     # Updating response in DynamoDB
     responses_table.update_item(
         Key={"threadId": str(event["thread_id"])},

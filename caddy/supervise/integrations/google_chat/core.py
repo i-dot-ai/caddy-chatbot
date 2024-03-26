@@ -327,7 +327,7 @@ class GoogleChat:
         )
 
     @xray_recorder.capture()
-    def create_approved_card(card, approver):
+    def create_approved_card(self, card, approver):
         approval_json = {
             "widgets": [
                 {
