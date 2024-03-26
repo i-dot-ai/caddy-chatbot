@@ -61,6 +61,7 @@ setup_lambda_venv:
 	@current_dir=$$(pwd) && \
 	cd $(dir) && \
 	uv venv && \
+	chmod +x .venv/bin/activate && \
 	.venv/bin/activate && \
 	uv pip sync requirements.txt && \
 	uv pip freeze > requirements-lock.txt && \
