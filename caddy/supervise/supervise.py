@@ -8,12 +8,14 @@ from integrations.google_chat.core import GoogleChat
 
 def lambda_handler(event, context):
     chat_client = ""
+    user = None
 
     # --- Determine the chat client ---
     if "type" in event and event["type"] == "SUPERVISION_REQUIRED":
         match event["source_client"]:
             case "Google Chat":
                 chat_client = "Google Chat"
+                user = event["user"]
             case "Microsoft Teams":
                 chat_client = "Microsoft Teams"
             case "CADDY_LOCAL":
@@ -36,7 +38,7 @@ def lambda_handler(event, context):
             Handles inbound requests from Google Chat
             """
             google_chat = GoogleChat()
-            user = event["user"]["email"]
+            user = user or event["user"]["email"]
             domain = user.split("@")[1]
 
             domain_enrolled = enrolment.check_domain_status(domain)
