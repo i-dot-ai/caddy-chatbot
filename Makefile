@@ -58,13 +58,14 @@ freeze-dev-requirements:
 	uv pip freeze > requirements-lock.txt
 
 setup_lambda_venv:
+	@current_dir=$$(pwd) && \
 	cd $(dir) && \
 	uv venv && \
 	source .venv/bin/activate && \
 	uv pip sync requirements.txt && \
 	uv pip freeze > requirements-lock.txt && \
 	deactivate && \
-	cd -
+	cd $$current_dir
 
 setup_venv_conversations:
 	$(MAKE) setup_lambda_venv dir=caddy/conversations
