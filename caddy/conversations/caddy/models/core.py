@@ -29,6 +29,7 @@ class LlmResponse(pydantic.BaseModel):
 
 class SupervisionEvent(pydantic.BaseModel):
     type: str
+    source_client: str
     user: str
     llmPrompt: str
     llm_answer: str

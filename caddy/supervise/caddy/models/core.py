@@ -1,6 +1,5 @@
 from typing import Union
 from datetime import datetime
-import json
 import uuid
 import pydantic
 from pydantic.types import StrictBool
@@ -30,6 +29,7 @@ class LlmResponse(pydantic.BaseModel):
 
 class SupervisionEvent(pydantic.BaseModel):
     type: str
+    source_client: str
     user: str
     llmPrompt: str
     llm_answer: str
@@ -57,83 +57,3 @@ class User(pydantic.BaseModel):
     is_super_user: StrictBool = False
     created_at: datetime = datetime.now()
     supervision_space_id: str
-
-
-# === Database functions ===
-def store_message(message: UserMessage, table):
-    # Storing in DynamoDB
-    table.put_item(
-        Item={
-            "messageId": str(message.message_id),
-            "conversationId": str(message.conversation_id),
-            "threadId": str(message.thread_id),
-            "client": message.client,
-            "userEmail": str(message.user_email),
-            "message": message.message,
-            "messageSentTimestamp": message.message_sent_timestamp,
-            "messageReceivedTimestamp": str(message.message_received_timestamp),
-        }
-    )
-
-    return {
-        "statusCode": 200,
-        "body": json.dumps({"message": "Message stored successfully!"}),
-    }
-
-
-def store_response(response: LlmResponse, table):
-    # Storing in DynamoDB
-    response = table.put_item(
-        Item={
-            "responseId": str(response.response_id),
-            "messageId": str(response.message_id),
-            "llmPrompt": response.llm_prompt,
-            "llmAnswer": response.llm_answer,
-            "llmResponseJSon": response.llm_response_json,
-            "llmPromptTimestamp": str(response.llm_prompt_timestamp),
-            "llmResponseTimestamp": str(response.llm_response_timestamp),
-        }
-    )
-
-    return {
-        "statusCode": 200,
-        "body": json.dumps({"message": "Response stored successfully!"}),
-    }
-
-
-def store_approver_received_timestamp(event: SupervisionEvent, timestamp, table):
-    # Updating response in DynamoDB
-    table.update_item(
-        Key={"threadId": str(event["thread_id"])},
-        UpdateExpression="set approverReceivedTimestamp=:t",
-        ExpressionAttributeValues={":t": str(timestamp)},
-        ReturnValues="UPDATED_NEW",
-    )
-
-    return {
-        "statusCode": 200,
-        "body": json.dumps({"message": "Timestamp stored successfully!"}),
-    }
-
-
-def store_approver_event(approval_event: ApprovalEvent, table):
-    # Updating response in DynamoDB
-    table.update_item(
-        Key={"threadId": str(approval_event.thread_id)},
-        UpdateExpression="set approverEmail=:email, approved=:approved, approvalTimestamp=:atime, userResponseTimestamp=:utime, supervisorMessage=:sMessage",
-        ExpressionAttributeValues={
-            ":email": approval_event.approver_email,
-            ":approved": approval_event.approved,
-            ":atime": str(approval_event.approval_timestamp),
-            ":utime": str(approval_event.user_response_timestamp),
-            ":sMessage": approval_event.supervisor_message,
-        },
-        ReturnValues="UPDATED_NEW",
-    )
-
-    return {
-        "statusCode": 200,
-        "body": json.dumps(
-            {"message": "Supervisor approval/ rejection stored successfully!"}
-        ),
-    }
