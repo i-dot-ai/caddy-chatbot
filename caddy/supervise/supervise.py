@@ -1,4 +1,4 @@
-from events import (
+from caddy.events import (
     receive_new_ai_response,
     received_approval,
     received_rejection,
@@ -9,29 +9,48 @@ from events import (
     get_supervisor_response,
     introduce_caddy_supervisor,
 )
-from utils import helper_dialog
-from models import users_table, offices_table
+from caddy.utils.core import helper_dialog
+from caddy.services import enrolment
+from integrations.google_chat.core import GoogleChat
 import json
 
 
 def lambda_handler(event, context):
-    if event["type"] == "SUPERVISION_REQUIRED":
+    if "type" in event and event["type"] == "SUPERVISION_REQUIRED":
         receive_new_ai_response(event)
-        return
 
-    user = event["user"]["email"]
-    domain = user.split("@")[1]
+    chat_client = ""
 
-    if domain == "gmail.com":
-        return json.dumps(
-            {"text": "Caddy is not currently available for personal use."}
-        )
+    # --- Determine the chat client ---
+    if "common" in event and event["common"]["hostApp"] == "CHAT":
+        chat_client = "Google Chat"
+    elif "type" in event and event["type"] == "ADDED_TO_SPACE":
+        chat_client = "Google Chat"
+    elif "channelId" in event and event["channelId"] == "msteams":
+        chat_client = "Microsoft Teams"
+    elif "source" in event and event["source"] == "CADDY_LOCAL":
+        """
+        TEST RUNNER FOR LOCAL SAM TESTING OF PLATFORM AGNOSTIC CADDY COMPONENTS
+        """
+        chat_client = "Caddy Local"
 
-    user_registered = users_table.get_item(Key={"userEmail": user})
-    office_registered = offices_table.get_item(Key={"emailDomain": domain})
+    match chat_client:
+        case "Google Chat":
+            """
+            Handles inbound requests from Google Chat
+            """
+            google_chat = GoogleChat()
+            user = event["user"]["email"]
+            domain = user.split("@")[1]
 
-    if "Item" in office_registered:
-        if "Item" in user_registered:
+            domain_enrolled = enrolment.check_domain_status(domain)
+            if domain_enrolled is not True:
+                return google_chat.messages["domain_not_enrolled"]
+
+            user_enrolled = enrolment.check_user_status(user)
+            if user_enrolled is not True:
+                return google_chat.messages["user_not_registered"]
+
             match event["type"]:
                 case "CARD_CLICKED":
                     match event["action"]["actionMethodName"]:
@@ -65,17 +84,38 @@ def lambda_handler(event, context):
                                     return helper_dialog()
                 case "ADDED_TO_SPACE":
                     return introduce_caddy_supervisor(event)
-                case _:
-                    print("Case not handled")
-        else:
+        case "Microsoft Teams":
+            """
+            TODO - Add Microsoft Teams support
+            """
             return json.dumps(
-                {
-                    "text": "Supervisor is not registered, please contact it.support@casort.org for support in onboarding to Caddy"
-                }
+                {"text": "Caddy is not currently available for this platform."}
             )
-    else:
-        return json.dumps(
-            {
-                "text": "Office is not registered, please contact it.support@casort.org regarding onboarding to Caddy"
-            }
-        )
+        case "Caddy Local":
+            """
+            TODO - SPLIT INTO PLATFORM AGNOSTIC CADDY COMPONENTS
+            """
+            user = event["user"]
+            domain = user.split("@")[1]
+
+            domain_enrolled = enrolment.check_domain_status(domain)
+            if domain_enrolled is not True:
+                return json.dumps(
+                    {
+                        "text": "Your domain is not enrolled in Caddy. Please contact your administrator."
+                    }
+                )
+
+            user_enrolled = enrolment.check_user_status(user)
+            if user_enrolled is not True:
+                return json.dumps(
+                    {
+                        "text": "User is not registered, please contact your administrator for support in onboarding to Caddy"
+                    }
+                )
+
+            return "Supervision Event Received"
+        case _:
+            return json.dumps(
+                {"text": "Caddy is not currently available for this platform."}
+            )

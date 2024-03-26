@@ -3,14 +3,14 @@ import json
 from datetime import datetime
 import boto3
 from boto3.dynamodb.conditions import Attr
-from responses import (
+from integrations.google_chat.responses import (
     send_message_to_supervisor_space,
     send_message_to_adviser_space,
     update_message_in_supervisor_space,
     update_message_in_adviser_space,
     respond_to_supervisor_thread,
 )
-from utils import (
+from caddy.utils.core import (
     create_supervision_card,
     create_updated_supervision_card,
     create_supervision_request_card,
@@ -22,17 +22,17 @@ from utils import (
     user_list_dialog,
     get_supervisor_response_dialog,
 )
-from models import (
+from caddy.models.core import (
     User,
     SupervisionEvent,
     ApprovalEvent,
     store_approver_received_timestamp,
     store_approver_event,
-    responses_table,
 )
+from caddy.utils.tables import responses_table
 from aws_xray_sdk.core import xray_recorder
 from aws_xray_sdk.core import patch_all
-from survey import run_survey
+from caddy.services.survey import run_survey
 
 patch_all()
 

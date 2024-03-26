@@ -1,5 +1,5 @@
-from models import offices_table
-from responses import send_message_to_adviser_space
+from caddy.utils.tables import offices_table
+from integrations.google_chat.responses import send_message_to_adviser_space
 import json
 
 
