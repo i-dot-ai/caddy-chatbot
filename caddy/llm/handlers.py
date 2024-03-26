@@ -17,6 +17,7 @@ from utils import create_card, get_chat_history, store_evaluation_module
 from llm import run_chain, build_chain
 from responses import update_message_in_adviser_space
 from utils import bcolors, execute_optional_modules
+
 from aws_xray_sdk.core import xray_recorder
 from aws_xray_sdk.core import patch_all
 
@@ -114,6 +115,7 @@ def process_chat_message(event: ProcessChatMessageEvent):
 
     supervision_event = SupervisionEvent(
         type="SUPERVISION_REQUIRED",
+        source_client=message_query.client,
         user=message_query.user_email,
         llmPrompt=ai_answer.llm_prompt,
         llm_answer=ai_answer.llm_answer,

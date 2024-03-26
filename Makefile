@@ -1,6 +1,7 @@
 run-tests:
+	sam build -t template.yaml --use-container
 	sam local start-lambda --env-vars env.json 2> /dev/null & #Disable SAM output
-	sleep 5 # Wait for the lambda to start
+	sleep 10 # Wait for the lambda to start
 	pytest -vv
 	pkill -f "sam local start-lambda"
 

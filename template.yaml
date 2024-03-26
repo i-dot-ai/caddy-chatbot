@@ -20,9 +20,6 @@ Parameters:
   ResponsesTableName:
     Type: String
     Description: Name of the DynamoDB table for responses
-  IdempotencyTableName:
-    Type: String
-    Description: Name of the DynamoDB table for idempotency
   OfficesTableName:
     Type: String
     Description: Name of the DynamoDB table for responses
@@ -93,7 +90,6 @@ Resources:
           MESSAGES_TABLE_NAME: !Ref MessageTableName
           RESPONSES_TABLE_NAME: !Ref ResponsesTableName
           USERS_TABLE_NAME: !Ref UserTableName
-          IDEMPOTENCY_TABLE_NAME: !Ref IdempotencyTableName
           OFFICES_TABLE_NAME: !Ref OfficesTableName
           EVALUATION_TABLE_NAME: !Ref EvaluationTableName
           CADDY_SERVICE_ACCOUNT_ID: !Ref CaddyServiceAccountId
@@ -162,17 +158,6 @@ Resources:
                   Action:
                     - secretsmanager:GetSecretValue # pragma: allowlist secret
                   Resource: '*'
-          - PolicyName: !Sub 'ConversationsIdempotencyDynamoPolicy-${StageName}'
-            PolicyDocument:
-              Version: '2012-10-17'
-              Statement:
-                - Effect: Allow
-                  Action:
-                    - dynamodb:PutItem
-                    - dynamodb:GetItem
-                    - dynamodb:UpdateItem
-                    - dynamodb:DeleteItem
-                  Resource: !GetAtt IdempotencyTable.Arn
           - PolicyName: !Sub 'ConversationsOfficesDynamoPolicy-${StageName}'
             PolicyDocument:
               Version: '2012-10-17'
@@ -218,7 +203,6 @@ Resources:
           MESSAGES_TABLE_NAME: !Ref MessageTableName
           RESPONSES_TABLE_NAME: !Ref ResponsesTableName
           USERS_TABLE_NAME: !Ref UserTableName
-          IDEMPOTENCY_TABLE_NAME: !Ref IdempotencyTableName
           OFFICES_TABLE_NAME: !Ref OfficesTableName
           HF_HOME: "/tmp"
           XDG_CACHE_HOME: "/tmp"
@@ -300,17 +284,6 @@ Resources:
                   Action:
                     - secretsmanager:GetSecretValue # pragma: allowlist secret
                   Resource: '*'
-          - PolicyName: !Sub 'LlmIdempotencyDynamoPolicy-${StageName}'
-            PolicyDocument:
-              Version: '2012-10-17'
-              Statement:
-                - Effect: Allow
-                  Action:
-                    - dynamodb:PutItem
-                    - dynamodb:GetItem
-                    - dynamodb:UpdateItem
-                    - dynamodb:DeleteItem
-                  Resource: !GetAtt IdempotencyTable.Arn
           - PolicyName: !Sub 'LlmOfficesDynamoPolicy-${StageName}'
             PolicyDocument:
               Version: '2012-10-17'
@@ -486,21 +459,6 @@ Resources:
               WriteCapacityUnits: 1
           StreamSpecification:
               StreamViewType: NEW_AND_OLD_IMAGES
-
-  IdempotencyTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: !Ref IdempotencyTableName
-      AttributeDefinitions:
-        - AttributeName: id
-          AttributeType: S
-      KeySchema:
-        - AttributeName: id
-          KeyType: HASH
-      TimeToLiveSpecification:
-        AttributeName: expiration
-        Enabled: true
-      BillingMode: PAY_PER_REQUEST
 
   OfficesTable:
     Type: AWS::DynamoDB::Table

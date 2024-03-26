@@ -1,0 +1,36 @@
+{
+  "type": "SUPERVISION_REQUIRED",
+  "source_client": "Caddy Local",
+  "user": "tester@test.com",
+  "llmPrompt": "What makes a client eligible for universal credit?",
+  "llm_answer": "LLM ANSWER TEXT",
+  "llm_response_json": {
+    "cardsV2": [
+      {
+        "cardId": "aiResponseCard",
+        "card": {
+          "sections": [
+            {"widgets": [
+              {
+                "textParagraph": {
+                  "text": "LLM ANSWER TEXT"
+                  }
+                }
+              ]
+            },
+            { "header": "Reference links",
+            "widgets": [
+              { "textParagraph": { "text": "<a href='https://www.gov.uk/universal-credit/eligibility'>Universal Credit: Eligibility - GOV.UK</a>" }},
+              { "textParagraph": { "text": "<a href='https://www.citizensadvice.org.uk/benefits/universal-credit/before-you-apply/Check-if-you-can-get-Universal-Credit/'>Check if you can get Universal Credit - Citizens Advice</a>"}}
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "conversation_id": "12345",
+  "thread_id": "12345",
+  "message_id": "12345",
+  "response_id": "12345-12345-12345-12345-12345"
+}

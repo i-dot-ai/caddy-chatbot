@@ -17,5 +17,6 @@ notebooks/*
 .pre-commit-trivy-cache
 # Ignore virtual environments
 **/venv/
+.ruff_cache
 _site
 /.quarto/
