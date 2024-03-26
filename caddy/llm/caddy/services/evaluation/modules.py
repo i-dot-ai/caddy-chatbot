@@ -1,5 +1,5 @@
 import random
-from responses import update_message_in_adviser_space
+from integrations.google_chat.core import update_message_in_adviser_space
 
 # the module file includes optional plugins called during the conversation. Each must be passed an event, as well as optional kwargs
 # the module must return a tuple of (status, message) where status is either "end_interaction" or "continue_interaction"
