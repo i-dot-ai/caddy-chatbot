@@ -5,7 +5,7 @@ run-tests:
 	pkill -f "sam local start-lambda"
 
 requirements-dev:
-	pip install -r requirements-dev.txt
+	pip install -r requirements.txt
 
 build-lambda:
 	sam build -t template.yaml --use-container
@@ -52,7 +52,7 @@ setup-dev-venv:
 	uv venv
 
 install-dev-requirements:
-	uv pip sync requirements.txt  # Install from a requirements.txt file.
+	uv pip sync requirements.txt
 
 freeze-dev-requirements:
 	uv pip freeze > requirements-lock.txt
