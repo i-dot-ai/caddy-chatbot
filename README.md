@@ -123,4 +123,3 @@ For ease of deletion, you can remove all the created resources with
 ```bash
 $ aws cloudformation delete-stack --stack-name caddyStack
 ```
-You will need to manually edit the Kendra index in the console. You may need to manually create an S3 bucket to store the images.

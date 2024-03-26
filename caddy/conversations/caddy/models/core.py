@@ -64,7 +64,7 @@ class CaddyMessageEvent(pydantic.BaseModel):
 # === Database functions ===
 def store_message(message: UserMessage, table):
     # Storing in DynamoDB
-    response = table.put_item(
+    table.put_item(
         Item={
             "messageId": str(message.message_id),
             "conversationId": str(message.conversation_id),
@@ -106,7 +106,7 @@ def store_response(response: LlmResponse, table):
 
 def store_awaiting_approval_timestamp(ai_answer: LlmResponse, timestamp, table):
     # Updating response in DynamoDB
-    response = table.update_item(
+    table.update_item(
         Key={"threadId": ai_answer.thread_id},
         UpdateExpression="set awaitingApprovalMessageTimestamp=:t",
         ExpressionAttributeValues={":t": str(timestamp)},

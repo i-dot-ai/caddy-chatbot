@@ -1,6 +1,5 @@
 import os
 import json
-import sys
 from datetime import datetime
 import boto3
 from models import (
@@ -14,10 +13,10 @@ from models import (
     message_table,
     responses_table,
 )
-from utils import create_card, get_chat_history, idempotent, store_evaluation_module
+from utils import create_card, get_chat_history, store_evaluation_module
 from llm import run_chain, build_chain
-from responses import send_message_to_adviser_space, update_message_in_adviser_space
-from utils import bcolors, get_user_workspace_variables, execute_optional_modules
+from responses import update_message_in_adviser_space
+from utils import bcolors, execute_optional_modules
 from aws_xray_sdk.core import xray_recorder
 from aws_xray_sdk.core import patch_all
 
@@ -41,7 +40,7 @@ def process_chat_message(event: ProcessChatMessageEvent):
         continue_conversation,
     ) = execute_optional_modules(event, execution_time="before_message_processed")
 
-    if continue_conversation == False:
+    if continue_conversation is False:
         return
 
     message_query = UserMessage(

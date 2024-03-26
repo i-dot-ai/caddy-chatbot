@@ -141,7 +141,7 @@ def lambda_handler(event, context):
                             "text": "Your domain is not enrolled in Caddy. Please contact your administrator."
                         }
                     )
-        case other:
+        case _:
             return json.dumps(
                 {"text": "Caddy is not currently available for this platform."}
             )

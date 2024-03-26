@@ -1,5 +1,5 @@
 from langchain_community.llms import Bedrock
-from prompt import *
+from prompt import CORE_PROMPT
 from langchain.retrievers import ContextualCompressionRetriever
 from langchain.retrievers.merger_retriever import MergerRetriever
 from langchain.retrievers.document_compressors import DocumentCompressorPipeline
@@ -12,9 +12,9 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from datetime import datetime
 from langchain.vectorstores.elasticsearch import ElasticsearchStore
 import boto3
+from typing import List, Any
 import re
 import os
-from datetime import datetime
 
 from aws_xray_sdk.core import xray_recorder
 from aws_xray_sdk.core import patch_all
@@ -164,7 +164,7 @@ def build_chain():
 
 
 @xray_recorder.capture()
-def run_chain(chain, prompt: str, history: []):
+def run_chain(chain, prompt: str, history: List[Any]):
     ai_response = chain({"query": prompt, "chat_history": history})
     ai_response_timestamp = datetime.now()
 

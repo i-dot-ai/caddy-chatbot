@@ -160,7 +160,7 @@ Resources:
               Statement:
                 - Effect: Allow
                   Action:
-                    - secretsmanager:GetSecretValue
+                    - secretsmanager:GetSecretValue # pragma: allowlist secret
                   Resource: '*'
           - PolicyName: !Sub 'ConversationsIdempotencyDynamoPolicy-${StageName}'
             PolicyDocument:
@@ -298,7 +298,7 @@ Resources:
               Statement:
                 - Effect: Allow
                   Action:
-                    - secretsmanager:GetSecretValue
+                    - secretsmanager:GetSecretValue # pragma: allowlist secret
                   Resource: '*'
           - PolicyName: !Sub 'LlmIdempotencyDynamoPolicy-${StageName}'
             PolicyDocument:
@@ -359,7 +359,7 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
-                  - secretsmanager:GetSecretValue
+                  - secretsmanager:GetSecretValue # pragma: allowlist secret
                 Resource: '*'
         - PolicyName: !Sub 'UserManagementPolicy-${StageName}'
           PolicyDocument:
