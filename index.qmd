@@ -1,0 +1,6 @@
+---
+title: "Caddy"
+format: html
+---
+
+This is the homepage for Caddy and how wonderful it is.
