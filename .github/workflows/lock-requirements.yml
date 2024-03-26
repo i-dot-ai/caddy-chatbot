@@ -13,7 +13,7 @@ jobs:
 
       - name: Check Caddy Conversations requirements-lock.txt existence
         run: |
-          if compgen -G caddy/conversations/requirements-lock.txt" > /dev/null; then
+          if compgen -G "caddy/conversations/requirements-lock.txt" > /dev/null; then
             echo "Caddy Conversations requirements-lock.txt files exist."
           else
             echo "Caddy Conversations requirements-lock.txt files do not exist."
@@ -22,7 +22,7 @@ jobs:
 
       - name: Check Caddy LLM requirements-lock.txt existence
         run: |
-          if compgen -G caddy/llm/requirements-lock.txt" > /dev/null; then
+          if compgen -G "caddy/llm/requirements-lock.txt" > /dev/null; then
             echo "Caddy LLM requirements-lock.txt files exist."
           else
             echo "Caddy LLM requirements-lock.txt files do not exist."
@@ -31,7 +31,7 @@ jobs:
 
       - name: Check Caddy Supervise requirements-lock.txt existence
         run: |
-          if compgen -G caddy/supervise/requirements-lock.txt" > /dev/null; then
+          if compgen -G "caddy/supervise/requirements-lock.txt" > /dev/null; then
             echo "Caddy Supervise requirements-lock.txt files exist."
           else
             echo "Caddy Supervise requirements-lock.txt files do not exist."
