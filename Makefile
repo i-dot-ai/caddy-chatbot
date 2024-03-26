@@ -62,10 +62,10 @@ setup_lambda_venv:
 	cd $(dir) && \
 	uv venv && \
 	chmod +x .venv/bin/activate && \
-	.venv/bin/activate && \
+	. .venv/bin/activate && \
 	uv pip sync requirements.txt && \
 	uv pip freeze > requirements-lock.txt && \
-	deactivate && \
+	. .venv/bin/activate && \
 	cd $$current_dir
 
 setup_venv_conversations:
