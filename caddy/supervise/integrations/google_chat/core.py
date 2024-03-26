@@ -843,7 +843,9 @@ class GoogleChat:
         )
 
     @xray_recorder.capture()
-    def get_post_call_survey_card(post_call_survey_questions, post_call_survey_values):
+    def get_post_call_survey_card(
+        self, post_call_survey_questions, post_call_survey_values
+    ):
         card = {
             "cardsV2": [
                 {
