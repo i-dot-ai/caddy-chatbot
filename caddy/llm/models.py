@@ -124,74 +124,8 @@ def store_user_thanked_timestamp(ai_answer: LlmResponse, timestamp, table):
     }
 
 
-def create_db_message_table(connection):
-    """Creates the messages table in the database"""
-
-    connection.create_table(
-        TableName="caddyMessages",
-        KeySchema=[
-            {"AttributeName": "messageId", "KeyType": "HASH"},  # Partition key
-            {"AttributeName": "threadId", "KeyType": "RANGE"},  # Sort key
-        ],
-        AttributeDefinitions=[
-            {"AttributeName": "messageId", "AttributeType": "S"},
-            {"AttributeName": "threadId", "AttributeType": "S"},
-        ],
-        GlobalSecondaryIndexes=[
-            {
-                "IndexName": "gsiIndex",
-                "KeySchema": [
-                    {"AttributeName": "threadId", "KeyType": "HASH"},
-                ],
-                "Projection": {"ProjectionType": "ALL"},
-                "ProvisionedThroughput": {
-                    "ReadCapacityUnits": 10,
-                    "WriteCapacityUnits": 10,
-                },
-            },
-        ],
-        ProvisionedThroughput={"ReadCapacityUnits": 10, "WriteCapacityUnits": 10},
-        StreamSpecification={
-            "StreamEnabled": True,
-            "StreamViewType": "NEW_AND_OLD_IMAGES",
-        },
-    )
-
-
-def create_db_responses_table(connection):
-    """Creates the responses table in the database"""
-
-    connection.create_table(
-        TableName="caddyResponses",
-        KeySchema=[
-            {"AttributeName": "threadId", "KeyType": "HASH"},
-        ],
-        AttributeDefinitions=[
-            {"AttributeName": "threadId", "AttributeType": "S"},
-        ],
-        ProvisionedThroughput={"ReadCapacityUnits": 10, "WriteCapacityUnits": 10},
-    )
-
-
 # === Database Connections ===
 dynamodb = boto3.resource("dynamodb", region_name="eu-west-2")
-
-try:
-    create_db_message_table(dynamodb)
-except boto3.exceptions.botocore.exceptions.ClientError as e:
-    if e.response["Error"]["Code"] == "ResourceInUseException":
-        print("message table already exists")
-    else:
-        raise
-
-try:
-    create_db_responses_table(dynamodb)
-except boto3.exceptions.botocore.exceptions.ClientError as e:
-    if e.response["Error"]["Code"] == "ResourceInUseException":
-        print("response table already exists")
-    else:
-        raise
-
 
 message_table = dynamodb.Table(os.getenv("MESSAGES_TABLE_NAME"))
 users_table = dynamodb.Table(os.getenv("USERS_TABLE_NAME"))
