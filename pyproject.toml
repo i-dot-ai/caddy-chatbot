@@ -1,0 +1,12 @@
+[project]
+name = "caddy-chatbot"
+version = "0.0.9"
+description = "An AI powered copilot for customer service agents"
+authors = ["i.AI <i-dot-ai-enquiries@cabinetoffice.gov.uk>"]
+license = "MIT"
+readme = "README.md"
+requires-python = ">= 3.11"
+
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"

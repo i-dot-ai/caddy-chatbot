@@ -6,7 +6,7 @@ run-tests:
 	pkill -f "sam local start-lambda"
 
 requirements-dev:
-	pip install -r requirements-dev.txt
+	pip install -r requirements.txt
 
 build-lambda:
 	sam build -t template.yaml --use-container
@@ -48,3 +48,26 @@ deploy-prod:
 
 deploy-dev:
 	sam build -t template.yaml --use-container && sam deploy --guided --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND CAPABILITY_NAMED_IAM --config-env develop
+
+setup-dev-venv:
+	uv venv
+
+install-dev-requirements:
+	uv pip sync requirements.txt
+
+freeze-dev-requirements:
+	uv pip freeze > requirements.txt
+
+setup_lambda_requirements:
+	uv pip compile --output-file $(dir)/requirements.txt $(dir)/requirements.in
+
+setup_venv_conversations:
+	$(MAKE) setup_lambda_requirements dir=caddy/conversations
+
+setup_venv_llm:
+	$(MAKE) setup_lambda_requirements dir=caddy/llm
+
+setup_venv_supervise:
+	$(MAKE) setup_lambda_requirements dir=caddy/supervise
+
+prepare_deployment_dependencies: freeze-dev-requirements setup_venv_conversations setup_venv_llm setup_venv_supervise

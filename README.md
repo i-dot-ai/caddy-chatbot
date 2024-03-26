@@ -6,10 +6,26 @@ This repository stores the project for the LLM enabled advisor support bot. This
 
 This version is intended for deployment on serverless infrastructure, and will ideally use Docker and AWS Sam.
 
-Ensure you have installed Python3.11, and created a virtual environment in your repo.  You can then install the requirements with
+### Environment Management
+We recommend using [uv](https://github.com/astral-sh/uv) for managing environments and dependencies. Given each lambda has bespoke requirements, we also provide helpful functions to separate these out.
+
+To create your virtual environment, run
 
 ```bash
-$ make requirements-dev
+$ 	uv venv
+$ 	uv pip sync requirements.txt
+```
+
+If making any updates, ensure you freeze your versions using
+
+```bash
+$ 	uv pip freeze > requirements.txt
+```
+
+Before deploying into main, you can use the below to ensure all dependencies are up to date according to each requirements.in file.
+
+```bash
+$ 	make prepare_deployment_dependencies
 ```
 
 ### With AWS SAM CLI
