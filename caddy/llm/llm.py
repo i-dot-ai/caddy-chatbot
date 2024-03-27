@@ -32,7 +32,7 @@ def lambda_handler(event, context):
 
             if continue_conversation is False:
                 google_chat.update_message_in_adviser_space(
-                    message_query.space_id,
+                    message_query.conversation_id,
                     message_query.message_id,
                     {"text": control_group_message},
                 )
