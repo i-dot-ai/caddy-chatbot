@@ -1,1 +1,1 @@
-caddy/llm/caddy/services/model/model.safetensors filter=lfs diff=lfs merge=lfs -text
+caddy/llm/model/model.safetensors filter=lfs diff=lfs merge=lfs -text
