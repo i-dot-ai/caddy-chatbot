@@ -130,6 +130,8 @@ def query_llm(message_query: UserMessage, chat_history: List[Any]):
         chain, message_query.message, chat_history
     )
 
+    source_documents = ai_response["source_documents"]
+
     llm_response = LlmResponse(
         message_id=message_query.message_id,
         llm_prompt=message_query.message,
@@ -139,7 +141,7 @@ def query_llm(message_query: UserMessage, chat_history: List[Any]):
         llm_response_timestamp=ai_response_timestamp,
     )
 
-    return llm_response
+    return llm_response, source_documents
 
 
 @xray_recorder.capture()
@@ -150,7 +152,7 @@ def format_supervision_event(message_query: UserMessage, llm_response: LlmRespon
         user=message_query.user_email,
         llmPrompt=llm_response.llm_prompt,
         llm_answer=llm_response.llm_answer,
-        llm_response_json=llm_response.response_card,
+        llm_response_json=llm_response.llm_response_json,
         conversation_id=message_query.conversation_id,
         thread_id=message_query.thread_id,
         message_id=message_query.message_id,
