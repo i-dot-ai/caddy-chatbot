@@ -58,7 +58,7 @@ class GoogleChat:
         ).execute()
 
     @xray_recorder.capture()
-    def create_card(self, llm_response):
+    def create_card(self, llm_response, source_documents):
         card = {
             "cardsV2": [
                 {
@@ -72,7 +72,7 @@ class GoogleChat:
 
         llm_response_section = {
             "widgets": [
-                {"textParagraph": {"text": llm_response["result"]}},
+                {"textParagraph": {"text": llm_response.llm_answer}},
             ],
         }
 
@@ -80,7 +80,7 @@ class GoogleChat:
 
         reference_links_section = {"header": "Reference links", "widgets": []}
 
-        for document in llm_response["source_documents"]:
+        for document in source_documents:
             reference_link = {
                 "textParagraph": {
                     "text": f"<a href=\"{document.metadata['source_url']}\">{document.metadata['source_url']}</a>"

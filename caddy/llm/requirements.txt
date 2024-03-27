@@ -81,7 +81,7 @@ jsonpointer==2.4
 langchain==0.1.13
 langchain-community==0.0.29
     # via langchain
-langchain-core==0.1.33
+langchain-core==0.1.34
     # via
     #   langchain
     #   langchain-community

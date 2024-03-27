@@ -51,12 +51,14 @@ def lambda_handler(event, context):
                 message=google_chat.messages["GENERATING_RESPONSE"],
             )
 
-            llm_response = caddy.query_llm(message_query, chat_history)
+            llm_response, source_documents = caddy.query_llm(
+                message_query, chat_history
+            )
 
-            response_card = google_chat.create_card(llm_response)
+            response_card = google_chat.create_card(llm_response, source_documents)
             response_card = json.dumps(response_card)
 
-            llm_response.response_card = response_card
+            llm_response.llm_response_json = response_card
 
             caddy.store_response(llm_response)
 
