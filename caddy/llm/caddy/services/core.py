@@ -97,7 +97,7 @@ def build_chain():
         refreshable_credentials=credentials,
     )
 
-    embeddings = HuggingFaceEmbeddings(model_name="../../model")
+    embeddings = HuggingFaceEmbeddings(model_name="model")
 
     vectorstore = OpenSearchVectorSearch(
         index_name=opensearch_index,
