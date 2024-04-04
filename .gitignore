@@ -21,3 +21,4 @@ notebooks/*
 _site
 /_site/
 /.quarto/
+*egg-info/

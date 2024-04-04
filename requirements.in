@@ -21,3 +21,7 @@ elasticsearch
 presidio-analyzer
 presidio-anonymizer
 quarto
+botocore
+aws-xray-sdk
+typing-extensions
+-e ./caddy_core
