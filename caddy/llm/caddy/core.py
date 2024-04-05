@@ -94,7 +94,7 @@ def store_user_thanked_timestamp(ai_answer: LlmResponse):
 
 
 @xray_recorder.capture()
-def store_evaluation_module(thread_id, user_arguments, argument_output):
+def store_evaluation_module(thread_id, user_arguments, argument_output, continue_conversation, control_group_message):
     # Handles DynamoDB TypeError: Float types are not supported.
     user_arguments["module_arguments"]["split"] = str(
         user_arguments["module_arguments"]["split"]
@@ -105,6 +105,8 @@ def store_evaluation_module(thread_id, user_arguments, argument_output):
             "threadId": thread_id,
             "modulesUsed": user_arguments,
             "moduleOutputs": argument_output,
+            "continueConversation": continue_conversation,
+            "controlGroupMessage": control_group_message,
             "callComplete": False,
         }
     )
@@ -164,6 +166,7 @@ def check_existing_call(threadId):
     response = evaluation_table.query(
         KeyConditionExpression=Key("threadId").eq(threadId),
     )
+    survey_complete = False
     if response["Items"]:
         values = {
             "user_arguments": response["Items"][0]["user_arguments"],
@@ -171,5 +174,7 @@ def check_existing_call(threadId):
             "continue_conversation": response["Items"][0]["continue_conversation"],
             "control_group_message": response["Items"][0]["control_group_message"]
         }
-        return True, values
-    return False, {}
+        if "surveyResponse" in response["Items"][0]:
+            survey_complete = True
+        return True, values, survey_complete
+    return False, {}, survey_complete

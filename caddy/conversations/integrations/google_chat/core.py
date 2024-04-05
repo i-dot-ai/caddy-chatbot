@@ -320,7 +320,18 @@ class GoogleChat:
         }
         return edit_query_dialog
     
-    def run_survey(self, survey_card, user_space, thread_id):
+    def run_survey(self, survey_card: dict, user_space: str, thread_id: str) -> None:
+        """
+        Run a survey in the adviser space given a survey card input
+
+        Args:
+            survey_card (dict): The survey card to run
+            user_space (str): The space ID of the user
+            thread_id (str): The thread ID of the conversation
+
+        Returns:
+            None
+        """
         self.send_dynamic_to_adviser_space(
             response_type="cardsV2",
             space_id=user_space,

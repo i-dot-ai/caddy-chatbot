@@ -897,7 +897,18 @@ class GoogleChat:
 
         return survey_card
 
-    def call_complete_confirmation(self, user, user_space, thread_id):
+    def call_complete_confirmation(self, user, user_space, thread_id) -> None:
+        """
+        Send a card to the adviser space to confirm the call is complete
+
+        Args:
+            user (str): The email of the user
+            user_space (str): The space ID of the user
+            thread_id (str): The thread ID of the conversation
+
+        Returns:
+            None
+        """
         survey_card = self.get_survey(user, user_space, thread_id)
         call_complete_card = {
             "cardsV2": [

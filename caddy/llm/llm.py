@@ -10,8 +10,8 @@ def lambda_handler(event, context):
         case "Google Chat":
             google_chat = GoogleChat()
 
-            existing_call, values = caddy.check_existing_call(event.thread_id)
-
+            existing_call, values, survey_complete = caddy.check_existing_call(event.thread_id)
+            
             if existing_call is False:
                 (
                     modules_to_use,
@@ -29,10 +29,11 @@ def lambda_handler(event, context):
                 control_group_message=control_group_message
                 )
             elif existing_call is True:
-                modules_to_use = values["user_arguments"]
-                module_outputs_json = values["argument_output"]
-                continue_conversation = values["continue_conversation"]
-                control_group_message = values["control_group_message"]
+                modules_to_use = values["modulesUsed"]
+                module_outputs_json = values["moduleOutputs"]
+                continue_conversation = values["continueConversation"]
+                control_group_message = values["controlGroupMessage"]
+
 
             message_query = caddy.format_chat_message(event)
 
@@ -44,6 +45,8 @@ def lambda_handler(event, context):
                     message_query.message_id,
                     {"text": control_group_message},
                 )
+                if survey_complete is False:
+                    google_chat.run_survey(message_query.user, message_query.thread_id, message_query.conversation_id)
                 return
 
             module_outputs_json = json.loads(module_outputs_json)
