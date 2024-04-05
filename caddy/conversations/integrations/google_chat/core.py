@@ -174,7 +174,18 @@ class GoogleChat:
         ).execute()
 
     @xray_recorder.capture()
-    def update_survey_card_in_adviser_space(self, space_id: str, message_id: str, card):
+    def update_survey_card_in_adviser_space(self, space_id: str, message_id: str, card: dict) -> None:
+        """
+        Updates a survey card in the adviser space given a space ID, message ID, and card
+
+        Args:
+            space_id (str): The space ID of the user
+            message_id (str): The message ID of the survey card
+            card (dict): The card to update
+
+        Returns:
+            None
+        """
         self.caddy.spaces().messages().patch(
             name=f"spaces/{space_id}/messages/{message_id}",
             body=card,

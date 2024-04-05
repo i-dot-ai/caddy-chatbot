@@ -91,6 +91,26 @@ def lambda_handler(event, context):
                             user_space = event["space"]["name"].split("/")[1]
                             caddy.mark_call_complete(thread_id)
                             google_chat.run_survey(survey_card, user_space, thread_id)
+                            google_chat.update_survey_card_in_adviser_space(
+                                space_id=user_space, 
+                                message_id=event['message']['name'].split('/')[3],
+                                card={
+                                    "cardsV2": [
+                                        {
+                                            "cardId": "callCompleteConfirmed",
+                                            "card": {
+                                                "sections": [
+                                                    {
+                                                        "widgets": [
+                                                            {"textParagraph": {"text": '<font color="#00ba01"><b>📞 Call complete, please complete the post call survey below</b></font>'}},
+                                                        ],
+                                                    },
+                                                ],
+                                            },
+                                        },
+                                    ],            
+                                },
+                            )
         case "Microsoft Teams":
             """
             TODO - Add Microsoft Teams support
