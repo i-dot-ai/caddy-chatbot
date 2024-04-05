@@ -900,7 +900,16 @@ class GoogleChat:
         return card
 
     @xray_recorder.capture()
-    def get_survey(self, user, user_space, thread_id):
+    def get_survey(self, user: str) -> dict:
+        """
+        Gets a post call survey card for the given user
+
+        Args:
+            user (str): The email of the user
+        
+        Returns:
+            dict: The survey card
+        """
         post_call_survey_questions, post_call_survey_values = get_survey(user)
 
         survey_card = self.get_post_call_survey_card(
@@ -909,7 +918,7 @@ class GoogleChat:
 
         return survey_card
 
-    def call_complete_confirmation(self, user, user_space, thread_id) -> None:
+    def call_complete_confirmation(self, user: str, user_space: str, thread_id: str) -> None:
         """
         Send a card to the adviser space to confirm the call is complete
 
@@ -921,7 +930,7 @@ class GoogleChat:
         Returns:
             None
         """
-        survey_card = self.get_survey(user, user_space, thread_id)
+        survey_card = self.get_survey(user)
         call_complete_card = {
             "cardsV2": [
                 {
