@@ -22,7 +22,7 @@ def lambda_handler(event, context):
                     event, execution_time="before_message_processed"
                 )
                 caddy.store_evaluation_module(
-                thread_id=message_query.thread_id,
+                thread_id=event.thread_id,
                 user_arguments=json.dumps(modules_to_use[0]),
                 argument_output=module_outputs_json,
                 continue_conversation=continue_conversation,
