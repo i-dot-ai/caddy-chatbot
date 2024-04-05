@@ -11,6 +11,14 @@ def lambda_handler(event, context):
             google_chat = GoogleChat()
 
             existing_call, values, survey_complete = caddy.check_existing_call(event["thread_id"])
+
+            if survey_complete is True:
+                google_chat.update_message_in_adviser_space(
+                space_id=event["space_id"],
+                message_id=event["message_id"],
+                message=google_chat.messages["SURVEY_ALREADY_COMPLETED"],
+                )
+                return
             
             if existing_call is False:
                 (
