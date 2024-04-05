@@ -34,8 +34,17 @@ def send_for_supervisor_approval(supervision_event: SupervisionEvent):
 
 @xray_recorder.capture()
 def format_chat_message(
-    event: ProcessChatMessageEvent, modules_to_use, module_outputs_json
-):
+    event: ProcessChatMessageEvent
+    ) -> UserMessage:
+    """
+    Formats the chat message into a UserMessage object
+
+    Args:
+        event (ProcessChatMessageEvent): The event containing the chat message
+
+    Returns:
+        UserMessage: The formatted chat message
+    """
     message_query = UserMessage(
         conversation_id=event["space_id"],
         thread_id=event["thread_id"],
