@@ -299,7 +299,9 @@ Resources:
               Statement:
                 - Effect: Allow
                   Action:
+                    - dynamodb:Query
                     - dynamodb:PutItem
+                    - dynamodb:UpdateItem
                   Resource: !GetAtt EvaluationTable.Arn
 
   SuperviseFunctionIamRole:
