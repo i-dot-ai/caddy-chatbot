@@ -1,5 +1,4 @@
 import os
-import json
 import boto3
 from typing import List, Any, Tuple, Dict
 from datetime import datetime
@@ -33,9 +32,7 @@ def send_for_supervisor_approval(supervision_event: SupervisionEvent):
 
 
 @xray_recorder.capture()
-def format_chat_message(
-    event: ProcessChatMessageEvent
-    ) -> UserMessage:
+def format_chat_message(event: ProcessChatMessageEvent) -> UserMessage:
     """
     Formats the chat message into a UserMessage object
 
@@ -103,7 +100,13 @@ def store_user_thanked_timestamp(ai_answer: LlmResponse):
 
 
 @xray_recorder.capture()
-def store_evaluation_module(thread_id, user_arguments, argument_output, continue_conversation, control_group_message):
+def store_evaluation_module(
+    thread_id,
+    user_arguments,
+    argument_output,
+    continue_conversation,
+    control_group_message,
+):
     # Handles DynamoDB TypeError: Float types are not supported.
     user_arguments["module_arguments"]["split"] = str(
         user_arguments["module_arguments"]["split"]
@@ -171,13 +174,14 @@ def format_supervision_event(message_query: UserMessage, llm_response: LlmRespon
 
     return supervision_event
 
+
 def check_existing_call(threadId: str) -> Tuple[bool, Dict[str, Any], bool]:
     """
     Check if the call has already received evaluation modules
 
     Args:
         threadId (str): The threadId of the conversation
-    
+
     Returns:
         Tuple[bool, Dict[str, Any], bool]: A tuple containing three values:
             - True if the call has already received evaluation modules, False otherwise
@@ -193,7 +197,7 @@ def check_existing_call(threadId: str) -> Tuple[bool, Dict[str, Any], bool]:
             "modulesUsed": response["Items"][0]["modulesUsed"],
             "moduleOutputs": response["Items"][0]["moduleOutputs"],
             "continueConversation": response["Items"][0]["continueConversation"],
-            "controlGroupMessage": response["Items"][0]["controlGroupMessage"]
+            "controlGroupMessage": response["Items"][0]["controlGroupMessage"],
         }
         if "surveyResponse" in response["Items"][0]:
             survey_complete = True

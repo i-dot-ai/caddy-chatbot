@@ -81,7 +81,7 @@ jsonpointer==2.4
 langchain==0.1.13
 langchain-community==0.0.29
     # via langchain
-langchain-core==0.1.34
+langchain-core==0.1.35
     # via
     #   langchain
     #   langchain-community
@@ -124,7 +124,7 @@ packaging==23.2
     #   langchain-core
     #   marshmallow
     #   transformers
-pillow==10.2.0
+pillow==10.3.0
     # via sentence-transformers
 proto-plus==1.23.0
     # via google-api-core

@@ -95,11 +95,11 @@ class GoogleChat:
         card["cardsV2"][0]["card"]["sections"].append(reference_links_section)
 
         return card
-    
+
     @xray_recorder.capture()
     def send_dynamic_to_adviser_space(
         self, response_type: str, space_id: str, message: dict, thread_id: str
-        ) -> None:
+    ) -> None:
         """
         Sends a dynamic message to the adviser space given a type of response
 
@@ -108,7 +108,7 @@ class GoogleChat:
             space_id (str): The space ID of the user
             message (dict): The message to send
             thread_id (str): The thread ID of the conversation
-        
+
         Returns:
             None
         """
@@ -131,18 +131,18 @@ class GoogleChat:
                     },
                     messageReplyOption="REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD",
                 ).execute()
-    
+
     @xray_recorder.capture()
     def get_post_call_survey_card(
         self, post_call_survey_questions: List[str], post_call_survey_values: List[str]
-        ) -> dict:
+    ) -> dict:
         """
         Create a post call survey card with the given questions and values
 
         Args:
             post_call_survey_questions (List[str]): The questions for the survey
             post_call_survey_values (List[str]): The values for the survey
-        
+
         Returns:
             dict: The survey card
         """

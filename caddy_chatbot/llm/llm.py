@@ -10,16 +10,18 @@ def lambda_handler(event, context):
         case "Google Chat":
             google_chat = GoogleChat()
 
-            existing_call, values, survey_complete = caddy.check_existing_call(event["thread_id"])
+            existing_call, values, survey_complete = caddy.check_existing_call(
+                event["thread_id"]
+            )
 
             if survey_complete is True:
                 google_chat.update_message_in_adviser_space(
-                space_id=event["space_id"],
-                message_id=event["message_id"],
-                message=google_chat.messages["SURVEY_ALREADY_COMPLETED"],
+                    space_id=event["space_id"],
+                    message_id=event["message_id"],
+                    message=google_chat.messages["SURVEY_ALREADY_COMPLETED"],
                 )
                 return
-            
+
             if existing_call is False:
                 (
                     modules_to_use,
@@ -30,18 +32,17 @@ def lambda_handler(event, context):
                     event, execution_time="before_message_processed"
                 )
                 caddy.store_evaluation_module(
-                thread_id=event["thread_id"],
-                user_arguments=modules_to_use[0],
-                argument_output=module_outputs_json,
-                continue_conversation=continue_conversation,
-                control_group_message=control_group_message
+                    thread_id=event["thread_id"],
+                    user_arguments=modules_to_use[0],
+                    argument_output=module_outputs_json,
+                    continue_conversation=continue_conversation,
+                    control_group_message=control_group_message,
                 )
             elif existing_call is True:
                 modules_to_use = values["modulesUsed"]
                 module_outputs_json = values["moduleOutputs"]
                 continue_conversation = values["continueConversation"]
                 control_group_message = values["controlGroupMessage"]
-
 
             message_query = caddy.format_chat_message(event)
 
@@ -54,7 +55,11 @@ def lambda_handler(event, context):
                     {"text": control_group_message},
                 )
                 if survey_complete is False:
-                    google_chat.run_survey(message_query.user, message_query.thread_id, message_query.conversation_id)
+                    google_chat.run_survey(
+                        message_query.user,
+                        message_query.thread_id,
+                        message_query.conversation_id,
+                    )
                 return
 
             module_outputs_json = json.loads(module_outputs_json)

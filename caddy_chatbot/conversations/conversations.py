@@ -92,8 +92,8 @@ def lambda_handler(event, context):
                             caddy.mark_call_complete(thread_id)
                             google_chat.run_survey(survey_card, user_space, thread_id)
                             google_chat.update_survey_card_in_adviser_space(
-                                space_id=user_space, 
-                                message_id=event['message']['name'].split('/')[3],
+                                space_id=user_space,
+                                message_id=event["message"]["name"].split("/")[3],
                                 card={
                                     "cardsV2": [
                                         {
@@ -102,13 +102,17 @@ def lambda_handler(event, context):
                                                 "sections": [
                                                     {
                                                         "widgets": [
-                                                            {"textParagraph": {"text": '<font color="#00ba01"><b>📞 Call complete, please complete the post call survey below</b></font>'}},
+                                                            {
+                                                                "textParagraph": {
+                                                                    "text": '<font color="#00ba01"><b>📞 Call complete, please complete the post call survey below</b></font>'
+                                                                }
+                                                            },
                                                         ],
                                                     },
                                                 ],
                                             },
                                         },
-                                    ],            
+                                    ],
                                 },
                             )
         case "Microsoft Teams":

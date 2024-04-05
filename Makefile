@@ -6,7 +6,8 @@ run-tests:
 	pkill -f "sam local start-lambda"
 
 requirements-dev:
-	pip install -r requirements.txt
+	pip install poetry
+	poetry install
 
 build-lambda:
 	sam build -t template.yaml --use-container
@@ -31,7 +32,6 @@ setup-pre-commit:
 
 setup-cloud-env-vars:
 	@cp env.json.example env.json
-	@sed -i 's/"securi5key"/"$(ANTHROPIC_API_KEY)"/' env.json
 
 setup-local-env-vars:
 	@cp env.json.example env.json
@@ -39,7 +39,12 @@ setup-local-env-vars:
 create-docker-network:
 	docker network create caddy
 
-setup-dev-container: requirements-dev setup-cloud-env-vars setup-pre-commit create-docker-network
+setup-dev-container:
+	pip install poetry
+	poetry install
+	$(MAKE) setup-cloud-env-vars
+	$(MAKE) setup-pre-commit
+	$(MAKE) create-docker-network
 
 setup-local-environment: requirements-dev setup-local-env-vars setup-pre-commit create-docker-network
 
@@ -48,26 +53,3 @@ deploy-prod:
 
 deploy-dev:
 	sam build -t template.yaml --use-container && sam deploy --guided --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND CAPABILITY_NAMED_IAM --config-env develop
-
-setup-dev-venv:
-	uv venv
-
-install-dev-requirements:
-	uv pip sync requirements.txt
-
-freeze-dev-requirements:
-	uv pip freeze > requirements.txt
-
-setup_lambda_requirements:
-	uv pip compile --output-file $(dir)/requirements.txt $(dir)/requirements.in
-
-setup_venv_conversations:
-	$(MAKE) setup_lambda_requirements dir=caddy/conversations
-
-setup_venv_llm:
-	$(MAKE) setup_lambda_requirements dir=caddy/llm
-
-setup_venv_supervise:
-	$(MAKE) setup_lambda_requirements dir=caddy/supervise
-
-prepare_deployment_dependencies: freeze-dev-requirements setup_venv_conversations setup_venv_llm setup_venv_supervise

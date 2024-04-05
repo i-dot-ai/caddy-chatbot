@@ -174,7 +174,9 @@ class GoogleChat:
         ).execute()
 
     @xray_recorder.capture()
-    def update_survey_card_in_adviser_space(self, space_id: str, message_id: str, card: dict) -> None:
+    def update_survey_card_in_adviser_space(
+        self, space_id: str, message_id: str, card: dict
+    ) -> None:
         """
         Updates a survey card in the adviser space given a space ID, message ID, and card
 
@@ -330,7 +332,7 @@ class GoogleChat:
             }
         }
         return edit_query_dialog
-    
+
     def run_survey(self, survey_card: dict, user_space: str, thread_id: str) -> None:
         """
         Run a survey in the adviser space given a survey card input
@@ -353,7 +355,7 @@ class GoogleChat:
     @xray_recorder.capture()
     def send_dynamic_to_adviser_space(
         self, response_type: str, space_id: str, message: dict, thread_id: str
-        ) -> None:
+    ) -> None:
         """
         Sends a dynamic message to the adviser space given a type of response
 
@@ -362,7 +364,7 @@ class GoogleChat:
             space_id (str): The space ID of the user
             message (dict): The message to send
             thread_id (str): The thread ID of the conversation
-        
+
         Returns:
             None
         """

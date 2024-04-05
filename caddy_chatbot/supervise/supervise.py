@@ -84,7 +84,9 @@ def lambda_handler(event, context):
                             ) = google_chat.received_approval(event)
                             caddy.store_approver_event(approval_event)
 
-                            google_chat.call_complete_confirmation(user, user_space, thread_id)
+                            google_chat.call_complete_confirmation(
+                                user, user_space, thread_id
+                            )
                         case "rejected_dialog":
                             return google_chat.get_supervisor_response(event)
                         case "receiveSupervisorResponse":
@@ -97,8 +99,10 @@ def lambda_handler(event, context):
                             ) = google_chat.received_rejection(event)
 
                             caddy.store_approver_event(rejection_event)
-                            
-                            google_chat.call_complete_confirmation(user, user_space, thread_id)
+
+                            google_chat.call_complete_confirmation(
+                                user, user_space, thread_id
+                            )
 
                             return confirmation_of_receipt
                         case "receiveDialog":

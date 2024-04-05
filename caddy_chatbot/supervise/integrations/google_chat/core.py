@@ -847,14 +847,14 @@ class GoogleChat:
     @xray_recorder.capture()
     def get_post_call_survey_card(
         self, post_call_survey_questions: List[str], post_call_survey_values: List[str]
-        ) -> dict:
+    ) -> dict:
         """
         Create a post call survey card with the given questions and values
 
         Args:
             post_call_survey_questions (List[str]): The questions for the survey
             post_call_survey_values (List[str]): The values for the survey
-        
+
         Returns:
             dict: The survey card
         """
@@ -906,7 +906,7 @@ class GoogleChat:
 
         Args:
             user (str): The email of the user
-        
+
         Returns:
             dict: The survey card
         """
@@ -918,7 +918,9 @@ class GoogleChat:
 
         return survey_card
 
-    def call_complete_confirmation(self, user: str, user_space: str, thread_id: str) -> None:
+    def call_complete_confirmation(
+        self, user: str, user_space: str, thread_id: str
+    ) -> None:
         """
         Send a card to the adviser space to confirm the call is complete
 
@@ -942,17 +944,22 @@ class GoogleChat:
                                     {
                                         "buttonList": {
                                             "buttons": [
-                                                        {
-                                                    "text": 'Mark call complete',
+                                                {
+                                                    "text": "Mark call complete",
                                                     "onClick": {
                                                         "action": {
                                                             "function": "call_complete",
                                                             "parameters": [
-                                                                {"key": "survey", "value": json.dumps(survey_card)},
+                                                                {
+                                                                    "key": "survey",
+                                                                    "value": json.dumps(
+                                                                        survey_card
+                                                                    ),
+                                                                },
                                                             ],
                                                         }
                                                     },
-                                                }    
+                                                }
                                             ]
                                         }
                                     }

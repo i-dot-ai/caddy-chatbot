@@ -19,13 +19,14 @@ def handle_message(event: CaddyMessageEvent):
         Payload=event.model_dump_json(),
     )
 
+
 def mark_call_complete(thread_id: str) -> None:
     """
     Mark the call as complete in the evaluation table
 
     Args:
         thread_id (str): The thread id of the conversation
-    
+
     Returns:
         None
     """

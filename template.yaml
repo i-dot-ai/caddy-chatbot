@@ -103,7 +103,7 @@ Resources:
             Method: post
             RestApiId: !Ref CaddyApi
     Metadata:
-      DockerContext: caddy/conversations/
+      DockerContext: caddy_chatbot/conversations/
       Dockerfile: Dockerfile
 
   ConversationsFunctionIamRole:
@@ -213,7 +213,7 @@ Resources:
           CADDY_SUPERVISOR_SERVICE_ACCOUNT_ID: !Ref CaddySupervisorServiceAccountId
           STAGE: !Ref StageName
     Metadata:
-      DockerContext: caddy/llm/
+      DockerContext: caddy_chatbot/llm/
       Dockerfile: Dockerfile
 
   LlmFunctionIamRole:
@@ -413,7 +413,7 @@ Resources:
             Method: post
             RestApiId: !Ref CaddyApi
     Metadata:
-      DockerContext: caddy/supervise/
+      DockerContext: caddy_chatbot/supervise/
       Dockerfile: Dockerfile
 
   UsersTable:

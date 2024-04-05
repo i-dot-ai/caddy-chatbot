@@ -9,7 +9,7 @@ def get_survey(user: str) -> Tuple[List[str], List[str]]:
 
     Args:
         user (str): The email of the user
-    
+
     Returns:
         Tuple[List[str], List[str]]: The questions for the survey and the values for the survey
     """
