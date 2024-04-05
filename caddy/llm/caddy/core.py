@@ -190,10 +190,10 @@ def check_existing_call(threadId: str) -> Tuple[bool, Dict[str, Any], bool]:
     survey_complete = False
     if response["Items"]:
         values = {
-            "user_arguments": response["Items"][0]["modulesUsed"],
-            "argument_output": response["Items"][0]["moduleOutputs"],
-            "continue_conversation": response["Items"][0]["continueConversation"],
-            "control_group_message": response["Items"][0]["controlGroupMessage"]
+            "modulesUsed": response["Items"][0]["modulesUsed"],
+            "moduleOutputs": response["Items"][0]["moduleOutputs"],
+            "continueConversation": response["Items"][0]["continueConversation"],
+            "controlGroupMessage": response["Items"][0]["controlGroupMessage"]
         }
         if "surveyResponse" in response["Items"][0]:
             survey_complete = True
