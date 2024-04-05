@@ -888,16 +888,53 @@ class GoogleChat:
         return card
 
     @xray_recorder.capture()
-    def run_survey(self, user, user_space, thread_id):
+    def get_survey(self, user, user_space, thread_id):
         post_call_survey_questions, post_call_survey_values = get_survey(user)
 
         survey_card = self.get_post_call_survey_card(
             post_call_survey_questions, post_call_survey_values
         )
 
+        return survey_card
+
+    def call_complete_confirmation(self, user, user_space, thread_id):
+        survey_card = self.get_survey(user, user_space, thread_id)
+        call_complete_card = {
+            "cardsV2": [
+                {
+                    "cardId": "callCompleteCard",
+                    "card": {
+                        "sections": [
+                            {
+                                "widgets": [
+                                    {
+                                        "buttonList": {
+                                            "buttons": [
+                                                        {
+                                                    "text": 'Mark call complete',
+                                                    "onClick": {
+                                                        "action": {
+                                                            "function": "call_complete",
+                                                            "parameters": [
+                                                                {"key": "survey", "value": json.dumps(survey_card)},
+                                                            ],
+                                                        }
+                                                    },
+                                                }    
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        ],
+                    },
+                },
+            ],
+        }
+
         self.send_message_to_adviser_space(
             response_type="cardsV2",
             space_id=user_space,
-            message=survey_card,
+            message=call_complete_card,
             thread_id=thread_id,
         )

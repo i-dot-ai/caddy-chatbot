@@ -319,3 +319,35 @@ class GoogleChat:
             }
         }
         return edit_query_dialog
+    
+    def run_survey(self, survey_card, user_space, thread_id):
+        self.send_dynamic_to_adviser_space(
+            response_type="cardsV2",
+            space_id=user_space,
+            message=survey_card,
+            thread_id=thread_id,
+        )
+
+    @xray_recorder.capture()
+    def send_dynamic_to_adviser_space(
+        self, response_type, space_id, message, thread_id
+    ):
+        match response_type:
+            case "text":
+                self.caddy.spaces().messages().create(
+                    parent=f"spaces/{space_id}",
+                    body={
+                        "text": message,
+                        "thread": {"name": f"spaces/{space_id}/threads/{thread_id}"},
+                    },
+                    messageReplyOption="REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD",
+                ).execute()
+            case "cardsV2":
+                self.caddy.spaces().messages().create(
+                    parent=f"spaces/{space_id}",
+                    body={
+                        "cardsV2": message["cardsV2"],
+                        "thread": {"name": f"spaces/{space_id}/threads/{thread_id}"},
+                    },
+                    messageReplyOption="REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD",
+                ).execute()

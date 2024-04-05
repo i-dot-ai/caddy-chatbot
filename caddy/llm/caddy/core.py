@@ -107,6 +107,7 @@ def store_evaluation_module(thread_id, user_arguments, argument_output):
             "threadId": thread_id,
             "modulesUsed": user_arguments,
             "moduleOutputs": argument_output,
+            "callComplete": False,
         }
     )
 
