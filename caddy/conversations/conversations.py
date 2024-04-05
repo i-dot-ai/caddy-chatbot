@@ -83,6 +83,14 @@ def lambda_handler(event, context):
                             return google_chat.success_dialog()
                         case "survey_response":
                             google_chat.handle_survey_response(event)
+                        case "call_complete":
+                            survey_card = json.loads(
+                                event["common"]["parameters"]["survey"]
+                            )
+                            thread_id = event["message"]["thread"]["name"].split("/")[3]
+                            user_space = event["space"]["name"].split("/")[1]
+                            caddy.mark_call_complete(thread_id)
+                            google_chat.run_survey(survey_card, user_space, thread_id)
         case "Microsoft Teams":
             """
             TODO - Add Microsoft Teams support

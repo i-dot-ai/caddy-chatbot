@@ -319,3 +319,58 @@ class GoogleChat:
             }
         }
         return edit_query_dialog
+    
+    def run_survey(self, survey_card: dict, user_space: str, thread_id: str) -> None:
+        """
+        Run a survey in the adviser space given a survey card input
+
+        Args:
+            survey_card (dict): The survey card to run
+            user_space (str): The space ID of the user
+            thread_id (str): The thread ID of the conversation
+
+        Returns:
+            None
+        """
+        self.send_dynamic_to_adviser_space(
+            response_type="cardsV2",
+            space_id=user_space,
+            message=survey_card,
+            thread_id=thread_id,
+        )
+
+    @xray_recorder.capture()
+    def send_dynamic_to_adviser_space(
+        self, response_type: str, space_id: str, message: dict, thread_id: str
+        ) -> None:
+        """
+        Sends a dynamic message to the adviser space given a type of response
+
+        Args:
+            response_type (str): The type of response to send
+            space_id (str): The space ID of the user
+            message (dict): The message to send
+            thread_id (str): The thread ID of the conversation
+        
+        Returns:
+            None
+        """
+        match response_type:
+            case "text":
+                self.caddy.spaces().messages().create(
+                    parent=f"spaces/{space_id}",
+                    body={
+                        "text": message,
+                        "thread": {"name": f"spaces/{space_id}/threads/{thread_id}"},
+                    },
+                    messageReplyOption="REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD",
+                ).execute()
+            case "cardsV2":
+                self.caddy.spaces().messages().create(
+                    parent=f"spaces/{space_id}",
+                    body={
+                        "cardsV2": message["cardsV2"],
+                        "thread": {"name": f"spaces/{space_id}/threads/{thread_id}"},
+                    },
+                    messageReplyOption="REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD",
+                ).execute()

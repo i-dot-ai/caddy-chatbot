@@ -11,6 +11,8 @@ from caddy.models.core import ApprovalEvent
 from caddy.services import enrolment
 from caddy.services.survey import get_survey
 
+from typing import List
+
 from aws_xray_sdk.core import xray_recorder
 from aws_xray_sdk.core import patch_all
 
@@ -844,8 +846,18 @@ class GoogleChat:
 
     @xray_recorder.capture()
     def get_post_call_survey_card(
-        self, post_call_survey_questions, post_call_survey_values
-    ):
+        self, post_call_survey_questions: List[str], post_call_survey_values: List[str]
+        ) -> dict:
+        """
+        Create a post call survey card with the given questions and values
+
+        Args:
+            post_call_survey_questions (List[str]): The questions for the survey
+            post_call_survey_values (List[str]): The values for the survey
+        
+        Returns:
+            dict: The survey card
+        """
         card = {
             "cardsV2": [
                 {
@@ -888,16 +900,64 @@ class GoogleChat:
         return card
 
     @xray_recorder.capture()
-    def run_survey(self, user, user_space, thread_id):
+    def get_survey(self, user, user_space, thread_id):
         post_call_survey_questions, post_call_survey_values = get_survey(user)
 
         survey_card = self.get_post_call_survey_card(
             post_call_survey_questions, post_call_survey_values
         )
 
+        return survey_card
+
+    def call_complete_confirmation(self, user, user_space, thread_id) -> None:
+        """
+        Send a card to the adviser space to confirm the call is complete
+
+        Args:
+            user (str): The email of the user
+            user_space (str): The space ID of the user
+            thread_id (str): The thread ID of the conversation
+
+        Returns:
+            None
+        """
+        survey_card = self.get_survey(user, user_space, thread_id)
+        call_complete_card = {
+            "cardsV2": [
+                {
+                    "cardId": "callCompleteCard",
+                    "card": {
+                        "sections": [
+                            {
+                                "widgets": [
+                                    {
+                                        "buttonList": {
+                                            "buttons": [
+                                                        {
+                                                    "text": 'Mark call complete',
+                                                    "onClick": {
+                                                        "action": {
+                                                            "function": "call_complete",
+                                                            "parameters": [
+                                                                {"key": "survey", "value": json.dumps(survey_card)},
+                                                            ],
+                                                        }
+                                                    },
+                                                }    
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        ],
+                    },
+                },
+            ],
+        }
+
         self.send_message_to_adviser_space(
             response_type="cardsV2",
             space_id=user_space,
-            message=survey_card,
+            message=call_complete_card,
             thread_id=thread_id,
         )

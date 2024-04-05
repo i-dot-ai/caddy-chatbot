@@ -1,7 +1,7 @@
 import os
 import json
 import boto3
-from typing import List, Any
+from typing import List, Any, Tuple, Dict
 from datetime import datetime
 from boto3.dynamodb.conditions import Key
 
@@ -45,8 +45,6 @@ def format_chat_message(
         message=event["message_string"],
         message_sent_timestamp=event["timestamp"],
         message_received_timestamp=datetime.now(),
-        user_arguments=json.dumps(modules_to_use[0]),
-        argument_output=module_outputs_json,
     )
 
     return message_query
@@ -96,7 +94,7 @@ def store_user_thanked_timestamp(ai_answer: LlmResponse):
 
 
 @xray_recorder.capture()
-def store_evaluation_module(thread_id, user_arguments, argument_output):
+def store_evaluation_module(thread_id, user_arguments, argument_output, continue_conversation, control_group_message):
     # Handles DynamoDB TypeError: Float types are not supported.
     user_arguments["module_arguments"]["split"] = str(
         user_arguments["module_arguments"]["split"]
@@ -107,6 +105,9 @@ def store_evaluation_module(thread_id, user_arguments, argument_output):
             "threadId": thread_id,
             "modulesUsed": user_arguments,
             "moduleOutputs": argument_output,
+            "continueConversation": continue_conversation,
+            "controlGroupMessage": control_group_message,
+            "callComplete": False,
         }
     )
 
@@ -160,3 +161,32 @@ def format_supervision_event(message_query: UserMessage, llm_response: LlmRespon
     ).model_dump_json()
 
     return supervision_event
+
+def check_existing_call(threadId: str) -> Tuple[bool, Dict[str, Any], bool]:
+    """
+    Check if the call has already received evaluation modules
+
+    Args:
+        threadId (str): The threadId of the conversation
+    
+    Returns:
+        Tuple[bool, Dict[str, Any], bool]: A tuple containing three values:
+            - True if the call has already received evaluation modules, False otherwise
+            - A dictionary containing the values of user_arguments, argument_output, continue_conversation, and control_group_message
+            - True if the survey is complete, False otherwise
+    """
+    response = evaluation_table.query(
+        KeyConditionExpression=Key("threadId").eq(threadId),
+    )
+    survey_complete = False
+    if response["Items"]:
+        values = {
+            "user_arguments": response["Items"][0]["user_arguments"],
+            "argument_output": response["Items"][0]["argument_output"],
+            "continue_conversation": response["Items"][0]["continue_conversation"],
+            "control_group_message": response["Items"][0]["control_group_message"]
+        }
+        if "surveyResponse" in response["Items"][0]:
+            survey_complete = True
+        return True, values, survey_complete
+    return False, {}, survey_complete

@@ -3,9 +3,12 @@ from googleapiclient.discovery import build
 
 from integrations.google_chat.content import MESSAGES
 from integrations.google_chat.auth import get_google_creds
+from caddy.services.survey import get_survey
 
 from aws_xray_sdk.core import xray_recorder
 from aws_xray_sdk.core import patch_all
+
+from typing import List
 
 patch_all()
 
@@ -92,3 +95,120 @@ class GoogleChat:
         card["cardsV2"][0]["card"]["sections"].append(reference_links_section)
 
         return card
+    
+    @xray_recorder.capture()
+    def send_dynamic_to_adviser_space(
+        self, response_type: str, space_id: str, message: dict, thread_id: str
+        ) -> None:
+        """
+        Sends a dynamic message to the adviser space given a type of response
+
+        Args:
+            response_type (str): The type of response to send
+            space_id (str): The space ID of the user
+            message (dict): The message to send
+            thread_id (str): The thread ID of the conversation
+        
+        Returns:
+            None
+        """
+        match response_type:
+            case "text":
+                self.caddy.spaces().messages().create(
+                    parent=f"spaces/{space_id}",
+                    body={
+                        "text": message,
+                        "thread": {"name": f"spaces/{space_id}/threads/{thread_id}"},
+                    },
+                    messageReplyOption="REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD",
+                ).execute()
+            case "cardsV2":
+                self.caddy.spaces().messages().create(
+                    parent=f"spaces/{space_id}",
+                    body={
+                        "cardsV2": message["cardsV2"],
+                        "thread": {"name": f"spaces/{space_id}/threads/{thread_id}"},
+                    },
+                    messageReplyOption="REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD",
+                ).execute()
+    
+    @xray_recorder.capture()
+    def get_post_call_survey_card(
+        self, post_call_survey_questions: List[str], post_call_survey_values: List[str]
+        ) -> dict:
+        """
+        Create a post call survey card with the given questions and values
+
+        Args:
+            post_call_survey_questions (List[str]): The questions for the survey
+            post_call_survey_values (List[str]): The values for the survey
+        
+        Returns:
+            dict: The survey card
+        """
+        card = {
+            "cardsV2": [
+                {
+                    "cardId": "postCallSurvey",
+                    "card": {
+                        "sections": [],
+                    },
+                },
+            ],
+        }
+
+        for question in post_call_survey_questions:
+            section = {"widgets": []}
+
+            question_section = {"textParagraph": {"text": question}}
+
+            button_section = {"buttonList": {"buttons": []}}
+
+            for value in post_call_survey_values:
+                button_section["buttonList"]["buttons"].append(
+                    {
+                        "text": value,
+                        "onClick": {
+                            "action": {
+                                "function": "survey_response",
+                                "parameters": [
+                                    {"key": "question", "value": question},
+                                    {"key": "response", "value": value},
+                                ],
+                            }
+                        },
+                    }
+                )
+
+            section["widgets"].append(question_section)
+            section["widgets"].append(button_section)
+
+            card["cardsV2"][0]["card"]["sections"].append(section)
+
+        return card
+
+    @xray_recorder.capture()
+    def run_survey(self, user: str, thread_id: str, user_space: str) -> None:
+        """
+        Run a survey in the adviser space by getting the survey questions and values by providing a user to the get_survey function
+
+        Args:
+            survey_card (dict): The survey card to run
+            user_space (str): The space ID of the user
+            thread_id (str): The thread ID of the conversation
+
+        Returns:
+            None
+        """
+        post_call_survey_questions, post_call_survey_values = get_survey(user)
+
+        survey_card = self.get_post_call_survey_card(
+            post_call_survey_questions, post_call_survey_values
+        )
+
+        self.send_dynamic_to_adviser_space(
+            response_type="cardsV2",
+            space_id=user_space,
+            message=survey_card,
+            thread_id=thread_id,
+        )
