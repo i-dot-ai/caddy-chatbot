@@ -45,8 +45,6 @@ def format_chat_message(
         message=event["message_string"],
         message_sent_timestamp=event["timestamp"],
         message_received_timestamp=datetime.now(),
-        user_arguments=json.dumps(modules_to_use[0]),
-        argument_output=module_outputs_json,
     )
 
     return message_query
@@ -161,3 +159,17 @@ def format_supervision_event(message_query: UserMessage, llm_response: LlmRespon
     ).model_dump_json()
 
     return supervision_event
+
+def check_existing_call(threadId):
+    response = evaluation_table.query(
+        KeyConditionExpression=Key("threadId").eq(threadId),
+    )
+    if response["Items"]:
+        values = {
+            "user_arguments": response["Items"][0]["user_arguments"],
+            "argument_output": response["Items"][0]["argument_output"],
+            "continue_conversation": response["Items"][0]["continue_conversation"],
+            "control_group_message": response["Items"][0]["control_group_message"]
+        }
+        return True, values
+    return False, {}

@@ -10,25 +10,33 @@ def lambda_handler(event, context):
         case "Google Chat":
             google_chat = GoogleChat()
 
-            (
-                modules_to_use,
-                module_outputs_json,
-                continue_conversation,
-                control_group_message,
-            ) = execute_optional_modules(
-                event, execution_time="before_message_processed"
-            )
+            existing_call, values = caddy.check_existing_call(event.thread_id)
 
-            message_query = caddy.format_chat_message(
-                event, modules_to_use, module_outputs_json
-            )
+            if existing_call is False:
+                (
+                    modules_to_use,
+                    module_outputs_json,
+                    continue_conversation,
+                    control_group_message,
+                ) = execute_optional_modules(
+                    event, execution_time="before_message_processed"
+                )
+                caddy.store_evaluation_module(
+                thread_id=message_query.thread_id,
+                user_arguments=json.dumps(modules_to_use[0]),
+                argument_output=module_outputs_json,
+                continue_conversation=continue_conversation,
+                control_group_message=control_group_message
+                )
+            elif existing_call is True:
+                modules_to_use = values["user_arguments"]
+                module_outputs_json = values["argument_output"]
+                continue_conversation = values["continue_conversation"]
+                control_group_message = values["control_group_message"]
+
+            message_query = caddy.format_chat_message(event)
 
             caddy.store_message(message_query)
-            caddy.store_evaluation_module(
-                thread_id=message_query.thread_id,
-                user_arguments=message_query.user_arguments,
-                argument_output=message_query.argument_output,
-            )
 
             if continue_conversation is False:
                 google_chat.update_message_in_adviser_space(
