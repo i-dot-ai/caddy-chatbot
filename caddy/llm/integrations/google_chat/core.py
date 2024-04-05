@@ -8,6 +8,8 @@ from caddy.services.survey import get_survey
 from aws_xray_sdk.core import xray_recorder
 from aws_xray_sdk.core import patch_all
 
+from typing import List
+
 patch_all()
 
 
@@ -96,8 +98,20 @@ class GoogleChat:
     
     @xray_recorder.capture()
     def send_dynamic_to_adviser_space(
-        self, response_type, space_id, message, thread_id
-    ):
+        self, response_type: str, space_id: str, message: dict, thread_id: str
+        ) -> None:
+        """
+        Sends a dynamic message to the adviser space given a type of response
+
+        Args:
+            response_type (str): The type of response to send
+            space_id (str): The space ID of the user
+            message (dict): The message to send
+            thread_id (str): The thread ID of the conversation
+        
+        Returns:
+            None
+        """
         match response_type:
             case "text":
                 self.caddy.spaces().messages().create(
@@ -120,8 +134,18 @@ class GoogleChat:
     
     @xray_recorder.capture()
     def get_post_call_survey_card(
-        self, post_call_survey_questions, post_call_survey_values
-    ):
+        self, post_call_survey_questions: List[str], post_call_survey_values: List[str]
+        ) -> dict:
+        """
+        Create a post call survey card with the given questions and values
+
+        Args:
+            post_call_survey_questions (List[str]): The questions for the survey
+            post_call_survey_values (List[str]): The values for the survey
+        
+        Returns:
+            dict: The survey card
+        """
         card = {
             "cardsV2": [
                 {

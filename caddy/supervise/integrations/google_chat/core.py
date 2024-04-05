@@ -11,6 +11,8 @@ from caddy.models.core import ApprovalEvent
 from caddy.services import enrolment
 from caddy.services.survey import get_survey
 
+from typing import List
+
 from aws_xray_sdk.core import xray_recorder
 from aws_xray_sdk.core import patch_all
 
@@ -844,8 +846,18 @@ class GoogleChat:
 
     @xray_recorder.capture()
     def get_post_call_survey_card(
-        self, post_call_survey_questions, post_call_survey_values
-    ):
+        self, post_call_survey_questions: List[str], post_call_survey_values: List[str]
+        ) -> dict:
+        """
+        Create a post call survey card with the given questions and values
+
+        Args:
+            post_call_survey_questions (List[str]): The questions for the survey
+            post_call_survey_values (List[str]): The values for the survey
+        
+        Returns:
+            dict: The survey card
+        """
         card = {
             "cardsV2": [
                 {

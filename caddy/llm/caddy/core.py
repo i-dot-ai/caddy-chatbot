@@ -1,7 +1,7 @@
 import os
 import json
 import boto3
-from typing import List, Any
+from typing import List, Any, Tuple, Dict
 from datetime import datetime
 from boto3.dynamodb.conditions import Key
 
@@ -162,7 +162,19 @@ def format_supervision_event(message_query: UserMessage, llm_response: LlmRespon
 
     return supervision_event
 
-def check_existing_call(threadId):
+def check_existing_call(threadId: str) -> Tuple[bool, Dict[str, Any], bool]:
+    """
+    Check if the call has already received evaluation modules
+
+    Args:
+        threadId (str): The threadId of the conversation
+    
+    Returns:
+        Tuple[bool, Dict[str, Any], bool]: A tuple containing three values:
+            - True if the call has already received evaluation modules, False otherwise
+            - A dictionary containing the values of user_arguments, argument_output, continue_conversation, and control_group_message
+            - True if the survey is complete, False otherwise
+    """
     response = evaluation_table.query(
         KeyConditionExpression=Key("threadId").eq(threadId),
     )
