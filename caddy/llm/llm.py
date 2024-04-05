@@ -10,7 +10,7 @@ def lambda_handler(event, context):
         case "Google Chat":
             google_chat = GoogleChat()
 
-            existing_call, values, survey_complete = caddy.check_existing_call(event.thread_id)
+            existing_call, values, survey_complete = caddy.check_existing_call(event["thread_id"])
             
             if existing_call is False:
                 (
