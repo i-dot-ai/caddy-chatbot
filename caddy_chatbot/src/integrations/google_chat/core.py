@@ -1250,60 +1250,6 @@ class GoogleChat:
             supervision_users=space_users, space_display_name=space_name
         )
 
-    def get_post_call_survey_card(
-        self, post_call_survey_questions: List[str], post_call_survey_values: List[str]
-    ) -> dict:
-        """
-        Create a post call survey card with the given questions and values
-
-        Args:
-            post_call_survey_questions (List[str]): The questions for the survey
-            post_call_survey_values (List[str]): The values for the survey
-
-        Returns:
-            dict: The survey card
-        """
-        card = {
-            "cardsV2": [
-                {
-                    "cardId": "postCallSurvey",
-                    "card": {
-                        "sections": [],
-                    },
-                },
-            ],
-        }
-
-        for question in post_call_survey_questions:
-            section = {"widgets": []}
-
-            question_section = {"textParagraph": {"text": question}}
-
-            button_section = {"buttonList": {"buttons": []}}
-
-            for value in post_call_survey_values:
-                button_section["buttonList"]["buttons"].append(
-                    {
-                        "text": value,
-                        "onClick": {
-                            "action": {
-                                "function": "survey_response",
-                                "parameters": [
-                                    {"key": "question", "value": question},
-                                    {"key": "response", "value": value},
-                                ],
-                            }
-                        },
-                    }
-                )
-
-            section["widgets"].append(question_section)
-            section["widgets"].append(button_section)
-
-            card["cardsV2"][0]["card"]["sections"].append(section)
-
-        return card
-
     def get_survey(self, user: str) -> dict:
         """
         Gets a post call survey card for the given user

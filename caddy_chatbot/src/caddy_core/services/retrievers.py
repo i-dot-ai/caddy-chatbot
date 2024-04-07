@@ -5,6 +5,7 @@ from typing import List
 from langchain.retrievers.merger_retriever import MergerRetriever
 from langchain_core.language_models.chat_models import BaseChatModel
 
+
 class LLMPriorityRetriever(BaseRetriever):
     """Retriever that merges the results of multiple retrievers."""
 

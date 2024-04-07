@@ -72,20 +72,6 @@ class CaddyMessageEvent(pydantic.BaseModel):
     timestamp: datetime
 
 
-class SupervisionEvent(pydantic.BaseModel):
-    type: str
-    source_client: str
-    user: str
-    llmPrompt: str
-    llm_answer: str
-    llm_response_json: pydantic.Json
-    conversation_id: str
-    thread_id: str
-    message_id: str
-    approver_received_timestamp: Union[datetime, None] = None
-    response_id: str
-
-
 class ProcessChatMessageEvent(pydantic.BaseModel):
     type: str
     user: str

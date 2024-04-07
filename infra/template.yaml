@@ -136,8 +136,8 @@ Resources:
     Type: AWS::AppRunner::Service
     Properties:
       ServiceName: !Sub 'caddy-runner-${StageName}'
-      NetworkConfiguration: 
-        IngressConfiguration: 
+      NetworkConfiguration:
+        IngressConfiguration:
           IsPubliclyAccessible: True
       InstanceConfiguration:
           InstanceRoleArn: !GetAtt CaddyRole.Arn
@@ -154,7 +154,7 @@ Resources:
           ImageIdentifier: !Ref CaddyImage
           ImageRepositoryType: ECR
           ImageConfiguration:
-            RuntimeEnvironmentSecrets: 
+            RuntimeEnvironmentSecrets:
               - Name: CADDY_SERVICE_ACCOUNT
                 Value: !Ref CaddyServiceAccountSecretArn
               - Name: CADDY_SUPERVISOR_SERVICE_ACCOUNT
@@ -211,7 +211,7 @@ Resources:
             Action:
               - "ecr:BatchGetImage"
               - "ecr:GetDownloadUrlForLayer"
-  
+
   CaddyECRRole:
     Type: AWS::IAM::Role
     Properties:

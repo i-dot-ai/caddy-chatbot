@@ -3,7 +3,6 @@ from fastapi.responses import Response
 from fastapi import status
 
 from caddy_core.models.core import (
-    CaddyMessageEvent,
     ProcessChatMessageEvent,
     UserMessage,
     LlmResponse,
@@ -18,7 +17,6 @@ from caddy_core.services import enrolment
 from caddy_core.services.evaluation.core import execute_optional_modules
 from boto3.dynamodb.conditions import Key
 
-import sys
 import json
 
 from typing import List, Any, Dict, Tuple
@@ -237,7 +235,6 @@ def query_llm(message_query: UserMessage, chat_history: List[Any]):
 
 
 def format_supervision_event(message_query: UserMessage, llm_response: LlmResponse):
-
     supervision_event = SupervisionEvent(
         type="SUPERVISION_REQUIRED",
         source_client=message_query.client,

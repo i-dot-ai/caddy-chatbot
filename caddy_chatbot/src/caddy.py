@@ -5,7 +5,6 @@ import json
 from caddy_core import core as caddy
 from caddy_core.services import enrolment
 from integrations.google_chat.core import GoogleChat
-from integrations.local import core as caddy_local
 
 from integrations.google_chat.verification import (
     verify_google_chat_request,
@@ -13,8 +12,6 @@ from integrations.google_chat.verification import (
 )
 
 app = FastAPI(docs_url=None)
-
-from threading import Thread
 
 
 @app.get("/")
