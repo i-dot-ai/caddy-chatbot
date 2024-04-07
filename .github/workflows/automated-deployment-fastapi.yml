@@ -24,10 +24,10 @@ jobs:
       - name: Build and push container image
         run: |
           aws ecr get-login-password | docker login --username AWS --password-stdin ${{ secrets.CADDY_ECR_ENDPOINT }}
-          docker build -f ./caddy_chatbot/Dockerfile -t ${{ secrets.CADDY_ECR_REPO_ID }}:v${{ github.SHA }} .
-          docker tag ${{ secrets.CADDY_ECR_REPO_ID }}:v${{ github.SHA }} ${{ secrets.CADDY_ECR_ENDPOINT }}/${{ secrets.CADDY_ECR_REPO_ID }}:v${{ github.SHA }}
-          docker push ${{ secrets.CADDY_ECR_ENDPOINT }}/${{ secrets.CADDY_ECR_REPO_ID }}:v${{ github.SHA }}
+          docker build -f ./caddy_chatbot/Dockerfile -t ${{ secrets.CADDY_ECR_REPO_ID }}:v${{ github.sha }} .
+          docker tag ${{ secrets.CADDY_ECR_REPO_ID }}:v${{ github.sha }} ${{ secrets.CADDY_ECR_ENDPOINT }}/${{ secrets.CADDY_ECR_REPO_ID }}:v${{ github.sha }}
+          docker push ${{ secrets.CADDY_ECR_ENDPOINT }}/${{ secrets.CADDY_ECR_REPO_ID }}:v${{ github.sha }}
       - name: Deploy infrastructure
         run: |
-          aws cloudformation deploy --template-file infra/template.yaml --stack-name "caddy-fast-test" --capabilities CAPABILITY_NAMED_IAM --parameter-overrides StageName=fast MessageTableName=caddyMessages-fast ResponsesTableName=caddyResponse-fast EMBEDDING_MODEL=model UserTableName=caddyUsers-fast OfficesTableName=caddyOffices-fast EvaluationTableName=caddyEvalutation-fast OpensearchUrl=${{ secrets.OPENSEARCH_URL }} CaddyServiceAccountSecretArn=${{ secrets.CADDY_SA_ARN_DEV }} CaddySupervisorServiceAccountSecretArn=${{ secrets.CADDY_SUPERVISOR_SA_ARN_DEV }} CaddyImage=${{ secrets.CADDY_ECR_ENDPOINT }}/${{ secrets.CADDY_ECR_REPO_ID }}:v${{ github.SHA }} CaddySupervisorGoogleCloudProject=${{ vars.CADDY_SUPERVISOR_GOOGLE_CLOUD_PROJECT_DEV }} CaddyGoogleCloudProject=${{ vars.CADDY_GOOGLE_CLOUD_PROJECT_DEV }} LLM="anthropic.claude-instant-v1"
+          aws cloudformation deploy --template-file infra/template.yaml --stack-name "caddy-fast-test" --capabilities CAPABILITY_NAMED_IAM --parameter-overrides StageName=fast MessageTableName=caddyMessages-fast ResponsesTableName=caddyResponse-fast EMBEDDING_MODEL=model UserTableName=caddyUsers-fast OfficesTableName=caddyOffices-fast EvaluationTableName=caddyEvalutation-fast OpensearchUrl=${{ secrets.OPENSEARCH_URL }} CaddyServiceAccountSecretArn=${{ secrets.CADDY_SA_ARN_DEV }} CaddySupervisorServiceAccountSecretArn=${{ secrets.CADDY_SUPERVISOR_SA_ARN_DEV }} CaddyImage=${{ secrets.CADDY_ECR_ENDPOINT }}/${{ secrets.CADDY_ECR_REPO_ID }}:v${{ github.sha }} CaddySupervisorGoogleCloudProject=${{ vars.CADDY_SUPERVISOR_GOOGLE_CLOUD_PROJECT_DEV }} CaddyGoogleCloudProject=${{ vars.CADDY_GOOGLE_CLOUD_PROJECT_DEV }} LLM="anthropic.claude-instant-v1"
           aws apprunner start-deployment --service-arn ${{ secrets.CADDY_RUNNER_ARN }}
