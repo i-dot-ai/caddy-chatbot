@@ -56,14 +56,6 @@ To develop in codespaces, ensure you define your environment variables through G
 
 If you are using windows or do not want to install vscode on your machine, you can click on the badge above to spin up a codespace environment.
 
-### Without AWS CLI
-
-if you are not able to run AWS CLI or Docker, you can manually test the lambda function by running
-
-```bash
-$ make test-lambda-func MSG="your custom message here"
-```
-
 ## Developing with Local DynamoDB
 
 To explore the connection to DynamoDB, I have attached the docker-compose file to spin up a local DynamoDB.  This will have to be span up before using the relevant notebook.
