@@ -1,0 +1,305 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Caddy - AWS Cloudformation Template
+
+Globals:
+  Function:
+    Timeout: 100
+
+Parameters:
+  StageName:
+    Type: String
+    Description: Name of the stage (e.g., dev, prod)
+    AllowedValues:
+      - dev
+      - prod
+      - fast
+  UserTableName:
+    Type: String
+    Description: Name of the DynamoDB table for users
+  MessageTableName:
+    Type: String
+    Description: Name of the DynamoDB table for messages
+  ResponsesTableName:
+    Type: String
+    Description: Name of the DynamoDB table for responses
+  OfficesTableName:
+    Type: String
+    Description: Name of the DynamoDB table for responses
+  EvaluationTableName:
+    Type: String
+    Description: Name of the DynamoDB table for evaluation
+  OpensearchUrl:
+    Type: String
+    Description: Url of Opensearch Index
+  CaddyServiceAccountSecretArn:
+    Type: String
+    Description: AWS Arn for Caddy service account
+  CaddySupervisorServiceAccountSecretArn:
+    Type: String
+    Description: AWS Arn for Caddy Supervisor service account
+  CaddyImage:
+    Type: String
+    Description: Caddy container image
+  CaddyGoogleCloudProject:
+    Type: String
+    Description: Google Cloud Project Id
+  CaddySupervisorGoogleCloudProject:
+    Type: String
+    Description: Google Cloud Project Id
+  LLM:
+    Type: String
+    Description: LLM to use
+
+Resources:
+  CaddyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'CaddyRole-${StageName}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: tasks.apprunner.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: !Sub 'CaddyLoggingPolicy-${StageName}'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+        - PolicyName: !Sub 'CaddyDynamoPolicy-${StageName}'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:Scan
+                  - dynamodb:Query
+                Resource: !GetAtt MessagesTable.Arn
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:Scan
+                  - dynamodb:Query
+                  - dynamodb:DeleteItem
+                Resource: !GetAtt ResponsesTable.Arn
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt OfficesTable.Arn
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Scan
+                Resource: !GetAtt UsersTable.Arn
+              - Effect: Allow
+                Action:
+                  - dynamodb:Query
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:GetItem
+                Resource: !GetAtt EvaluationTable.Arn
+        - PolicyName: !Sub 'BedrockInvokerPolicy-${StageName}'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource: '*'
+        - PolicyName: !Sub 'CaddySecrets-${StageName}'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue # pragma: allowlist secret
+                Resource: '*'
+
+  CaddyRunner:
+    Type: AWS::AppRunner::Service
+    Properties:
+      ServiceName: !Sub 'caddy-runner-${StageName}'
+      NetworkConfiguration: 
+        IngressConfiguration: 
+          IsPubliclyAccessible: True
+      InstanceConfiguration:
+          InstanceRoleArn: !GetAtt CaddyRole.Arn
+          Cpu: 4096
+          Memory: 8192
+      ObservabilityConfiguration:
+        ObservabilityEnabled: True
+        ObservabilityConfigurationArn: !GetAtt CaddyObservabilityConfig.ObservabilityConfigurationArn
+      SourceConfiguration:
+        AuthenticationConfiguration:
+          AccessRoleArn: !GetAtt CaddyECRRole.Arn
+        AutoDeploymentsEnabled: True
+        ImageRepository:
+          ImageIdentifier: !Ref CaddyImage
+          ImageRepositoryType: ECR
+          ImageConfiguration:
+            RuntimeEnvironmentSecrets: 
+              - Name: CADDY_SERVICE_ACCOUNT
+                Value: !Ref CaddyServiceAccountSecretArn
+              - Name: CADDY_SUPERVISOR_SERVICE_ACCOUNT
+                Value: !Ref CaddySupervisorServiceAccountSecretArn
+            RuntimeEnvironmentVariables:
+              - Name: MESSAGES_TABLE_NAME
+                Value: !Ref MessageTableName
+              - Name: RESPONSES_TABLE_NAME
+                Value: !Ref ResponsesTableName
+              - Name: USERS_TABLE_NAME
+                Value: !Ref UserTableName
+              - Name: OFFICES_TABLE_NAME
+                Value: !Ref OfficesTableName
+              - Name: EVALUATION_TABLE_NAME
+                Value: !Ref EvaluationTableName
+              - Name: STAGE
+                Value: !Ref StageName
+              - Name: HF_HOME
+                Value: "/tmp"
+              - Name: XDG_CACHE_HOME
+                Value: "/tmp"
+              - Name: LLM
+                Value: !Ref LLM
+              - Name: OPENSEARCH_HTTPS
+                Value: !Ref OpensearchUrl
+              - Name: OPENSEARCH_INDEX
+                Value: "caddy_vector_index"
+              - Name: CADDY_GOOGLE_CLOUD_PROJECT
+                Value: !Ref CaddyGoogleCloudProject
+              - Name: CADDY_SUPERVISOR_GOOGLE_CLOUD_PROJECT
+                Value: !Ref CaddySupervisorGoogleCloudProject
+
+  CaddyObservabilityConfig:
+    Type: AWS::AppRunner::ObservabilityConfiguration
+    Properties:
+      ObservabilityConfigurationName: xray-tracing
+      TraceConfiguration:
+        Vendor: AWSXRAY
+
+  CaddyECR:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub 'caddy-ecr-repository-${StageName}'
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ECRLambdaPolicy
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - "ecr:BatchGetImage"
+              - "ecr:GetDownloadUrlForLayer"
+  
+  CaddyECRRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2008-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - build.apprunner.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess
+
+  UsersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: !Ref UserTableName
+        AttributeDefinitions:
+          - AttributeName: userEmail
+            AttributeType: S
+        KeySchema:
+          - AttributeName: userEmail
+            KeyType: HASH
+        ProvisionedThroughput:
+            ReadCapacityUnits: 1
+            WriteCapacityUnits: 1
+
+  MessagesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+          TableName: !Ref MessageTableName
+          AttributeDefinitions:
+          - AttributeName: threadId
+            AttributeType: S
+          KeySchema:
+          - AttributeName: threadId
+            KeyType: HASH
+          ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
+          StreamSpecification:
+              StreamViewType: NEW_AND_OLD_IMAGES
+
+  ResponsesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+          TableName: !Ref ResponsesTableName
+          AttributeDefinitions:
+          - AttributeName: threadId
+            AttributeType: S
+          KeySchema:
+          - AttributeName: threadId
+            KeyType: HASH
+          ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
+          StreamSpecification:
+              StreamViewType: NEW_AND_OLD_IMAGES
+
+  OfficesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+        TableName: !Ref OfficesTableName
+        AttributeDefinitions:
+        - AttributeName: emailDomain
+          AttributeType: S
+        KeySchema:
+        - AttributeName: emailDomain
+          KeyType: HASH
+        ProvisionedThroughput:
+            ReadCapacityUnits: 1
+            WriteCapacityUnits: 1
+        StreamSpecification:
+            StreamViewType: NEW_AND_OLD_IMAGES
+
+  EvaluationTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+        TableName: !Ref EvaluationTableName
+        AttributeDefinitions:
+        - AttributeName: threadId
+          AttributeType: S
+        KeySchema:
+        - AttributeName: threadId
+          KeyType: HASH
+        ProvisionedThroughput:
+            ReadCapacityUnits: 1
+            WriteCapacityUnits: 1
+        StreamSpecification:
+            StreamViewType: NEW_AND_OLD_IMAGES
