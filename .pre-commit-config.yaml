@@ -2,7 +2,7 @@
 # See https://pre-commit.com/hooks.html for more hooks
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.4.0
+    rev: v4.6.0
     hooks:
       - id: check-added-large-files
         name: Check for files larger than 5 MB
@@ -15,7 +15,7 @@ repos:
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
-    rev: v0.2.1
+    rev: v0.3.5
     hooks:
       # Run the linter.
       - id: ruff
@@ -49,7 +49,7 @@ repos:
         language: pygrep
         entry: ':\d{12}:'
   - repo: https://github.com/mxab/pre-commit-trivy.git
-    rev: v0.3.0
+    rev: v0.12.0
     hooks:
       - id: trivyfs-docker
         args:
@@ -66,7 +66,7 @@ repos:
           - --ignore-unfixed
           - . # last arg indicates the path/file to scan
   - repo: https://github.com/psf/black
-    rev: stable
+    rev: 24.3.0
     hooks:
     - id: black
       language_version: python3.12
