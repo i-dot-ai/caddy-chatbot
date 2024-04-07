@@ -149,7 +149,7 @@ Resources:
       SourceConfiguration:
         AuthenticationConfiguration:
           AccessRoleArn: !GetAtt CaddyECRRole.Arn
-        AutoDeploymentsEnabled: True
+        AutoDeploymentsEnabled: False
         ImageRepository:
           ImageIdentifier: !Ref CaddyImage
           ImageRepositoryType: ECR
