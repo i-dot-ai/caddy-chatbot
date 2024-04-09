@@ -9,26 +9,31 @@ from langchain.retrievers.merger_retriever import MergerRetriever
 from langchain.vectorstores.elasticsearch import ElasticsearchStore
 from langchain.retrievers.document_compressors import DocumentCompressorPipeline
 
+import boto3
+from botocore.exceptions import NoCredentialsError
 from opensearchpy import RequestsHttpConnection
 from requests_aws4auth import AWS4Auth
 
 import re
 import os
-import boto3
 from typing import List, Any
 from datetime import datetime
 
 from caddy_core.utils.prompt import CORE_PROMPT
 
-credentials = boto3.Session().get_credentials()
-auth = AWS4Auth(
-    service="es",
-    region=os.environ.get("AWS_REGION"),
-    refreshable_credentials=credentials,
-)
-
-embeddings = HuggingFaceEmbeddings(model_name="model")
 opensearch_https = os.environ.get("OPENSEARCH_HTTPS")
+embeddings = HuggingFaceEmbeddings(model_name="model")
+
+try:
+    session = boto3.Session()
+    credentials = session.get_credentials()
+    auth = AWS4Auth(
+        region=os.environ.get("AWS_REGION"),
+        service="es",
+        refreshable_credentials=credentials,
+    )
+except NoCredentialsError:
+    print("No credentials could be found")
 
 
 def find_most_recent_caddy_vector_index():

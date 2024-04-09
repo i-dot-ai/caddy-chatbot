@@ -3,10 +3,9 @@ services:
    build:
      context: .
      dockerfile: ./caddy_chatbot/Dockerfile
-   image: caddy:latest
-   container_name: caddy
+   container_name: caddy_chatbot
    ports:
-    - "8080:8080"
+    - "80:80"
    volumes:
     - type: bind
       source: ./pyproject.toml
@@ -19,9 +18,6 @@ services:
     - caddy
    env_file:
     - .env
-   environment:
-    - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-    - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
 
  dynamodb-local:
    command: "-jar DynamoDBLocal.jar -sharedDb -inMemory"

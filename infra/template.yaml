@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: >
+Description: |
   Caddy - AWS Cloudformation Template
 
 Globals:
@@ -51,21 +51,278 @@ Parameters:
   LLM:
     Type: String
     Description: LLM to use
+  DomainName:
+    Type: String
+    Description: Domain for Cert
 
 Resources:
+
+  CaddyVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+
+  CaddyPrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: eu-west-2a
+      VpcId: !Ref CaddyVPC
+      CidrBlock: 10.0.0.0/24
+
+  CaddyPublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: eu-west-2b
+      VpcId: !Ref CaddyVPC
+      CidrBlock: 10.0.1.0/24
+  CaddyPublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: eu-west-2a
+      VpcId: !Ref CaddyVPC
+      CidrBlock: 10.0.2.0/24
+
+  CaddyNATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt CaddyElasticIP.AllocationId
+      SubnetId: !Ref CaddyPublicSubnet1
+
+  CaddyInternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  CaddyElasticIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref CaddyVPC
+      InternetGatewayId: !Ref CaddyInternetGateway
+
+  CaddySecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub caddy-security-group-${StageName}
+      GroupDescription: Security group for Caddy ECS Fargate
+      VpcId: !Ref CaddyVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+
+  CaddyPrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref CaddyVPC
+
+  CaddyPublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref CaddyVPC
+
+  CaddyInternetGatewayRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref CaddyPublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref CaddyInternetGateway
+
+  CaddyPrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref CaddyPrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref CaddyNATGateway
+
+  PrivateSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref CaddyPrivateRouteTable
+      SubnetId: !Ref CaddyPrivateSubnet1
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref CaddyPublicRouteTable
+      SubnetId: !Ref CaddyPublicSubnet1
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref CaddyPublicRouteTable
+      SubnetId: !Ref CaddyPublicSubnet2
+
+  CaddyLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub caddy-loadbalancer-${StageName}
+      Scheme: internet-facing
+      Type: application
+      Subnets:
+        - !Ref CaddyPublicSubnet1
+        - !Ref CaddyPublicSubnet2
+      SecurityGroups:
+        - !Ref CaddySecurityGroup
+
+  CaddyHTTPSListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref CaddyLoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      MutualAuthentication:
+        Mode: passthrough
+      Certificates:
+        - CertificateArn: !Ref CaddyCertificate
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref CaddyTargetGroup
+
+  CaddyCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref DomainName
+
+  CaddyTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    DependsOn: CaddyLoadBalancer
+    Properties:
+      Name: !Sub caddy-targetgroup-${StageName}
+      Port: 80
+      Protocol: HTTP
+      TargetType: ip
+      HealthCheckPort: 80
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: /health
+      Matcher:
+        HttpCode: 200
+      VpcId: !Ref CaddyVPC
+
+  CaddyTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub caddy-task-${StageName}
+      ExecutionRoleArn: !GetAtt CaddyRole.Arn
+      TaskRoleArn: !GetAtt CaddyRole.Arn
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: 2048
+      Memory: 4096
+      ContainerDefinitions:
+        - Name: caddy-container
+          Image: !Ref CaddyImage
+          PortMappings:
+            - ContainerPort: 80
+          Secrets:
+            - Name: CADDY_SERVICE_ACCOUNT
+              ValueFrom: !Ref CaddyServiceAccountSecretArn
+            - Name: CADDY_SUPERVISOR_SERVICE_ACCOUNT
+              ValueFrom: !Ref CaddySupervisorServiceAccountSecretArn
+          Environment:
+            - Name: MESSAGES_TABLE_NAME
+              Value: !Ref MessageTableName
+            - Name: RESPONSES_TABLE_NAME
+              Value: !Ref ResponsesTableName
+            - Name: USERS_TABLE_NAME
+              Value: !Ref UserTableName
+            - Name: OFFICES_TABLE_NAME
+              Value: !Ref OfficesTableName
+            - Name: EVALUATION_TABLE_NAME
+              Value: !Ref EvaluationTableName
+            - Name: STAGE
+              Value: !Ref StageName
+            - Name: HF_HOME
+              Value: /tmp
+            - Name: XDG_CACHE_HOME
+              Value: /tmp
+            - Name: LLM
+              Value: !Ref LLM
+            - Name: OPENSEARCH_HTTPS
+              Value: !Ref OpensearchUrl
+            - Name: OPENSEARCH_INDEX
+              Value: caddy_vector_index
+            - Name: CADDY_GOOGLE_CLOUD_PROJECT
+              Value: !Ref CaddyGoogleCloudProject
+            - Name: CADDY_SUPERVISOR_GOOGLE_CLOUD_PROJECT
+              Value: !Ref CaddySupervisorGoogleCloudProject
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref CaddyLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: caddy-container
+
+  CaddyCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub caddy-cluster-${StageName}
+
+  CaddyService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref CaddyCluster
+      ServiceName: !Sub caddy-service-${StageName}
+      TaskDefinition: !Ref CaddyTaskDefinition
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - !Ref CaddySecurityGroup
+          Subnets:
+            - !Ref CaddyPrivateSubnet1
+      HealthCheckGracePeriodSeconds: 30
+      LoadBalancers:
+        - ContainerName: caddy-container
+          ContainerPort: 80
+          TargetGroupArn: !Ref CaddyTargetGroup
+
+  CaddyLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /ecs/caddy-log-group-${StageName}
+      RetentionInDays: 7
+
   CaddyRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'CaddyRole-${StageName}'
+      RoleName: !Sub CaddyRole-${StageName}
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
           - Effect: Allow
             Principal:
-              Service: tasks.apprunner.amazonaws.com
-            Action: 'sts:AssumeRole'
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
       Policies:
-        - PolicyName: !Sub 'CaddyLoggingPolicy-${StageName}'
+        - PolicyName: !Sub CaddyECRPolicy-${StageName}
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                Resource: '*'
+        - PolicyName: !Sub CaddyLoggingPolicy-${StageName}
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -75,7 +332,7 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: '*'
-        - PolicyName: !Sub 'CaddyDynamoPolicy-${StageName}'
+        - PolicyName: !Sub CaddyDynamoPolicy-${StageName}
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -115,7 +372,7 @@ Resources:
                   - dynamodb:UpdateItem
                   - dynamodb:GetItem
                 Resource: !GetAtt EvaluationTable.Arn
-        - PolicyName: !Sub 'BedrockInvokerPolicy-${StageName}'
+        - PolicyName: !Sub BedrockInvokerPolicy-${StageName}
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -123,7 +380,7 @@ Resources:
                 Action:
                   - bedrock:InvokeModel
                 Resource: '*'
-        - PolicyName: !Sub 'CaddySecrets-${StageName}'
+        - PolicyName: !Sub CaddySecrets-${StageName}
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -132,174 +389,80 @@ Resources:
                   - secretsmanager:GetSecretValue # pragma: allowlist secret
                 Resource: '*'
 
-  CaddyRunner:
-    Type: AWS::AppRunner::Service
-    Properties:
-      ServiceName: !Sub 'caddy-runner-${StageName}'
-      NetworkConfiguration:
-        IngressConfiguration:
-          IsPubliclyAccessible: True
-      InstanceConfiguration:
-          InstanceRoleArn: !GetAtt CaddyRole.Arn
-          Cpu: 4096
-          Memory: 8192
-      ObservabilityConfiguration:
-        ObservabilityEnabled: True
-        ObservabilityConfigurationArn: !GetAtt CaddyObservabilityConfig.ObservabilityConfigurationArn
-      SourceConfiguration:
-        AuthenticationConfiguration:
-          AccessRoleArn: !GetAtt CaddyECRRole.Arn
-        AutoDeploymentsEnabled: False
-        ImageRepository:
-          ImageIdentifier: !Ref CaddyImage
-          ImageRepositoryType: ECR
-          ImageConfiguration:
-            RuntimeEnvironmentSecrets:
-              - Name: CADDY_SERVICE_ACCOUNT
-                Value: !Ref CaddyServiceAccountSecretArn
-              - Name: CADDY_SUPERVISOR_SERVICE_ACCOUNT
-                Value: !Ref CaddySupervisorServiceAccountSecretArn
-            RuntimeEnvironmentVariables:
-              - Name: MESSAGES_TABLE_NAME
-                Value: !Ref MessageTableName
-              - Name: RESPONSES_TABLE_NAME
-                Value: !Ref ResponsesTableName
-              - Name: USERS_TABLE_NAME
-                Value: !Ref UserTableName
-              - Name: OFFICES_TABLE_NAME
-                Value: !Ref OfficesTableName
-              - Name: EVALUATION_TABLE_NAME
-                Value: !Ref EvaluationTableName
-              - Name: STAGE
-                Value: !Ref StageName
-              - Name: HF_HOME
-                Value: "/tmp"
-              - Name: XDG_CACHE_HOME
-                Value: "/tmp"
-              - Name: LLM
-                Value: !Ref LLM
-              - Name: OPENSEARCH_HTTPS
-                Value: !Ref OpensearchUrl
-              - Name: OPENSEARCH_INDEX
-                Value: "caddy_vector_index"
-              - Name: CADDY_GOOGLE_CLOUD_PROJECT
-                Value: !Ref CaddyGoogleCloudProject
-              - Name: CADDY_SUPERVISOR_GOOGLE_CLOUD_PROJECT
-                Value: !Ref CaddySupervisorGoogleCloudProject
-
-  CaddyObservabilityConfig:
-    Type: AWS::AppRunner::ObservabilityConfiguration
-    Properties:
-      ObservabilityConfigurationName: xray-tracing
-      TraceConfiguration:
-        Vendor: AWSXRAY
-
-  CaddyECR:
-    Type: AWS::ECR::Repository
-    Properties:
-      RepositoryName: !Sub 'caddy-ecr-repository-${StageName}'
-      ImageScanningConfiguration:
-        ScanOnPush: true
-      RepositoryPolicyText:
-        Version: "2012-10-17"
-        Statement:
-          - Sid: ECRLambdaPolicy
-            Effect: Allow
-            Principal:
-              Service:
-                - lambda.amazonaws.com
-            Action:
-              - "ecr:BatchGetImage"
-              - "ecr:GetDownloadUrlForLayer"
-
-  CaddyECRRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2008-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - build.apprunner.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess
-
   UsersTable:
-      Type: AWS::DynamoDB::Table
-      Properties:
-        TableName: !Ref UserTableName
-        AttributeDefinitions:
-          - AttributeName: userEmail
-            AttributeType: S
-        KeySchema:
-          - AttributeName: userEmail
-            KeyType: HASH
-        ProvisionedThroughput:
-            ReadCapacityUnits: 1
-            WriteCapacityUnits: 1
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref UserTableName
+      AttributeDefinitions:
+        - AttributeName: userEmail
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userEmail
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
 
   MessagesTable:
-      Type: AWS::DynamoDB::Table
-      Properties:
-          TableName: !Ref MessageTableName
-          AttributeDefinitions:
-          - AttributeName: threadId
-            AttributeType: S
-          KeySchema:
-          - AttributeName: threadId
-            KeyType: HASH
-          ProvisionedThroughput:
-              ReadCapacityUnits: 1
-              WriteCapacityUnits: 1
-          StreamSpecification:
-              StreamViewType: NEW_AND_OLD_IMAGES
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref MessageTableName
+      AttributeDefinitions:
+        - AttributeName: threadId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: threadId
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
 
   ResponsesTable:
-      Type: AWS::DynamoDB::Table
-      Properties:
-          TableName: !Ref ResponsesTableName
-          AttributeDefinitions:
-          - AttributeName: threadId
-            AttributeType: S
-          KeySchema:
-          - AttributeName: threadId
-            KeyType: HASH
-          ProvisionedThroughput:
-              ReadCapacityUnits: 1
-              WriteCapacityUnits: 1
-          StreamSpecification:
-              StreamViewType: NEW_AND_OLD_IMAGES
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref ResponsesTableName
+      AttributeDefinitions:
+        - AttributeName: threadId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: threadId
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
 
   OfficesTable:
     Type: AWS::DynamoDB::Table
     Properties:
-        TableName: !Ref OfficesTableName
-        AttributeDefinitions:
+      TableName: !Ref OfficesTableName
+      AttributeDefinitions:
         - AttributeName: emailDomain
           AttributeType: S
-        KeySchema:
+      KeySchema:
         - AttributeName: emailDomain
           KeyType: HASH
-        ProvisionedThroughput:
-            ReadCapacityUnits: 1
-            WriteCapacityUnits: 1
-        StreamSpecification:
-            StreamViewType: NEW_AND_OLD_IMAGES
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
 
   EvaluationTable:
     Type: AWS::DynamoDB::Table
     Properties:
-        TableName: !Ref EvaluationTableName
-        AttributeDefinitions:
+      TableName: !Ref EvaluationTableName
+      AttributeDefinitions:
         - AttributeName: threadId
           AttributeType: S
-        KeySchema:
+      KeySchema:
         - AttributeName: threadId
           KeyType: HASH
-        ProvisionedThroughput:
-            ReadCapacityUnits: 1
-            WriteCapacityUnits: 1
-        StreamSpecification:
-            StreamViewType: NEW_AND_OLD_IMAGES
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES

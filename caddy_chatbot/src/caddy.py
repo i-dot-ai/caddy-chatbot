@@ -14,15 +14,13 @@ from integrations.google_chat.verification import (
 app = FastAPI(docs_url=None)
 
 
-@app.get("/")
-def root():
-    return JSONResponse(
-        status_code=status.HTTP_403_FORBIDDEN, content={"detail": "Forbidden"}
-    )
+@app.get("/health")
+def health():
+    return JSONResponse(status_code=status.HTTP_200_OK, content={"status": "Online"})
 
 
 @app.post("/google-chat/chat")
-def google_chat_endpoint(
+async def google_chat_endpoint(
     background_tasks: BackgroundTasks, event=Depends(verify_google_chat_request)
 ) -> dict:
     """
@@ -35,12 +33,14 @@ def google_chat_endpoint(
     domain_enrolled = enrolment.check_domain_status(domain)
     if domain_enrolled is not True:
         return JSONResponse(
+            status_code=status.HTTP_200_OK,
             content=google_chat.messages["domain_not_enrolled"],
         )
 
     user_enrolled = enrolment.check_user_status(user)
     if user_enrolled is not True:
         return JSONResponse(
+            status_code=status.HTTP_200_OK,
             content=google_chat.messages["user_not_registered"],
         )
 
@@ -63,9 +63,11 @@ def google_chat_endpoint(
             caddy_message = google_chat.format_message(event)
             if caddy_message == "PII Detected":
                 return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-            caddy.handle_message(caddy_message=caddy_message, chat_client=google_chat)
-
+            background_tasks.add_task(
+                caddy.handle_message,
+                caddy_message=caddy_message,
+                chat_client=google_chat,
+            )
             return Response(status_code=status.HTTP_202_ACCEPTED)
         case "CARD_CLICKED":
             match event["action"]["actionMethodName"]:
@@ -106,9 +108,7 @@ def google_chat_endpoint(
                         content=google_chat.success_dialog(),
                     )
                 case "survey_response":
-                    background_tasks.add_task(
-                        google_chat.handle_survey_response, event=event
-                    )
+                    google_chat.handle_survey_response(event=event)
                     return Response(status_code=status.HTTP_204_NO_CONTENT)
                 case "call_complete":
                     survey_card = json.loads(event["common"]["parameters"]["survey"])
@@ -144,7 +144,7 @@ def google_chat_endpoint(
 
 
 @app.post("/google-chat/supervision")
-def google_chat_supervision_endpoint(
+async def google_chat_supervision_endpoint(
     event=Depends(verify_google_chat_supervision_request),
 ):
     """
@@ -157,12 +157,14 @@ def google_chat_supervision_endpoint(
     domain_enrolled = enrolment.check_domain_status(domain)
     if domain_enrolled is not True:
         return JSONResponse(
+            status_code=status.HTTP_200_OK,
             content=google_chat.messages["domain_not_enrolled"],
         )
 
     user_enrolled = enrolment.check_user_status(user)
     if user_enrolled is not True:
         return JSONResponse(
+            status_code=status.HTTP_200_OK,
             content=google_chat.messages["user_not_registered"],
         )
 
