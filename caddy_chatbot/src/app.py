@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Depends, Request, status, BackgroundTasks
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse
 
 from caddy_core import core as caddy
 from caddy_core.services import enrolment
@@ -97,34 +97,20 @@ async def google_chat_supervision_endpoint(
 
     domain_enrolled = enrolment.check_domain_status(domain)
     if domain_enrolled is not True:
-        return JSONResponse(
-            status_code=status.HTTP_200_OK,
-            content=google_chat.messages["domain_not_enrolled"],
-        )
+        return google_chat.responses.DOMAIN_NOT_ENROLLED
 
     user_enrolled = enrolment.check_user_status(user)
     if user_enrolled is not True:
-        return JSONResponse(
-            status_code=status.HTTP_200_OK,
-            content=google_chat.messages["user_not_registered"],
-        )
+        return google_chat.responses.USER_NOT_ENROLLED
 
     match event["type"]:
         case "ADDED_TO_SPACE":
             match event["space"]["type"]:
                 case "DM":
-                    return JSONResponse(
-                        status_code=status.HTTP_200_OK,
-                        content=google_chat.messages["introduce_caddy_supervisor_DM"],
-                    )
+                    return google_chat.responses.INTRODUCE_CADDY_SUPERVISOR_IN_DM
                 case "ROOM":
-                    return JSONResponse(
-                        status_code=status.HTTP_200_OK,
-                        content={
-                            "text": google_chat.messages[
-                                "introduce_caddy_supervisor_SPACE"
-                            ].format(space=event["space"]["displayName"])
-                        },
+                    return google_chat.responses.introduce_caddy_supervisor_in_space(
+                        space_name=event["space"]["displayName"]
                     )
         case "CARD_CLICKED":
             match event["action"]["actionMethodName"]:
@@ -138,7 +124,7 @@ async def google_chat_supervision_endpoint(
                     caddy.store_approver_event(approval_event)
 
                     google_chat.call_complete_confirmation(user, user_space, thread_id)
-                    return Response(status_code=status.HTTP_204_NO_CONTENT)
+                    return google_chat.responses.NO_CONTENT
                 case "rejected_dialog":
                     reject_dialog = google_chat.get_supervisor_response(event)
                     return JSONResponse(

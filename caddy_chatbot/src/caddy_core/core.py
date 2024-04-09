@@ -31,7 +31,7 @@ def handle_message(caddy_message, chat_client):
         chat_client.update_message_in_adviser_space(
             space_id=caddy_message.space_id,
             message_id=caddy_message.message_id,
-            message=chat_client.messages["SURVEY_ALREADY_COMPLETED"],
+            message=chat_client.messages.SURVEY_ALREADY_COMPLETED,
         )
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -85,7 +85,7 @@ def handle_message(caddy_message, chat_client):
     chat_client.update_message_in_adviser_space(
         space_id=message_query.conversation_id,
         message_id=message_query.message_id,
-        message=chat_client.messages["GENERATING_RESPONSE"],
+        message=chat_client.messages.GENERATING_RESPONSE,
     )
 
     send_to_llm(caddy_query=message_query, chat_client=chat_client)
@@ -298,7 +298,7 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
     chat_client.update_message_in_adviser_space(
         space_id=caddy_query.conversation_id,
         message_id=caddy_query.message_id,
-        message=chat_client.messages["AWAITING_APPROVAL"],
+        message=chat_client.messages.AWAITING_APPROVAL,
     )
 
     send_for_supervisor_approval(

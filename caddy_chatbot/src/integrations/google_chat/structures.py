@@ -58,14 +58,14 @@ class GoogleChat:
                 self.send_pii_warning_to_adviser_space(
                     space_id=space_id,
                     thread_id=thread_id,
-                    message=self.messages["pii_detected"],
+                    message=self.messages.PII_DETECTED,
                     message_event=event,
                 )
 
                 return "PII Detected"
 
         thread_id, message_id = self.send_message_to_adviser_space(
-            space_id=space_id, thread_id=thread_id, message="*Status:* _*Processing*_"
+            space_id=space_id, thread_id=thread_id, message=self.messages.PROCESSING
         )
 
         caddy_message = CaddyMessageEvent(
@@ -82,10 +82,17 @@ class GoogleChat:
 
         return caddy_message
 
-    def send_message_to_adviser_space(self, space_id, thread_id, message):
+    def send_message_to_adviser_space(self, space_id, thread_id, message) -> tuple:
         """
         Sends a message to the adviser space
-        Returns the thread_id and message_id of the sent message
+
+        Args:
+            space_id (str): The ID of the adviser space
+            thread_id (str): The ID of the thread
+            message (str): The message to be sent
+
+        Returns:
+            tuple: A tuple containing the thread_id and message_id of the sent message
         """
         response = (
             self.caddy.spaces()
@@ -174,7 +181,20 @@ class GoogleChat:
             messageReplyOption="REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD",
         ).execute()
 
-    def update_message_in_adviser_space(self, space_id: str, message_id: str, message):
+    def update_message_in_adviser_space(
+        self, space_id: str, message_id: str, message
+    ) -> None:
+        """
+        Updates an existing text message in an adviser space
+
+        Args:
+            space_id (str): Space of the adviser
+            message_id (str): Existing message that requires updating
+            message: content to update message with
+
+        Returns:
+            None
+        """
         self.caddy.spaces().messages().patch(
             name=f"spaces/{space_id}/messages/{message_id}",
             body=message,

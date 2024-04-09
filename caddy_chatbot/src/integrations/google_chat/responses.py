@@ -22,6 +22,11 @@ INTRODUCE_CADDY_IN_DM = JSONResponse(
     status_code=status.HTTP_200_OK, content=content.INTRODUCE_CADDY_IN_DM
 )
 
+INTRODUCE_CADDY_SUPERVISOR_IN_DM = JSONResponse(
+    status_code=status.HTTP_200_OK,
+    content=content.INTRODUCE_CADDY_SUPERVISOR_IN_DM,
+)
+
 
 def introduce_caddy_in_space(space_name):
     text = content.INTRODUCE_CADDY_IN_SPACE.format(space_name=space_name)
@@ -29,6 +34,11 @@ def introduce_caddy_in_space(space_name):
         status_code=status.HTTP_200_OK,
         content={"text": text},
     )
+
+
+def introduce_caddy_supervisor_in_space(space_name):
+    text = content.INTRODUCE_CADDY_SUPERVISOR_IN_SPACE.format(space_name=space_name)
+    return JSONResponse(status_code=status.HTTP_200_OK, content={"text": text})
 
 
 # --- Card Responses --- #
