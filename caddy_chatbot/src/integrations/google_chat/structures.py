@@ -8,8 +8,7 @@ from caddy_core.services.survey import get_survey, check_if_survey_required
 from caddy_core.services import enrolment
 from caddy_core.utils.tables import evaluation_table
 from caddy_core import components as caddy
-from integrations.google_chat import content
-from integrations.google_chat import responses
+from integrations.google_chat import content, responses
 from integrations.google_chat.auth import get_google_creds
 
 from fastapi import status
@@ -1226,6 +1225,15 @@ class GoogleChat:
                 return self.get_user_to_remove_details_dialog()
 
     def get_supervisor_response(self, event):
+        """
+        Upon supervisor rejection returns a dialog box for supervisor response
+
+        Args:
+            Google Chat Event
+
+        Returns:
+            Google Chat Dialog
+        """
         conversation_id = event["common"]["parameters"]["conversationId"]
         response_id = event["common"]["parameters"]["responseId"]
         message_id = event["common"]["parameters"]["messageId"]
@@ -1234,7 +1242,7 @@ class GoogleChat:
         request_rejected = event["common"]["parameters"]["requestRejected"]
         user_email = event["common"]["parameters"]["userEmail"]
 
-        return self.get_supervisor_response_dialog(
+        dialog = self.get_supervisor_response_dialog(
             conversation_id,
             response_id,
             message_id,
@@ -1243,6 +1251,8 @@ class GoogleChat:
             request_rejected,
             user_email,
         )
+
+        return dialog
 
     def add_user(self, event):
         user = event["common"]["formInputs"]["email"]["stringInputs"]["value"][0]
