@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - enhance/migrateFastAPI
+      - develop
 
 jobs:
   build-deploy:

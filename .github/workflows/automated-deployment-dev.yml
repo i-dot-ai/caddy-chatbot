@@ -3,7 +3,7 @@ name: Dev Deployment
 on:
   push:
     branches:
-      - develop
+      - requiresUpdate
 
 jobs:
   run-tests:
