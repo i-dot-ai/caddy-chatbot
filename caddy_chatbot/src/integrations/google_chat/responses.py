@@ -1,6 +1,6 @@
 from fastapi import status
 from fastapi.responses import JSONResponse, Response
-import content
+from integrations.google_chat import content
 
 # --- Status Responses --- #
 NO_CONTENT = Response(status_code=status.HTTP_204_NO_CONTENT)
