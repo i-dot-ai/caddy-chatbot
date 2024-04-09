@@ -220,8 +220,8 @@ Resources:
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
-      Cpu: 2048
-      Memory: 4096
+      Cpu: 4096
+      Memory: 8192
       ContainerDefinitions:
         - Name: caddy-container
           Image: !Ref CaddyImage
