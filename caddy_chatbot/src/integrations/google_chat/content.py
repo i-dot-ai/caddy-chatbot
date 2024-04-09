@@ -3,16 +3,6 @@ import json
 # --- Google Chat Messages ---
 
 MESSAGES = {
-    "domain_not_enrolled": {
-        "text": "Caddy is not currently available for this domain. Please contact your administrator for more information."
-    },
-    "user_not_registered": {
-        "text": "User is not registered, please contact your administrator for support in onboarding to Caddy"
-    },
-    "introduce_caddy_DM": {
-        "text": "Hi, I'm Caddy! I'm an AI support for Citizens Advice advisers, I'm here to help give advice to support in resolving your client queries. \n *To get started just send me a query*"
-    },
-    "introduce_caddy_SPACE": "Hi, thank you for adding me to {space}, I'm Caddy! I'm an AI support for Citizens Advice advisers, I'm here to help give advice to support in resolving your client queries. \n\n *Just remember to type `@Caddy` at the start of your query if you would like my help.*",
     "pii_detected": '<b><font color="#FF0000">PII DETECTED</font><b> <i>Please ensure all queries to Caddy are anonymised. \n\n Choose whether to proceed anyway or edit your original query<i>',
     "GENERATING_RESPONSE": {"text": "*Status:* _*Generating response*_ "},
     "AWAITING_APPROVAL": {"text": "*Status:* _*Awaiting approval*_"},
@@ -25,4 +15,25 @@ MESSAGES = {
         }
     ),
     "introduce_caddy_supervisor_SPACE": "Hi, thank you for adding me to {space}, I'm the supervisor assistant for Caddy! Caddy is an AI support for Citizens Advice advisers. \n\nCaddy uses information from the below sites to form answers: \nGOV UK \nCitizens Advice \nAdviserNet \n\n*To get started you will need to register the advisers into your supervision space so their messages come to you, you can do this by typing `/addUser` into the chat, other user management functionality can be seen using `/help`*",
+}
+
+DOMAIN_NOT_ENROLLED = {
+    "text": "Caddy is not currently available for this domain. Please contact your administrator for more information."
+}
+
+USER_NOT_ENROLLED = {
+    "text": "Caddy is not currently registered for you. Please contact your administrator for support in onboarding to Caddy"
+}
+
+INTRODUCE_CADDY_IN_DM = {
+    "text": "Hi, I'm Caddy! I'm an AI support for Citizens Advice advisers, I'm here to help give advice to support in resolving your client queries. \n *To get started just send me a query*"
+}
+
+INTRODUCE_CADDY_IN_SPACE = "Hi, thank you for adding me to {space_name}, I'm Caddy! I'm an AI support for Citizens Advice advisers, I'm here to help give advice to support in resolving your client queries. \n\n *Just remember to type `@Caddy` at the start of your query if you would like my help.*"
+
+SUCCESS_DIALOG = {
+    "action_response": {
+        "type": "DIALOG",
+        "dialog_action": {"action_status": "OK"},
+    }
 }

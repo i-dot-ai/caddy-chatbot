@@ -3,6 +3,23 @@ import json
 from typing import List, Tuple
 
 
+def check_if_survey_required(user: str):
+    """
+    Checks whether survey questions are present in end of conversation modules
+    """
+
+    user_workspace_variables = get_user_workspace_variables(user)
+
+    if "module_name" in user_workspace_variables["end_of_conversation"][0]:
+        if (
+            user_workspace_variables["end_of_conversation"][0]["module_name"]
+            == "survey_questions"
+        ):
+            return True
+        else:
+            return False
+
+
 def get_survey(user: str) -> Tuple[List[str], List[str]]:
     """
     Retrieve the post call survey questions and values for a user

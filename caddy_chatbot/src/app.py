@@ -1,10 +1,9 @@
 from fastapi import FastAPI, Depends, Request, status, BackgroundTasks
 from fastapi.responses import JSONResponse, Response
 
-import json
 from caddy_core import core as caddy
 from caddy_core.services import enrolment
-from integrations.google_chat.core import GoogleChat
+from integrations.google_chat.structures import GoogleChat
 
 from integrations.google_chat.verification import (
     verify_google_chat_request,
@@ -32,115 +31,57 @@ async def google_chat_endpoint(
 
     domain_enrolled = enrolment.check_domain_status(domain)
     if domain_enrolled is not True:
-        return JSONResponse(
-            status_code=status.HTTP_200_OK,
-            content=google_chat.messages["domain_not_enrolled"],
-        )
+        return google_chat.responses.DOMAIN_NOT_ENROLLED
 
     user_enrolled = enrolment.check_user_status(user)
     if user_enrolled is not True:
-        return JSONResponse(
-            status_code=status.HTTP_200_OK,
-            content=google_chat.messages["user_not_registered"],
-        )
+        return google_chat.responses.USER_NOT_ENROLLED
 
     match event["type"]:
         case "ADDED_TO_SPACE":
             match event["space"]["type"]:
                 case "DM":
-                    return JSONResponse(
-                        content=google_chat.messages["introduce_caddy_DM"]
-                    )
+                    return google_chat.responses.INTRODUCE_CADDY_IN_DM
                 case "ROOM":
-                    return JSONResponse(
-                        content={
-                            "text": google_chat.messages[
-                                "introduce_caddy_SPACE"
-                            ].format(space=event["space"]["displayName"])
-                        }
+                    return google_chat.responses.introduce_caddy_in_space(
+                        space_name=event["space"]["displayName"]
                     )
         case "MESSAGE":
             caddy_message = google_chat.format_message(event)
             if caddy_message == "PII Detected":
-                return Response(status_code=status.HTTP_204_NO_CONTENT)
+                return google_chat.responses.NO_CONTENT
             background_tasks.add_task(
                 caddy.handle_message,
                 caddy_message=caddy_message,
                 chat_client=google_chat,
             )
-            return Response(status_code=status.HTTP_202_ACCEPTED)
+            return google_chat.responses.ACCEPTED
         case "CARD_CLICKED":
             match event["action"]["actionMethodName"]:
-                case "similarQuestionDialog":
-                    similar_dialog = google_chat.get_similar_question_dialog(event)
-                    return JSONResponse(
-                        status_code=status.HTTP_200_OK, content=similar_dialog
-                    )
                 case "Proceed":
-                    event = json.loads(event["common"]["parameters"]["message_event"])
-                    event["proceed"] = True
-                    caddy_message = google_chat.format_message(event)
+                    caddy_message = google_chat.handle_proceed_query(event)
                     background_tasks.add_task(
                         caddy.handle_message,
                         caddy_message=caddy_message,
                         chat_client=google_chat,
                     )
-                    return Response(status_code=status.HTTP_204_NO_CONTENT)
+                    return google_chat.responses.NO_CONTENT
                 case "edit_query_dialog":
-                    edit_query_dialog = google_chat.get_edit_query_dialog(event)
-                    return JSONResponse(
-                        status_code=status.HTTP_200_OK, content=edit_query_dialog
-                    )
+                    return google_chat.get_edit_query_dialog(event)
                 case "receiveEditedQuery":
-                    edited_message = event["common"]["formInputs"]["editedQuery"][
-                        "stringInputs"
-                    ]["value"][0]
-                    event = json.loads(event["common"]["parameters"]["message_event"])
-                    event["message"]["text"] = edited_message
-                    caddy_message = google_chat.format_message(event)
+                    caddy_message = google_chat.handle_edited_query(event)
                     background_tasks.add_task(
                         caddy.handle_message,
                         caddy_message=caddy_message,
                         chat_client=google_chat,
                     )
-                    return JSONResponse(
-                        status_code=status.HTTP_200_OK,
-                        content=google_chat.success_dialog(),
-                    )
+                    return google_chat.responses.SUCCESS_DIALOG
                 case "survey_response":
-                    google_chat.handle_survey_response(event=event)
-                    return Response(status_code=status.HTTP_204_NO_CONTENT)
+                    google_chat.handle_survey_response(event)
+                    return google_chat.responses.ACCEPTED
                 case "call_complete":
-                    survey_card = json.loads(event["common"]["parameters"]["survey"])
-                    thread_id = event["message"]["thread"]["name"].split("/")[3]
-                    user_space = event["space"]["name"].split("/")[1]
-                    caddy.mark_call_complete(thread_id)
-                    google_chat.run_survey(survey_card, user_space, thread_id)
-                    google_chat.update_survey_card_in_adviser_space(
-                        space_id=user_space,
-                        message_id=event["message"]["name"].split("/")[3],
-                        card={
-                            "cardsV2": [
-                                {
-                                    "cardId": "callCompleteConfirmed",
-                                    "card": {
-                                        "sections": [
-                                            {
-                                                "widgets": [
-                                                    {
-                                                        "textParagraph": {
-                                                            "text": '<font color="#00ba01"><b>📞 Call complete, please complete the post call survey below</b></font>'
-                                                        }
-                                                    },
-                                                ],
-                                            },
-                                        ],
-                                    },
-                                },
-                            ],
-                        },
-                    )
-                    return Response(status_code=status.HTTP_204_NO_CONTENT)
+                    google_chat.finalise_caddy_call(event)
+                    return google_chat.responses.ACCEPTED
 
 
 @app.post("/google-chat/supervision")

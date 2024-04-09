@@ -1,4 +1,4 @@
-from caddy_core.models.core import CaddyMessageEvent
+from caddy_core.models import CaddyMessageEvent
 from caddy_core.services.anonymise import analyse
 
 

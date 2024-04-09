@@ -1,5 +1,5 @@
 from caddy_core.utils.tables import offices_table, users_table
-from caddy_core.models.core import User
+from caddy_core.models import User
 
 from datetime import datetime
 

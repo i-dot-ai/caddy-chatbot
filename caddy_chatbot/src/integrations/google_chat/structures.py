@@ -2,13 +2,18 @@ import os
 import json
 from datetime import datetime
 
-from caddy_core.models.core import CaddyMessageEvent, ApprovalEvent
+from caddy_core.models import CaddyMessageEvent, ApprovalEvent
 from caddy_core.services.anonymise import analyse
-from caddy_core.services.survey import get_survey
+from caddy_core.services.survey import get_survey, check_if_survey_required
 from caddy_core.services import enrolment
 from caddy_core.utils.tables import evaluation_table
+from caddy_core import core as caddy
 from integrations.google_chat.content import MESSAGES
+from integrations.google_chat import responses
 from integrations.google_chat.auth import get_google_creds
+
+from fastapi import status
+from fastapi.responses import JSONResponse
 
 from googleapiclient.discovery import build
 
@@ -20,6 +25,7 @@ class GoogleChat:
     def __init__(self):
         self.client = "Google Chat"
         self.messages = MESSAGES
+        self.responses = responses
         self.caddy = build(
             "chat",
             "v1",
@@ -199,8 +205,9 @@ class GoogleChat:
         event = json.loads(event["common"]["parameters"]["message_event"])
         message_string = event["message"]["text"]
         message_string = message_string.replace("@Caddy", "")
+        edit_query_dialog = self.edit_query_dialog(event, message_string)
 
-        return self.edit_query_dialog(event, message_string)
+        return JSONResponse(status_code=status.HTTP_200_OK, content=edit_query_dialog)
 
     def handle_survey_response(self, event):
         question = event["common"]["parameters"]["question"]
@@ -209,21 +216,6 @@ class GoogleChat:
         card = event["message"]["cardsV2"]
         spaceId = event["space"]["name"].split("/")[1]
         messageId = event["message"]["name"].split("/")[3]
-
-        response_received = {
-            "textParagraph": {
-                "text": '<font color="#00ba01"><b>✅ survey response received</b></font>'
-            }
-        }
-
-        for section in card[0]["card"]["sections"]:
-            if section["widgets"][0]["textParagraph"]["text"] == question:
-                del section["widgets"][1]["buttonList"]
-                section["widgets"].append(response_received)
-
-        self.update_survey_card_in_adviser_space(
-            space_id=spaceId, message_id=messageId, card={"cardsV2": card}
-        )
 
         survey_response = [{question: response}]
 
@@ -244,14 +236,20 @@ class GoogleChat:
                 ReturnValues="UPDATED_NEW",
             )
 
-    def success_dialog(self):
-        success_dialog = {
-            "action_response": {
-                "type": "DIALOG",
-                "dialog_action": {"action_status": "OK"},
+        response_received = {
+            "textParagraph": {
+                "text": '<font color="#00ba01"><b>✅ survey response received</b></font>'
             }
         }
-        return success_dialog
+
+        for section in card[0]["card"]["sections"]:
+            if section["widgets"][0]["textParagraph"]["text"] == question:
+                del section["widgets"][1]["buttonList"]
+                section["widgets"].append(response_received)
+
+        self.update_survey_card_in_adviser_space(
+            space_id=spaceId, message_id=messageId, card={"cardsV2": card}
+        )
 
     def similar_question_dialog(self, similar_question, question_answer, similarity):
         question_dialog = {
@@ -893,7 +891,13 @@ class GoogleChat:
             supervisor_message=supervisor_message,
         )
 
-        return self.success_dialog(), user_email, user_space, thread_id, rejection_event
+        return (
+            self.responses.SUCCESS_DIALOG,
+            user_email,
+            user_space,
+            thread_id,
+            rejection_event,
+        )
 
     def create_updated_supervision_card(
         self, supervision_card, approver, approved, supervisor_message
@@ -1227,7 +1231,7 @@ class GoogleChat:
 
         try:
             enrolment.register_user(user, role, supervisor_space_id)
-            return self.success_dialog()
+            return self.responses.SUCCESS_DIALOG
         except Exception as error:
             return self.failed_dialog(error)
 
@@ -1236,7 +1240,7 @@ class GoogleChat:
 
         try:
             enrolment.remove_user(user)
-            return self.success_dialog()
+            return self.responses.SUCCESS_DIALOG
         except Exception as error:
             return self.failed_dialog(error)
 
@@ -1327,3 +1331,77 @@ class GoogleChat:
             message=call_complete_card,
             thread_id=thread_id,
         )
+
+    def finalise_caddy_call(self, event) -> None:
+        """
+        Marks a call as complete and triggers post call survey upon user triggered event
+
+        Args:
+            Google Chat Event
+
+        Returns:
+            None
+        """
+        survey_card = json.loads(event["common"]["parameters"]["survey"])
+        thread_id = event["message"]["thread"]["name"].split("/")[3]
+        user_space = event["space"]["name"].split("/")[1]
+        caddy.mark_call_complete(thread_id)
+        survey_required = check_if_survey_required(event["user"]["email"])
+        if survey_required is True:
+            self.update_survey_card_in_adviser_space(
+                space_id=user_space,
+                message_id=event["message"]["name"].split("/")[3],
+                card={
+                    "cardsV2": [
+                        {
+                            "cardId": "callCompleteConfirmed",
+                            "card": {
+                                "sections": [
+                                    {
+                                        "widgets": [
+                                            {
+                                                "textParagraph": {
+                                                    "text": '<font color="#00ba01"><b>📞 Call complete, please complete the post call survey below</b></font>'
+                                                }
+                                            },
+                                        ],
+                                    },
+                                ],
+                            },
+                        },
+                    ],
+                },
+            )
+            self.run_survey(survey_card, user_space, thread_id)
+
+    def handle_edited_query(self, event) -> CaddyMessageEvent:
+        """
+        Handles a edited query event from PII detected message
+
+        Args:
+            Google Chat Event
+
+        Returns:
+            CaddyMessageEvent
+        """
+        edited_message = event["common"]["formInputs"]["editedQuery"]["stringInputs"][
+            "value"
+        ][0]
+        event = json.loads(event["common"]["parameters"]["message_event"])
+        event["message"]["text"] = edited_message
+        caddy_message = self.format_message(event)
+        return caddy_message
+
+    def handle_proceed_query(self, event) -> CaddyMessageEvent:
+        """
+        Handles a proceed overwrite event from PII detected message
+
+        Args:
+            Google Chat Event
+
+        Returns:
+            CaddyMessageEvent
+        """
+        event = json.loads(event["common"]["parameters"]["message_event"])
+        event["proceed"] = True
+        return self.format_message(event)

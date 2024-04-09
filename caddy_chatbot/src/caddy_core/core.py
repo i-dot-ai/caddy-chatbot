@@ -2,7 +2,7 @@ from datetime import datetime
 from fastapi.responses import Response
 from fastapi import status
 
-from caddy_core.models.core import (
+from caddy_core.models import (
     ProcessChatMessageEvent,
     UserMessage,
     LlmResponse,
@@ -12,9 +12,9 @@ from caddy_core.models.core import (
 
 from caddy_core.utils.core import format_chat_history
 from caddy_core.utils.tables import evaluation_table, message_table, responses_table
-from caddy_core.services.core import build_chain, run_chain
+from caddy_core.services.retrieval_chain import build_chain, run_chain
 from caddy_core.services import enrolment
-from caddy_core.services.evaluation.core import execute_optional_modules
+from caddy_core.services.evaluation import execute_optional_modules
 from boto3.dynamodb.conditions import Key
 
 import json
