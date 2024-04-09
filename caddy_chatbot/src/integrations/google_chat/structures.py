@@ -852,7 +852,7 @@ class GoogleChat:
 
         return user_email, user_space, thread_id, approval_event
 
-    def received_rejection(self, event):
+    def handle_supervisor_rejection(self, event):
         supervisor_card = {"cardsV2": event["message"]["cardsV2"]}
         user_space = event["common"]["parameters"]["conversationId"]
         approver = event["user"]["email"]
@@ -910,13 +910,9 @@ class GoogleChat:
             supervisor_message=supervisor_message,
         )
 
-        return (
-            self.responses.SUCCESS_DIALOG,
-            user_email,
-            user_space,
-            thread_id,
-            rejection_event,
-        )
+        caddy.store_approver_event(rejection_event)
+
+        self.call_complete_confirmation(user_email, user_space, thread_id)
 
     def create_updated_supervision_card(
         self, supervision_card, approver, approved, supervisor_message
@@ -969,121 +965,6 @@ class GoogleChat:
 
         return card
 
-    def get_user_to_add_details_dialog(self):
-        input_dialog = {
-            "action_response": {
-                "type": "DIALOG",
-                "dialog_action": {
-                    "dialog": {
-                        "body": {
-                            "sections": [
-                                {
-                                    "header": "Onboard a new user to Caddy",
-                                    "widgets": [
-                                        {
-                                            "textParagraph": {
-                                                "text": "To allow a new user to join Caddy within your organisation register their email below and select their permissions"
-                                            }
-                                        },
-                                        {
-                                            "textInput": {
-                                                "label": "Email",
-                                                "type": "SINGLE_LINE",
-                                                "name": "email",
-                                            }
-                                        },
-                                        {
-                                            "selectionInput": {
-                                                "type": "RADIO_BUTTON",
-                                                "label": "Role",
-                                                "name": "role",
-                                                "items": [
-                                                    {
-                                                        "text": "Adviser",
-                                                        "value": "Adviser",
-                                                        "selected": True,
-                                                    },
-                                                    {
-                                                        "text": "Supervisor",
-                                                        "value": "Supervisor",
-                                                        "selected": False,
-                                                    },
-                                                ],
-                                            }
-                                        },
-                                        {
-                                            "buttonList": {
-                                                "buttons": [
-                                                    {
-                                                        "text": "Add User",
-                                                        "onClick": {
-                                                            "action": {
-                                                                "function": "receiveDialog"
-                                                            }
-                                                        },
-                                                    }
-                                                ]
-                                            },
-                                            "horizontalAlignment": "END",
-                                        },
-                                    ],
-                                }
-                            ]
-                        }
-                    }
-                },
-            }
-        }
-        return input_dialog
-
-    def get_user_to_remove_details_dialog(self):
-        input_dialog = {
-            "action_response": {
-                "type": "DIALOG",
-                "dialog_action": {
-                    "dialog": {
-                        "body": {
-                            "sections": [
-                                {
-                                    "header": "Remove a user from Caddy",
-                                    "widgets": [
-                                        {
-                                            "textParagraph": {
-                                                "text": "Input the email of the user whos access to Caddy supervision within your organisation you would like to revoke"
-                                            }
-                                        },
-                                        {
-                                            "textInput": {
-                                                "label": "Email",
-                                                "type": "SINGLE_LINE",
-                                                "name": "email",
-                                            }
-                                        },
-                                        {
-                                            "buttonList": {
-                                                "buttons": [
-                                                    {
-                                                        "text": "Remove User",
-                                                        "onClick": {
-                                                            "action": {
-                                                                "function": "receiveDialog"
-                                                            }
-                                                        },
-                                                    }
-                                                ]
-                                            },
-                                            "horizontalAlignment": "END",
-                                        },
-                                    ],
-                                }
-                            ]
-                        }
-                    }
-                },
-            }
-        }
-        return input_dialog
-
     def user_list_dialog(self, supervision_users: str, space_display_name: str):
         list_dialog = {
             "action_response": {
@@ -1105,32 +986,6 @@ class GoogleChat:
             }
         }
         return list_dialog
-
-    def helper_dialog(self):
-        helper_dialog = {
-            "action_response": {
-                "type": "DIALOG",
-                "dialog_action": {
-                    "dialog": {
-                        "body": {
-                            "sections": [
-                                {
-                                    "header": "Helper dialog for Caddy Supervisor",
-                                    "widgets": [
-                                        {
-                                            "textParagraph": {
-                                                "text": "Adding a New User:\n\nTo add a new user under your supervision space, use the command /addUser.\nExample: /addUser\n\nRemoving User Access:\n\nIf you need to revoke access for a user, use the /removeUser command.\nExample: /removeUser\n\nListing Registered Users:\n\nTo view a list of users currently registered under your supervision, use the /listUsers command.\nThis command will display a comprehensive list, making it easy to manage and monitor user access.\nExample: /listUsers"
-                                            }
-                                        }
-                                    ],
-                                }
-                            ]
-                        }
-                    }
-                },
-            }
-        }
-        return helper_dialog
 
     def failed_dialog(self, error):
         print(f"### FAILED: {error} ###")
@@ -1217,13 +1072,6 @@ class GoogleChat:
         }
         return supervisor_response_dialog
 
-    def get_user_details(self, type: str):
-        match type:
-            case "Add":
-                return self.get_user_to_add_details_dialog()
-            case "Remove":
-                return self.get_user_to_remove_details_dialog()
-
     def get_supervisor_response(self, event):
         """
         Upon supervisor rejection returns a dialog box for supervisor response
@@ -1261,18 +1109,16 @@ class GoogleChat:
 
         try:
             enrolment.register_user(user, role, supervisor_space_id)
-            return self.responses.SUCCESS_DIALOG
         except Exception as error:
-            return self.failed_dialog(error)
+            print(f"Adding user failed: {error}")
 
     def remove_user(self, event):
         user = event["common"]["formInputs"]["email"]["stringInputs"]["value"][0]
 
         try:
             enrolment.remove_user(user)
-            return self.responses.SUCCESS_DIALOG
         except Exception as error:
-            return self.failed_dialog(error)
+            print(f"Adding user failed: {error}")
 
     def list_space_users(self, event):
         supervision_space_id = event["space"]["name"].split("/")[1]
@@ -1435,3 +1281,13 @@ class GoogleChat:
         event = json.loads(event["common"]["parameters"]["message_event"])
         event["proceed"] = True
         return self.format_message(event)
+
+    def handle_supervisor_approval(self, event):
+        (
+            user,
+            user_space,
+            thread_id,
+            approval_event,
+        ) = self.received_approval(event)
+        caddy.store_approver_event(approval_event)
+        self.call_complete_confirmation(user, user_space, thread_id)

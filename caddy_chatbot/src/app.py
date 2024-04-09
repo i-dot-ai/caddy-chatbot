@@ -115,15 +115,7 @@ async def google_chat_supervision_endpoint(
         case "CARD_CLICKED":
             match event["action"]["actionMethodName"]:
                 case "Approved":
-                    (
-                        user,
-                        user_space,
-                        thread_id,
-                        approval_event,
-                    ) = google_chat.received_approval(event)
-                    caddy.store_approver_event(approval_event)
-
-                    google_chat.call_complete_confirmation(user, user_space, thread_id)
+                    google_chat.handle_supervisor_approval(event)
                     return google_chat.responses.NO_CONTENT
                 case "rejected_dialog":
                     reject_dialog = google_chat.get_supervisor_response(event)
@@ -131,29 +123,18 @@ async def google_chat_supervision_endpoint(
                         status_code=status.HTTP_200_OK, content=reject_dialog
                     )
                 case "receiveSupervisorResponse":
-                    (
-                        confirmation_of_receipt,
-                        user,
-                        user_space,
-                        thread_id,
-                        rejection_event,
-                    ) = google_chat.received_rejection(event)
-
-                    caddy.store_approver_event(rejection_event)
-
-                    google_chat.call_complete_confirmation(user, user_space, thread_id)
-
-                    return JSONResponse(
-                        status_code=status.HTTP_200_OK, content=confirmation_of_receipt
-                    )
+                    google_chat.handle_supervisor_rejection(event)
+                    return google_chat.responses.SUCCESS_DIALOG
                 case "receiveDialog":
                     match event["message"]["annotations"][0]["slashCommand"][
                         "commandName"
                     ]:
                         case "/addUser":
-                            return JSONResponse(content=google_chat.add_user(event))
+                            google_chat.add_user(event)
+                            return google_chat.responses.SUCCESS_DIALOG
                         case "/removeUser":
-                            return JSONResponse(content=google_chat.remove_user(event))
+                            google_chat.remove_user(event)
+                            return google_chat.responses.SUCCESS_DIALOG
         case "MESSAGE":
             match event["dialogEventType"]:
                 case "REQUEST_DIALOG":
@@ -161,19 +142,15 @@ async def google_chat_supervision_endpoint(
                         "commandName"
                     ]:
                         case "/addUser":
-                            return JSONResponse(
-                                content=google_chat.get_user_details("Add")
-                            )
+                            return google_chat.responses.ADD_USER_DIALOG
                         case "/removeUser":
-                            return JSONResponse(
-                                content=google_chat.get_user_details("Remove")
-                            )
+                            return google_chat.responses.REMOVE_USER_DIALOG
+                        case "/help":
+                            return google_chat.responses.HELPER_DIALOG
                         case "/listUsers":
                             return JSONResponse(
                                 content=google_chat.list_space_users(event)
                             )
-                        case "/help":
-                            return JSONResponse(content=google_chat.helper_dialog())
 
 
 @app.post("/microsoft-teams/chat")

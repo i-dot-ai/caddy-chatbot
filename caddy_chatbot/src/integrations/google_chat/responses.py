@@ -51,3 +51,15 @@ SUCCESS_DIALOG = JSONResponse(
     status_code=status.HTTP_200_OK,
     content=content.SUCCESS_DIALOG,
 )
+
+ADD_USER_DIALOG = JSONResponse(
+    status_code=status.HTTP_200_OK, content=content.ADD_USER_DIALOG
+)
+
+REMOVE_USER_DIALOG = JSONResponse(
+    status_code=status.HTTP_200_OK, content=content.REMOVE_USER_DIALOG
+)
+
+HELPER_DIALOG = JSONResponse(
+    status_code=status.HTTP_200_OK, content=content.HELPER_DIALOG
+)
