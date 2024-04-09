@@ -7,7 +7,7 @@ from caddy_core.services.anonymise import analyse
 from caddy_core.services.survey import get_survey, check_if_survey_required
 from caddy_core.services import enrolment
 from caddy_core.utils.tables import evaluation_table
-from caddy_core import core as caddy
+from caddy_core import components as caddy
 from integrations.google_chat.content import MESSAGES
 from integrations.google_chat import responses
 from integrations.google_chat.auth import get_google_creds

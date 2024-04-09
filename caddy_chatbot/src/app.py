@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, Request, status, BackgroundTasks
 from fastapi.responses import JSONResponse
 
-from caddy_core import core as caddy
+from caddy_core import components as caddy
 from caddy_core.services import enrolment
 from integrations.google_chat.structures import GoogleChat
 

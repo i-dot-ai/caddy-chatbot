@@ -10,7 +10,6 @@ from caddy_core.models import (
     ApprovalEvent,
 )
 
-from caddy_core.utils.core import format_chat_history
 from caddy_core.utils.tables import evaluation_table, message_table, responses_table
 from caddy_core.services.retrieval_chain import build_chain, run_chain
 from caddy_core.services import enrolment
@@ -89,6 +88,24 @@ def handle_message(caddy_message, chat_client):
     )
 
     send_to_llm(caddy_query=message_query, chat_client=chat_client)
+
+
+def format_chat_history(user_messages: List) -> List:
+    """
+    Formats chat messages for LangChain
+
+    Args:
+        user_messages (list): list of user messages
+
+    Returns:
+        history (list): langchain formatted
+    """
+    history_langchain_format = []
+    for message in user_messages:
+        human = message["llmPrompt"]
+        ai = message["llmAnswer"]
+        history_langchain_format.append((human, ai))
+    return history_langchain_format
 
 
 def get_chat_history(message: UserMessage) -> List:
