@@ -11,4 +11,4 @@ RUN poetry install
 
 RUN spacy download en_core_web_sm
 
-ENTRYPOINT ["poetry", "run", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "80"]
+ENTRYPOINT ["poetry", "run", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "80", "--workers", "4"]

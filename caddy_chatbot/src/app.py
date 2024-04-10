@@ -19,7 +19,7 @@ def health():
 
 
 @app.post("/google-chat/chat")
-async def google_chat_endpoint(
+def google_chat_endpoint(
     background_tasks: BackgroundTasks, event=Depends(verify_google_chat_request)
 ) -> dict:
     """
@@ -85,7 +85,7 @@ async def google_chat_endpoint(
 
 
 @app.post("/google-chat/supervision")
-async def google_chat_supervision_endpoint(
+def google_chat_supervision_endpoint(
     event=Depends(verify_google_chat_supervision_request),
 ):
     """
