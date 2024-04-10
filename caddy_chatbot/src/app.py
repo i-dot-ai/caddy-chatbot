@@ -10,6 +10,8 @@ from integrations.google_chat.verification import (
     verify_google_chat_supervision_request,
 )
 
+from threading import Thread
+
 app = FastAPI(docs_url=None)
 
 
@@ -50,31 +52,37 @@ def google_chat_endpoint(
             caddy_message = google_chat.format_message(event)
             if caddy_message == "PII Detected":
                 return google_chat.responses.NO_CONTENT
-            background_tasks.add_task(
-                caddy.handle_message,
-                caddy_message=caddy_message,
-                chat_client=google_chat,
+            process_message_thread = Thread(
+                target=caddy.handle_message,
+                kwargs={"caddy_message": caddy_message, "chat_client": google_chat},
             )
+            process_message_thread.start()
             return google_chat.responses.ACCEPTED
         case "CARD_CLICKED":
             match event["action"]["actionMethodName"]:
                 case "Proceed":
                     caddy_message = google_chat.handle_proceed_query(event)
-                    background_tasks.add_task(
-                        caddy.handle_message,
-                        caddy_message=caddy_message,
-                        chat_client=google_chat,
+                    process_message_thread = Thread(
+                        target=caddy.handle_message,
+                        kwargs={
+                            "caddy_message": caddy_message,
+                            "chat_client": google_chat,
+                        },
                     )
+                    process_message_thread.start()
                     return google_chat.responses.NO_CONTENT
                 case "edit_query_dialog":
                     return google_chat.get_edit_query_dialog(event)
                 case "receiveEditedQuery":
                     caddy_message = google_chat.handle_edited_query(event)
-                    background_tasks.add_task(
-                        caddy.handle_message,
-                        caddy_message=caddy_message,
-                        chat_client=google_chat,
+                    process_message_thread = Thread(
+                        target=caddy.handle_message,
+                        kwargs={
+                            "caddy_message": caddy_message,
+                            "chat_client": google_chat,
+                        },
                     )
+                    process_message_thread.start()
                     return google_chat.responses.SUCCESS_DIALOG
                 case "survey_response":
                     google_chat.handle_survey_response(event)
