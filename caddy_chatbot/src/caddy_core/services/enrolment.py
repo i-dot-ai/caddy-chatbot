@@ -55,19 +55,27 @@ def register_user(user, role, supervisor_space_id):
         supervision_space_id=supervisor_space_id,
     )
 
-    users_table.put_item(
-        Item={
-            "userEmail": user.user_email,
-            "isApprover": user.is_approver,
-            "isSuperUser": False,
-            "createdAt": user.created_at.isoformat(),
-            "supervisionSpaceId": user.supervision_space_id,
-        }
-    )
+    try:
+        users_table.put_item(
+            Item={
+                "userEmail": user.user_email,
+                "isApprover": user.is_approver,
+                "isSuperUser": False,
+                "createdAt": user.created_at.isoformat(),
+                "supervisionSpaceId": user.supervision_space_id,
+            }
+        )
+        return {"status": 200, "content": "user registration completed successfully"}
+    except Exception as error:
+        return {"status": 500, "content": f"user registration failed: {error}"}
 
 
 def remove_user(user):
-    users_table.delete_item(Key={"userEmail": user})
+    try:
+        users_table.delete_item(Key={"userEmail": user})
+        return {"status": 200, "content": "user deletion completed successfully"}
+    except Exception as error:
+        return {"status": 500, "content": f"user deletion failed: {error}"}
 
 
 def list_users(supervision_space_id):

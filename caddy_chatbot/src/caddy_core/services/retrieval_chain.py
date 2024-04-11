@@ -98,7 +98,7 @@ def build_chain():
     )
 
     advisernet_retriever = vectorstore.as_retriever(
-        k="3",
+        k="5",
         strategy=ElasticsearchStore.ApproxRetrievalStrategy(hybrid=True),
         search_kwargs={
             "filter": {"match": {"metadata.domain_description": "AdvisorNet"}}
@@ -106,13 +106,13 @@ def build_chain():
     )
 
     gov_retriever = vectorstore.as_retriever(
-        k="3",
+        k="5",
         strategy=ElasticsearchStore.ApproxRetrievalStrategy(hybrid=True),
         search_kwargs={"filter": {"match": {"metadata.domain_description": "GOV.UK"}}},
     )
 
     ca_retriever = vectorstore.as_retriever(
-        k="3",
+        k="5",
         strategy=ElasticsearchStore.ApproxRetrievalStrategy(hybrid=True),
         search_kwargs={
             "filter": {"match": {"metadata.domain_description": "Citizens Advice"}}
@@ -126,7 +126,7 @@ def build_chain():
     filter_ordered_by_retriever = EmbeddingsClusteringFilter(
         embeddings=embeddings,
         num_clusters=3,
-        num_closest=1,
+        num_closest=2,
         sorted=True,
         remove_duplicates=True,
     )
