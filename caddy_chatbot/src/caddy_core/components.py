@@ -2,6 +2,10 @@ from datetime import datetime
 from fastapi.responses import Response
 from fastapi import status
 
+from langchain.prompts import PromptTemplate
+from caddy_core.utils.prompts.default_template import CADDY_PROMPT_TEMPLATE
+from caddy_core.utils.prompts.prompt import retrieve_route_specific_augmentation
+
 from caddy_core.models import (
     ProcessChatMessageEvent,
     UserMessage,
@@ -231,7 +235,17 @@ def store_evaluation_module(
 
 
 def query_llm(message_query: UserMessage, chat_history: List[Any]):
-    chain, ai_prompt_timestamp = build_chain()
+    route_specific_augmentation = retrieve_route_specific_augmentation(
+        query=message_query.message
+    )
+
+    CADDY_PROMPT = PromptTemplate(
+        template=CADDY_PROMPT_TEMPLATE,
+        input_variables=["context", "question"],
+        partial_variables={"route_specific_augmentation": route_specific_augmentation},
+    )
+
+    chain, ai_prompt_timestamp = build_chain(CADDY_PROMPT)
 
     ai_response, ai_response_timestamp = run_chain(
         chain, message_query.message, chat_history
