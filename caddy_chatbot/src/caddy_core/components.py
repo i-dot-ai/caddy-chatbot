@@ -94,6 +94,15 @@ def handle_message(caddy_message, chat_client):
     send_to_llm(caddy_query=message_query, chat_client=chat_client)
 
 
+def remove_role_played_responses(response: str) -> str:
+    adviser_index = response.find("Adviser: ")
+
+    if adviser_index != -1:
+        response = response[:adviser_index]
+
+    return response
+
+
 def format_chat_history(user_messages: List) -> List:
     """
     Formats chat messages for LangChain
@@ -261,6 +270,8 @@ def query_llm(message_query: UserMessage, chat_history: List[Any]):
         llm_prompt_timestamp=ai_prompt_timestamp,
         llm_response_timestamp=ai_response_timestamp,
     )
+
+    llm_response.llm_answer = remove_role_played_responses(llm_response.llm_answer)
 
     return llm_response, source_documents
 
