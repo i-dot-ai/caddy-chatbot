@@ -95,12 +95,21 @@ def handle_message(caddy_message, chat_client):
 
 
 def remove_role_played_responses(response: str) -> str:
+    """
+    This function checks for and cuts off the adviser output at the end of some LLM responses
+
+    Args:
+        response (str): LLM response string
+
+    Returns:
+        response (str): cleaner version of the LLM response
+    """
     adviser_index = response.find("Adviser: ")
 
     if adviser_index != -1:
         response = response[:adviser_index]
 
-    return response
+    return response.strip()
 
 
 def format_chat_history(user_messages: List) -> List:
