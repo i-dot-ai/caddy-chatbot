@@ -3,7 +3,7 @@ name: FastAPI Dev Deployment
 on:
   push:
     branches:
-      - enhance/migrateFastAPI
+      - feature/augmentingPrompt
       - develop
 
 jobs:
