@@ -11,11 +11,11 @@ If your mum gets a severe disability addition/premium in Pension Credit or Housi
 this will stop if you are paid Carers Allowance.
 
 If you get the daily living component of PIP, the DWP might look again at your PIP award
-if the activities you are able to carry out as a carer for your mum suggest that you don’t
-need help with your own daily living activities. Being a carer and qualifying for PIP aren’t
+if the activities you are able to carry out as a carer for your mum suggest that you dont
+need help with your own daily living activities. Being a carer and qualifying for PIP arent
 necessarily incompatible.  It will depend on the reasons you get PIP and the tasks you carry
 out for your mum. For example, if you have a mental health condition and need prompting to carry
-out daily living tasks, but are physically able to carry them out there wouldn’t be a contradiction
+out daily living tasks, but are physically able to carry them out there wouldnt be a contradiction
 in receiving PIP and being a carer.
 ----
 NOTE: Advisors will ask you to provide advice on a citizen's question which can often be

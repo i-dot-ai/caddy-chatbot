@@ -28,6 +28,17 @@ def check_user_status(user: str):
         return False
 
 
+def get_office_coverage(domain: str):
+    """
+    Gets areas covered for the office
+    """
+    office = offices_table.get_item(Key={"emailDomain": domain})
+    coverage = ["England"]
+    if "officeCoverage" in office["Item"]:
+        coverage = office["Item"]["officeCoverage"]
+    return coverage
+
+
 def get_designated_supervisor_space(user: str):
     """
     Gets the registered supervisor space for a user

@@ -34,21 +34,21 @@ goes up in value quickly. If you have less than £5000 the Trustee is unlikely t
 order or order for sale as there will not be anything left to pay creditors after costs, but this is
 just a guide of course. A third party could make an offer to buy your share of the property, to the
 Trustee. You should always take legal advice about this, and be certain that the third party will let you
-stay in the property You or your husband may claim to have more than 50% share in the equity, for instance
+stay in the property You or your husband may claim to have more than 50 percent share in the equity, for instance
 if you paid the entire deposit for the house and used only your funds. This is a complicated area of law
-and you should get legal advice if you want to claim more or less than 50% share. You should decide this
+and you should get legal advice if you want to claim more or less than 50 percent share. You should decide this
 before going bankrupt but any agreement must be for the right consideration
 If you later go bankrupt and the Trustee believes you have given away all or part of your equity, in order
 not to pay creditors, you might have a longer bankruptcy period. This is known as a bankruptcy restriction
 order, and can last between 2-15 years. The Trustee might also try to seek payment from the other person to
 recover the lost value, or ask a court to reverse the transaction
 The Trustee can review any sale or transfer of assets if they occurred in the 5 years before your bankruptcy
-if the person you gave away or sold to, was an ‘associate’ like a business partner or family member. There
+if the person you gave away or sold to, was an 'associate' like a business partner or family member. There
 is no time limit where the Trustee thinks you did this on purpose to avoid paying creditors
-The Trustee in bankruptcy may argue you have more than 50% in order to claim more funds for creditors,
+The Trustee in bankruptcy may argue you have more than 50 perfect in order to claim more funds for creditors,
 but ultimately only a court can decide the shares
 The Trustee may still allow you to sell your home if this will raise more funds, but you should get their
-consent. However, if you own the home jointly with someone else, you do not need the Trustee’s consent to
+consent. However, if you own the home jointly with someone else, you do not need the Trustee's consent to
 sell You should also be aware that bankruptcy will not stop certain creditors chasing you for payment. These are
 court fines, family or child maintenance arrangements, social fund loans, student loans, debt incurred
 through fraud, and damages for negligence and injury

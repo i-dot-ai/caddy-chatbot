@@ -154,7 +154,7 @@ def build_chain(CADDY_PROMPT):
 
 
 def run_chain(chain, prompt: str, history: List[Any]):
-    ai_response = chain(
+    ai_response = chain.invoke(
         {
             "query": prompt,
             "chat_history": history,

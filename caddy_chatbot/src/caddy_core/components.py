@@ -21,6 +21,7 @@ from caddy_core.services.evaluation import execute_optional_modules
 from boto3.dynamodb.conditions import Key
 
 import json
+from pytz import timezone
 
 from typing import List, Any, Dict, Tuple
 
@@ -257,10 +258,22 @@ def query_llm(message_query: UserMessage, chat_history: List[Any]):
         query=message_query.message
     )
 
+    day_date_time = datetime.now(timezone("Europe/London")).strftime(
+        "%A %d %B %Y %H:%M"
+    )
+
+    office_regions = enrolment.get_office_coverage(
+        message_query.user_email.split("@")[1]
+    )
+
     CADDY_PROMPT = PromptTemplate(
         template=CADDY_PROMPT_TEMPLATE,
         input_variables=["context", "question"],
-        partial_variables={"route_specific_augmentation": route_specific_augmentation},
+        partial_variables={
+            "route_specific_augmentation": route_specific_augmentation,
+            "day_date_time": day_date_time,
+            "office_regions": office_regions,
+        },
     )
 
     chain, ai_prompt_timestamp = build_chain(CADDY_PROMPT)
