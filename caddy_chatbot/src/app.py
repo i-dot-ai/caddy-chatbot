@@ -180,7 +180,6 @@ def microsoft_teams_supervision_endpoint(request: Request):
 @app.post("/caddy/chat")
 async def caddy_endpoint(request: Request):
     query = await request.json()
-
     query = UserMessage.model_validate(query)
 
     caddy_query, caddy_documents = caddy.query_llm(message_query=query, chat_history=[])
