@@ -1,5 +1,24 @@
-version: '3.8'
 services:
+ caddy:
+   build:
+     context: .
+     dockerfile: ./caddy_chatbot/Dockerfile
+   container_name: caddy_chatbot
+   ports:
+    - "80:80"
+   volumes:
+    - type: bind
+      source: ./pyproject.toml
+      target: /caddy_chatbot/pyproject.toml
+    - type: bind
+      source: ./caddy_chatbot/src
+      target: /caddy_chatbot
+    - ~/.aws/:/root/.aws:ro
+   networks:
+    - caddy
+   env_file:
+    - .env
+
  dynamodb-local:
    command: "-jar DynamoDBLocal.jar -sharedDb -inMemory"
    image: "amazon/dynamodb-local:latest"
@@ -14,4 +33,3 @@ services:
 
 networks:
   caddy:
-    external: true

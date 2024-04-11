@@ -3,7 +3,7 @@ name: Prod Deployment
 on:
   push:
     branches:
-      - main
+      - requiresUpdate
 jobs:
   run-tests:
     runs-on: ubuntu-latest

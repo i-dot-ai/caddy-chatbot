@@ -1,7 +1,0 @@
-FROM public.ecr.aws/lambda/python:3.11
-
-COPY . ./
-
-RUN python3.11 -m pip install -r requirements.txt --no-cache-dir
-
-CMD ["supervise.lambda_handler"]

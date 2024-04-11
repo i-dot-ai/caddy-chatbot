@@ -1,1 +1,1 @@
-caddy/llm/model/model.safetensors filter=lfs diff=lfs merge=lfs -text
+caddy_chatbot/src/model/model.safetensors filter=lfs diff=lfs merge=lfs -text
