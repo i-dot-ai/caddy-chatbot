@@ -1,4 +1,4 @@
-from langchain_community.llms import Bedrock
+from langchain_community.chat_models import BedrockChat
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import OpenSearchVectorSearch
 from langchain_community.document_transformers import EmbeddingsClusteringFilter
@@ -134,7 +134,7 @@ def build_chain(CADDY_PROMPT):
         base_compressor=pipeline, base_retriever=lotr
     )
 
-    llm = Bedrock(
+    llm = BedrockChat(
         model_id=os.environ.get("LLM"),
         region_name="eu-west-3",
         model_kwargs={"temperature": 0.2, "max_tokens_to_sample": 750},
