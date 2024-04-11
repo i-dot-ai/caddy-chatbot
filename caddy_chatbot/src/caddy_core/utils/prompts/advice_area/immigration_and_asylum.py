@@ -17,7 +17,6 @@ app using an Android phone, or an iPhone 7 or above. Automatic checks of HMRC an
 confirm your residence. If not you will need to upload other documents.  There is no fee for the
 application.
 
-
 EU Settled status entitles you to stay in the UK indefinitely, and you can be absent for up to 5
 years without losing it. You will be entitled to claim most benefits on the same basis as a British
 citizen and without having to prove you have an EU right to reside. Youll usually be able to apply for

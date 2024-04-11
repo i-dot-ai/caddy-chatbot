@@ -26,7 +26,7 @@ income payment arrangement or order, to repay bankruptcy debts. If you do get a 
 Trustee has 3 years to decide what to do with the equity in your home. They usually won't sell it for at
 least 1 year after you go bankrupt. You can try to delay this sale but might need to go to court to do so,
 and the court will only usually delay the sale further if you have exceptional circumstances. You and your
-husband probably have a 50/50% share of the equity, known as 'beneficial interest.' Therefore, your share
+husband probably have a 50/50 share of the equity, known as 'beneficial interest.' Therefore, your share
 of the equity is probably £5000. The Trustee is likely to value your home after 2 years and 3 months to
 see if there is more equity If you have more than £5000 equity as your share at that point, the Trustee
 may apply for a charging order or an order to sell your home. This might happen much sooner if your home

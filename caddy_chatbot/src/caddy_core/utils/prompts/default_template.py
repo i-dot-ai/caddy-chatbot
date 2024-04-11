@@ -53,6 +53,6 @@ need to claim this within 6 weeks of receiving the service charge demand.
 ----
 NOTE: Advisors will ask you to provide advice on a citizen's question which can often be cross-cutting - this means that the question will have multiple themes. \
 It's important to understand that an issue related to a disabled person falling behind on their energy bills relates to \
-energy, debt, benefits as well as disability-based discrimination. You must think step-by-step about the question to identify \
+energy, debt, benefits as well as disability-based discrimination. You must think step-by-step about the question to indetify \
 the these present in the query and formulate your response to the advisor accordingly
 """

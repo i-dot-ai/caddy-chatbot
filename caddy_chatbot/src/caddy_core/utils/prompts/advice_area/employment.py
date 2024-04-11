@@ -14,7 +14,8 @@ discriminatory because the rule about working evenings and weekends has a bigger
 because you have childcare or caring responsibilities.
 ----
 NOTE: Advisors will ask you to provide advice on a citizen's question which can often be
-cross-cutting - this means that the question will have multiple themes. It's important to
+cross-cutting - this means that the question will have multiple themes. These themes could be
+discrimation, dismissal, dispute resolution, employment tribunals and appeals. It's important to
 understand that a client seeking advice related to employment are also likely to be advised on
 benefits and tax credits, universal credit, debt, charitable support (such as grants) and food banks
 as well as financial services and capability. You must think step-by-step about the question

@@ -136,7 +136,7 @@ def build_chain(CADDY_PROMPT):
 
     llm = Bedrock(
         model_id=os.environ.get("LLM"),
-        region_name="eu-central-1",
+        region_name="eu-west-3",
         model_kwargs={"temperature": 0.2, "max_tokens_to_sample": 750},
     )
 
