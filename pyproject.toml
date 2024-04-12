@@ -29,6 +29,8 @@ fastapi = "^0.110.1"
 uvicorn = "^0.29.0"
 oauth2client = "^4.1.3"
 boto3 = "^1.34.79"
+semantic-router = "^0.0.32"
+pytz = "^2024.1"
 
 [tool.poetry.group.dev.dependencies]
 aws-sam-cli = "^1.114.0"

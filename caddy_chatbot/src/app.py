@@ -3,12 +3,14 @@ from fastapi.responses import JSONResponse
 
 from caddy_core import components as caddy
 from caddy_core.services import enrolment
-from integrations.google_chat.structures import GoogleChat
+from caddy_core.models import UserMessage
 
+from integrations.google_chat.structures import GoogleChat
 from integrations.google_chat.verification import (
     verify_google_chat_request,
     verify_google_chat_supervision_request,
 )
+
 
 from threading import Thread
 
@@ -176,10 +178,15 @@ def microsoft_teams_supervision_endpoint(request: Request):
 
 
 @app.post("/caddy/chat")
-def caddy_endpoint(request: Request):
-    return JSONResponse(
-        status_code=status.HTTP_200_OK, content={"text": "Request received"}
-    )
+async def caddy_endpoint(request: Request):
+    query = await request.json()
+    query = UserMessage.model_validate(query)
+
+    caddy_query, caddy_documents = caddy.query_llm(message_query=query, chat_history=[])
+
+    caddy_query = {"caddy_response": caddy_query.llm_answer}
+
+    return JSONResponse(status_code=status.HTTP_200_OK, content=caddy_query)
 
 
 @app.post("/caddy/supervision")

@@ -1,4 +1,4 @@
-from langchain_community.llms import Bedrock
+from langchain_community.chat_models import BedrockChat
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import OpenSearchVectorSearch
 from langchain_community.document_transformers import EmbeddingsClusteringFilter
@@ -18,8 +18,6 @@ import re
 import os
 from typing import List, Any
 from datetime import datetime
-
-from caddy_core.utils.prompt import CORE_PROMPT
 
 opensearch_https = os.environ.get("OPENSEARCH_HTTPS")
 embeddings = HuggingFaceEmbeddings(model_name="model")
@@ -84,7 +82,7 @@ def find_most_recent_caddy_vector_index():
     return most_recent_index
 
 
-def build_chain():
+def build_chain(CADDY_PROMPT):
     opensearch_index = find_most_recent_caddy_vector_index()
 
     vectorstore = OpenSearchVectorSearch(
@@ -136,10 +134,10 @@ def build_chain():
         base_compressor=pipeline, base_retriever=lotr
     )
 
-    llm = Bedrock(
+    llm = BedrockChat(
         model_id=os.environ.get("LLM"),
-        region_name="eu-central-1",
-        model_kwargs={"temperature": 0.2, "max_tokens_to_sample": 500},
+        region_name="eu-west-3",
+        model_kwargs={"temperature": 0.2, "max_tokens": 750},
     )
 
     chain = RetrievalQA.from_chain_type(
@@ -147,7 +145,7 @@ def build_chain():
         retriever=compression_retriever,
         return_source_documents=True,
         chain_type_kwargs={
-            "prompt": CORE_PROMPT,
+            "prompt": CADDY_PROMPT,
         },
     )
 
@@ -156,7 +154,13 @@ def build_chain():
 
 
 def run_chain(chain, prompt: str, history: List[Any]):
-    ai_response = chain({"query": prompt, "chat_history": history})
+    ai_response = chain.invoke(
+        {
+            "query": prompt,
+            "chat_history": history,
+        }
+    )
+
     ai_response_timestamp = datetime.now()
 
     return ai_response, ai_response_timestamp

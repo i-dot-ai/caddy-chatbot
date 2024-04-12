@@ -1265,6 +1265,7 @@ class GoogleChat:
         ][0]
         event = json.loads(event["common"]["parameters"]["message_event"])
         event["message"]["text"] = edited_message
+        event["proceed"] = True
         caddy_message = self.format_message(event)
         return caddy_message
 
