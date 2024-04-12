@@ -32,8 +32,8 @@ from typing import List, Any, Dict, Tuple
 
 
 def handle_message(caddy_message, chat_client):
-    user_active_call, call_modules, module_values, survey_complete = (
-        check_existing_call(caddy_message.thread_id)
+    user_active_call, module_values, survey_complete = check_existing_call(
+        caddy_message
     )
 
     if survey_complete is True:
@@ -44,27 +44,9 @@ def handle_message(caddy_message, chat_client):
         )
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-    if call_modules is False:
-        (
-            modules_to_use,
-            module_outputs_json,
-            continue_conversation,
-            control_group_message,
-        ) = execute_optional_modules(
-            caddy_message, execution_time="before_message_processed"
-        )
-        store_evaluation_module(
-            thread_id=caddy_message.thread_id,
-            user_arguments=modules_to_use[0],
-            argument_output=module_outputs_json,
-            continue_conversation=continue_conversation,
-            control_group_message=control_group_message,
-        )
-    elif call_modules is True:
-        modules_to_use = module_values["modulesUsed"]
-        module_outputs_json = module_values["moduleOutputs"]
-        continue_conversation = module_values["continueConversation"]
-        control_group_message = module_values["controlGroupMessage"]
+    module_outputs_json = module_values["moduleOutputs"]
+    continue_conversation = module_values["continueConversation"]
+    control_group_message = module_values["controlGroupMessage"]
 
     message_query = format_chat_message(caddy_message)
 
@@ -74,13 +56,14 @@ def handle_message(caddy_message, chat_client):
         chat_client.update_message_in_adviser_space(
             message_query.conversation_id,
             message_query.message_id,
-            {"text": f"{control_group_message}, please try again on your next call"},
+            {"text": f"{control_group_message}"},
         )
         chat_client.call_complete_confirmation(
             user=message_query.user_email,
             user_space=message_query.conversation_id,
             thread_id=message_query.thread_id,
         )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     if continue_conversation is False:
         chat_client.update_message_in_adviser_space(
@@ -88,13 +71,11 @@ def handle_message(caddy_message, chat_client):
             message_query.message_id,
             {"text": control_group_message},
         )
-        if survey_complete is False:
-            chat_client.run_new_survey(
-                message_query.user_email,
-                message_query.thread_id,
-                message_query.conversation_id,
-            )
-            return Response(status_code=status.HTTP_204_NO_CONTENT)
+        chat_client.call_complete_confirmation(
+            user=message_query.user_email,
+            user_space=message_query.conversation_id,
+            thread_id=message_query.thread_id,
+        )
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     module_outputs_json = json.loads(module_outputs_json)
@@ -164,7 +145,7 @@ def get_chat_history(message: UserMessage) -> List:
     return history
 
 
-def mark_call_complete(thread_id: str) -> None:
+def mark_call_complete(user: str, thread_id: str) -> None:
     """
     Mark the call as complete in the evaluation table
 
@@ -178,6 +159,11 @@ def mark_call_complete(thread_id: str) -> None:
         Key={"threadId": thread_id},
         UpdateExpression="set callComplete = :cc",
         ExpressionAttributeValues={":cc": True},
+    )
+    users_table.update_item(
+        Key={"userEmail": user},
+        UpdateExpression="set activeCall = :ac",
+        ExpressionAttributeValues={":ac": False},
     )
 
 
@@ -245,18 +231,15 @@ def store_user_thanked_timestamp(ai_answer: LlmResponse):
     )
 
 
-def store_evaluation_module(
-    thread_id,
-    user_arguments,
-    argument_output,
-    continue_conversation,
-    control_group_message,
-):
+def store_evaluation_module(user, thread_id, module_values):
+    user_arguments = module_values["modulesUsed"][0]
+    argument_output = module_values["moduleOutputs"]
+    continue_conversation = module_values["continueConversation"]
+    control_group_message = module_values["controlGroupMessage"]
     # Handles DynamoDB TypeError: Float types are not supported.
     user_arguments["module_arguments"]["split"] = str(
         user_arguments["module_arguments"]["split"]
     )
-
     evaluation_table.put_item(
         Item={
             "threadId": thread_id,
@@ -266,6 +249,17 @@ def store_evaluation_module(
             "controlGroupMessage": control_group_message,
             "callComplete": False,
         }
+    )
+    users_table.update_item(
+        Key={"userEmail": user},
+        UpdateExpression="set activeCall = :ac, modulesUsed = :mu, moduleOutputs = :mo, continueConversation = :cc, controlGroupMessage = :cg",
+        ExpressionAttributeValues={
+            ":ac": True,
+            ":mu": user_arguments,
+            ":mo": argument_output,
+            ":cc": continue_conversation,
+            ":cg": control_group_message,
+        },
     )
 
 
@@ -331,9 +325,9 @@ def format_supervision_event(message_query: UserMessage, llm_response: LlmRespon
     return supervision_event
 
 
-def check_existing_call(user: str, threadId: str) -> Tuple[bool, Dict[str, Any], bool]:
+def check_existing_call(caddy_message) -> Tuple[bool, Dict[str, Any], bool]:
     """
-    Check if the user is in a call and whether call has already received evaluation modules
+    Check if the user is in a call and whether call has already received evaluation modules, if not it creates them
 
     Args:
         user (str): The user
@@ -342,22 +336,19 @@ def check_existing_call(user: str, threadId: str) -> Tuple[bool, Dict[str, Any],
     Returns:
         Tuple[bool, Dict[str, Any], bool]: A tuple containing four values:
             - True if the user is on an existing call, False if it is a new call
-            - True if the call has already received evaluation modules, False otherwise
             - A dictionary containing the values of user_arguments, argument_output, continue_conversation, and control_group_message
             - True if the survey is complete, False otherwise
     """
     user_active_call = False
-    call_modules = False
     survey_complete = False
     module_values = {}
-    user_response = users_table.get_item(Key={"userEmail": user})
+    user_response = users_table.get_item(Key={"userEmail": caddy_message.user})
     if "Item" in user_response and user_response["Item"]["activeCall"] is True:
         user_active_call = True
         response = evaluation_table.query(
-            KeyConditionExpression=Key("threadId").eq(threadId),
+            KeyConditionExpression=Key("threadId").eq(caddy_message.thread_id),
         )
         if response["Items"]:
-            call_modules = True
             module_values = {
                 "modulesUsed": response["Items"][0]["modulesUsed"],
                 "moduleOutputs": response["Items"][0]["moduleOutputs"],
@@ -366,9 +357,33 @@ def check_existing_call(user: str, threadId: str) -> Tuple[bool, Dict[str, Any],
             }
             if "surveyResponse" in response["Items"][0]:
                 survey_complete = True
-            return user_active_call, call_modules, module_values, survey_complete
-        return user_active_call, call_modules, module_values, survey_complete
-    return user_active_call, call_modules, module_values, survey_complete
+            return user_active_call, module_values, survey_complete
+        user_active_response = users_table.get_item(
+            Key={"userEmail": caddy_message.user}
+        )
+        if "Item" in user_active_response:
+            module_values = {
+                "modulesUsed": user_active_response["Item"]["modulesUsed"],
+                "moduleOutputs": user_active_response["Item"]["moduleOutputs"],
+                "continueConversation": user_active_response["Item"][
+                    "continueConversation"
+                ],
+                "controlGroupMessage": user_active_response["Item"][
+                    "controlGroupMessage"
+                ],
+            }
+            survey_complete = False
+        return user_active_call, module_values, survey_complete
+
+    module_values = execute_optional_modules(
+        caddy_message, execution_time="before_message_processed"
+    )
+    store_evaluation_module(
+        user=caddy_message.user,
+        thread_id=caddy_message.thread_id,
+        module_values=module_values,
+    )
+    return user_active_call, module_values, survey_complete
 
 
 def send_to_llm(caddy_query: UserMessage, chat_client):

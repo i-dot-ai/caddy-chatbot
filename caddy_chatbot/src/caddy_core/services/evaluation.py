@@ -63,12 +63,14 @@ def execute_optional_modules(event, execution_time):
     # this will be received from API
     module_outputs_json = json.dumps(module_outputs)
 
-    return (
-        modules_to_use,
-        module_outputs_json,
-        continue_conversation,
-        control_group_message,
-    )
+    module_values = {
+        "modulesUsed": modules_to_use,
+        "moduleOutputs": module_outputs_json,
+        "continueConversation": continue_conversation,
+        "controlGroupMessage": control_group_message,
+    }
+
+    return module_values
 
 
 def add_workspace_variables_to_table(email_domain: str, workspace_vars: dict):

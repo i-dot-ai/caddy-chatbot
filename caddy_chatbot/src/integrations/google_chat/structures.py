@@ -1221,8 +1221,9 @@ class GoogleChat:
         survey_card = json.loads(event["common"]["parameters"]["survey"])
         thread_id = event["message"]["thread"]["name"].split("/")[3]
         user_space = event["space"]["name"].split("/")[1]
-        caddy.mark_call_complete(thread_id)
-        survey_required = check_if_survey_required(event["user"]["email"])
+        user = event["user"]["email"]
+        caddy.mark_call_complete(user=user, thread_id=thread_id)
+        survey_required = check_if_survey_required(user)
         if survey_required is True:
             self.update_survey_card_in_adviser_space(
                 space_id=user_space,

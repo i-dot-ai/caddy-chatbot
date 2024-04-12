@@ -364,6 +364,7 @@ Resources:
                   - dynamodb:GetItem
                   - dynamodb:DeleteItem
                   - dynamodb:Scan
+                  - dynamodb:UpdateItem
                 Resource: !GetAtt UsersTable.Arn
               - Effect: Allow
                 Action:

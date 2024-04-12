@@ -60,6 +60,7 @@ def register_user(user, role, supervisor_space_id):
 
     user = User(
         user_email=user,
+        activeCall=False,
         is_approver=isApprover,
         is_super_user=False,
         created_at=datetime.now(),
