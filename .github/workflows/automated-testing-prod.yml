@@ -3,7 +3,7 @@ name: Prod Tests
 on:
   pull_request:
     branches:
-      - main
+      - requiresUpdate
 
 jobs:
   run-tests:

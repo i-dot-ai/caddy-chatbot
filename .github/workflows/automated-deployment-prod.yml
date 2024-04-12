@@ -3,43 +3,10 @@ name: Prod Deployment
 on:
   push:
     branches:
-      - requiresUpdate
-jobs:
-  run-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-        with:
-          lfs: true
-      - name: Checkout LFS objects
-        run: git lfs checkout
-      - name: Initalise AWS
-        uses: aws-actions/setup-sam@v2
-        with:
-          use-installer: true
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: eu-west-2
-      - name: Build Lambda
-        run: sam build -t template.yaml --use-container
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install test dependencies
-        run: pip install pytest boto3 botocore
-      - name: Start lambda endpoint and run tests
-        run: |
-          sam local start-lambda --parameter-overrides ParameterKey=MessageTableName,ParameterValue=${{ vars.MESSAGES_TABLE_NAME_PROD }} ParameterKey=ResponsesTableName,ParameterValue=${{ vars.RESPONSES_TABLE_NAME_PROD }} ParameterKey=UserTableName,ParameterValue=${{ vars.USERS_TABLE_NAME_PROD }} ParameterKey=OfficesTableName,ParameterValue=${{ vars.OFFICES_TABLE_NAME_PROD }} ParameterKey=EvaluationTableName,ParameterValue=${{ vars.EVALUATION_TABLE_NAME_PROD }} 2> /dev/null &
-          sleep 10
-          pytest -v
-          pkill -f "sam local start-lambda"
+      - main
 
+jobs:
   build-deploy:
-    needs: run-tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -48,13 +15,18 @@ jobs:
           lfs: true
       - name: Checkout LFS objects
         run: git lfs checkout
-      - uses: aws-actions/setup-sam@v2
-        with:
-          use-installer: true
-      - uses: aws-actions/configure-aws-credentials@v4
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: eu-west-2
-      - run: sam build -t template.yaml --use-container
-      - run: sam deploy --no-confirm-changeset --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND CAPABILITY_NAMED_IAM --no-fail-on-empty-changeset --parameter-overrides ParameterKey=MessageTableName,ParameterValue=${{ vars.MESSAGES_TABLE_NAME_PROD }} ParameterKey=ResponsesTableName,ParameterValue=${{ vars.RESPONSES_TABLE_NAME_PROD }} ParameterKey=EMBEDDING_MODEL,ParameterValue=model ParameterKey=UserTableName,ParameterValue=${{ vars.USERS_TABLE_NAME_PROD }} ParameterKey=OfficesTableName,ParameterValue=${{ vars.OFFICES_TABLE_NAME_PROD }} ParameterKey=EvaluationTableName,ParameterValue=${{ vars.EVALUATION_TABLE_NAME_PROD }} ParameterKey=OpensearchUrl,ParameterValue=${{ secrets.OPENSEARCH_URL }} ParameterKey=CaddyServiceAccountId,ParameterValue=${{ vars.CADDY_SERVICE_ACCOUNT_ID_PROD }} ParameterKey=CaddySupervisorServiceAccountId,ParameterValue=${{ vars.CADDY_SUPERVISOR_SERVICE_ACCOUNT_ID_PROD }} ParameterKey=StageName,ParameterValue=prod --image-repositories ConversationsFunction=${{ secrets.CADDY_ECR_PROD }} --image-repositories LlmFunction=${{ secrets.CADDY_ECR_PROD }} --image-repositories SuperviseFunction=${{ secrets.CADDY_ECR_PROD }} --config-env prod
+      - name: Build and push container image
+        run: |
+          aws ecr get-login-password | docker login --username AWS --password-stdin ${{ secrets.CADDY_ECR_ENDPOINT }}
+          docker build -f ./caddy_chatbot/Dockerfile -t ${{ secrets.CADDY_ECR_REPO_ID_PROD }}:${{ github.sha }} .
+          docker tag ${{ secrets.CADDY_ECR_REPO_ID_PROD }}:${{ github.sha }} ${{ secrets.CADDY_ECR_ENDPOINT }}/${{ secrets.CADDY_ECR_REPO_ID_PROD }}:${{ github.sha }}
+          docker push ${{ secrets.CADDY_ECR_ENDPOINT }}/${{ secrets.CADDY_ECR_REPO_ID_PROD }}:${{ github.sha }}
+      - name: Deploy infrastructure
+        run: |
+          aws cloudformation deploy --template-file infra/template.yaml --stack-name "caddy-prod" --capabilities CAPABILITY_NAMED_IAM --parameter-overrides StageName=prod  ParameterKey=MessageTableName,ParameterValue=${{ vars.MESSAGES_TABLE_NAME_PROD }} ParameterKey=ResponsesTableName,ParameterValue=${{ vars.RESPONSES_TABLE_NAME_PROD }} ParameterKey=UserTableName,ParameterValue=${{ vars.USERS_TABLE_NAME_PROD }} ParameterKey=OfficesTableName,ParameterValue=${{ vars.OFFICES_TABLE_NAME_PROD }} ParameterKey=EvaluationTableName,ParameterValue=${{ vars.EVALUATION_TABLE_NAME_PROD }} OpensearchUrl=${{ secrets.OPENSEARCH_URL }} CaddyServiceAccountSecretArn=${{ secrets.CADDY_SA_ARN_PROD }} CaddySupervisorServiceAccountSecretArn=${{ secrets.CADDY_SUPERVISOR_SA_ARN_PROD }} CaddyImage=${{ secrets.CADDY_ECR_ENDPOINT }}/${{ secrets.CADDY_ECR_REPO_ID_PROD }}:${{ github.sha }} CaddySupervisorGoogleCloudProject=${{ secrets.CADDY_SUPERVISOR_GOOGLE_CLOUD_PROJECT_PROD }} CaddyGoogleCloudProject=${{ secrets.CADDY_GOOGLE_CLOUD_PROJECT_PROD }} LLM=${{ vars.LLM }} DomainName=${{ secrets.CERT_DOMAIN }}

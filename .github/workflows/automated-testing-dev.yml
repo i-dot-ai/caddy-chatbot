@@ -3,7 +3,7 @@ name: Dev Tests
 on:
   pull_request:
     branches:
-      - develop
+      - requiresUpdate
 
 jobs:
   run-tests:
