@@ -1,8 +1,8 @@
 # --- Status Messages --- #
 
-PROCESSING = "*Status:* _*Processing*_"
+PROCESSING = "*Status:* _*Requesting Caddy to help with this query*_"
 
-GENERATING_RESPONSE = {"text": "*Status:* _*Generating response*_ "}
+GENERATING_RESPONSE = {"text": "*Status:* _*Composing answer to your query*_ "}
 
 AWAITING_APPROVAL = {"text": "*Status:* _*Awaiting approval*_"}
 
@@ -23,7 +23,7 @@ INTRODUCE_CADDY_IN_DM = {
 INTRODUCE_CADDY_IN_SPACE = "Hi, thank you for adding me to {space_name}, I'm Caddy! I'm an AI support for Citizens Advice advisers, I'm here to help give advice to support in resolving your client queries. \n\n *Just remember to type `@Caddy` at the start of your query if you would like my help.*"
 
 SURVEY_ALREADY_COMPLETED = {
-    "text": "_*Call thread has closed, please start a new call thread*_"
+    "text": "_*This thread is now closed, please start a new call thread*_"
 }
 
 PII_DETECTED = '<b><font color="#FF0000">PII DETECTED</font><b> <i>Please ensure all queries to Caddy are anonymised. \n\n Choose whether to proceed anyway or edit your original query<i>'
