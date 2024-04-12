@@ -8,6 +8,7 @@ from pydantic.types import StrictBool
 # === Data Models ===
 class User(pydantic.BaseModel):
     user_email: str
+    activeCall: StrictBool = False
     is_approver: StrictBool = False
     is_super_user: StrictBool = False
     created_at: datetime = datetime.now()

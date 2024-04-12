@@ -71,6 +71,7 @@ def register_user(user, role, supervisor_space_id):
         users_table.put_item(
             Item={
                 "userEmail": user.user_email,
+                "activeCall": False,
                 "isApprover": user.is_approver,
                 "isSuperUser": False,
                 "createdAt": user.created_at.isoformat(),
