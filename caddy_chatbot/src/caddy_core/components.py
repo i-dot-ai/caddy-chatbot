@@ -32,12 +32,11 @@ from typing import List, Any, Dict, Tuple
 
 
 def handle_message(caddy_message, chat_client):
-    user_active_call, module_values, survey_complete = check_existing_call(
-        caddy_message
-    )
+    module_values, survey_complete = check_existing_call(caddy_message)
 
     if survey_complete is True:
         chat_client.update_message_in_adviser_space(
+            message_type="text",
             space_id=caddy_message.space_id,
             message_id=caddy_message.message_id,
             message=chat_client.messages.SURVEY_ALREADY_COMPLETED,
@@ -52,24 +51,14 @@ def handle_message(caddy_message, chat_client):
 
     store_message(message_query)
 
-    if user_active_call is True and continue_conversation is False:
-        chat_client.update_message_in_adviser_space(
-            message_query.conversation_id,
-            message_query.message_id,
-            {"text": f"{control_group_message}"},
-        )
-        chat_client.call_complete_confirmation(
-            user=message_query.user_email,
-            user_space=message_query.conversation_id,
-            thread_id=message_query.thread_id,
-        )
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-
     if continue_conversation is False:
         chat_client.update_message_in_adviser_space(
-            message_query.conversation_id,
-            message_query.message_id,
-            {"text": control_group_message},
+            message_type="cardsV2",
+            space_id=message_query.conversation_id,
+            message_id=message_query.message_id,
+            message=chat_client.responses.control_group_selection(
+                control_group_message
+            ),
         )
         chat_client.call_complete_confirmation(
             user=message_query.user_email,
@@ -84,9 +73,10 @@ def handle_message(caddy_message, chat_client):
             return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     chat_client.update_message_in_adviser_space(
+        message_type="cardsV2",
         space_id=message_query.conversation_id,
         message_id=message_query.message_id,
-        message=chat_client.messages.GENERATING_RESPONSE,
+        message=chat_client.messages.COMPOSING_MESSAGE,
     )
 
     send_to_llm(caddy_query=message_query, chat_client=chat_client)
@@ -103,7 +93,10 @@ def remove_role_played_responses(response: str) -> str:
         response (str): cleaner version of the LLM response
     """
     adviser_index = response.find("Adviser: ")
+    if adviser_index != -1:
+        response = response[:adviser_index]
 
+    adviser_index = response.find("Advisor: ")
     if adviser_index != -1:
         response = response[:adviser_index]
 
@@ -325,7 +318,7 @@ def format_supervision_event(message_query: UserMessage, llm_response: LlmRespon
     return supervision_event
 
 
-def check_existing_call(caddy_message) -> Tuple[bool, Dict[str, Any], bool]:
+def check_existing_call(caddy_message) -> Tuple[Dict[str, Any], bool]:
     """
     Check if the user is in a call and whether call has already received evaluation modules, if not it creates them
 
@@ -334,17 +327,14 @@ def check_existing_call(caddy_message) -> Tuple[bool, Dict[str, Any], bool]:
         threadId (str): The threadId of the conversation
 
     Returns:
-        Tuple[bool, Dict[str, Any], bool]: A tuple containing four values:
-            - True if the user is on an existing call, False if it is a new call
+        Tuple[Dict[str, Any], bool]: A tuple containing four values:
             - A dictionary containing the values of user_arguments, argument_output, continue_conversation, and control_group_message
             - True if the survey is complete, False otherwise
     """
-    user_active_call = False
     survey_complete = False
     module_values = {}
     user_response = users_table.get_item(Key={"userEmail": caddy_message.user})
     if "Item" in user_response and user_response["Item"]["activeCall"] is True:
-        user_active_call = True
         response = evaluation_table.query(
             KeyConditionExpression=Key("threadId").eq(caddy_message.thread_id),
         )
@@ -357,7 +347,7 @@ def check_existing_call(caddy_message) -> Tuple[bool, Dict[str, Any], bool]:
             }
             if "surveyResponse" in response["Items"][0]:
                 survey_complete = True
-            return user_active_call, module_values, survey_complete
+            return module_values, survey_complete
         user_active_response = users_table.get_item(
             Key={"userEmail": caddy_message.user}
         )
@@ -373,7 +363,7 @@ def check_existing_call(caddy_message) -> Tuple[bool, Dict[str, Any], bool]:
                 ],
             }
             survey_complete = False
-        return user_active_call, module_values, survey_complete
+        return module_values, survey_complete
 
     module_values = execute_optional_modules(
         caddy_message, execution_time="before_message_processed"
@@ -383,7 +373,7 @@ def check_existing_call(caddy_message) -> Tuple[bool, Dict[str, Any], bool]:
         thread_id=caddy_message.thread_id,
         module_values=module_values,
     )
-    return user_active_call, module_values, survey_complete
+    return module_values, survey_complete
 
 
 def send_to_llm(caddy_query: UserMessage, chat_client):
@@ -401,9 +391,10 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
     supervision_event = format_supervision_event(caddy_query, llm_response)
 
     chat_client.update_message_in_adviser_space(
+        message_type="cardsV2",
         space_id=caddy_query.conversation_id,
         message_id=caddy_query.message_id,
-        message=chat_client.messages.AWAITING_APPROVAL,
+        message=chat_client.messages.AWAITING_SUPERVISOR_APPROVAL,
     )
 
     send_for_supervisor_approval(
