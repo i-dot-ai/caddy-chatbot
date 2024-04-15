@@ -1,5 +1,5 @@
-from fastapi import FastAPI, Depends, Request, status, BackgroundTasks
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, Depends, Request, status
+from fastapi.responses import JSONResponse, Response
 
 from caddy_core import components as caddy
 from caddy_core.services import enrolment
@@ -23,9 +23,7 @@ def health():
 
 
 @app.post("/google-chat/chat")
-def google_chat_endpoint(
-    background_tasks: BackgroundTasks, event=Depends(verify_google_chat_request)
-) -> dict:
+def google_chat_endpoint(event=Depends(verify_google_chat_request)) -> dict:
     """
     Handles inbound requests from Google Chat for Caddy
     """
@@ -92,6 +90,8 @@ def google_chat_endpoint(
                 case "call_complete":
                     google_chat.finalise_caddy_call(event)
                     return google_chat.responses.ACCEPTED
+        case _:
+            return Response(status_code=status.HTTP_404_NOT_FOUND)
 
 
 @app.post("/google-chat/supervision")
@@ -161,6 +161,8 @@ def google_chat_supervision_endpoint(
                             return JSONResponse(
                                 content=google_chat.list_space_users(event)
                             )
+        case _:
+            return Response(status_code=status.HTTP_404_NOT_FOUND)
 
 
 @app.post("/microsoft-teams/chat")

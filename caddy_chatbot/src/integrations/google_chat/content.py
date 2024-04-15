@@ -1,10 +1,10 @@
 # --- Status Messages --- #
 
-PROCESSING = "*Status:* _*Requesting Caddy to help with this query*_"
+PROCESSING = "<b>Requesting Caddy to help with this query</b>"
 
-GENERATING_RESPONSE = {"text": "*Status:* _*Composing answer to your query*_ "}
+GENERATING_RESPONSE = "<b>Composing answer to your query</b>"
 
-AWAITING_APPROVAL = {"text": "*Status:* _*Awaiting approval*_"}
+AWAITING_APPROVAL = "<b>Awaiting approval</b>"
 
 # --- Google Chat Messages ---
 
@@ -16,11 +16,9 @@ USER_NOT_ENROLLED = {
     "text": "Caddy is not currently registered for you. Please contact your administrator for support in onboarding to Caddy"
 }
 
-INTRODUCE_CADDY_IN_DM = {
-    "text": "Hi, I'm Caddy! I'm an AI support for Citizens Advice advisers, I'm here to help give advice to support in resolving your client queries. \n *To get started just send me a query*"
-}
+INTRODUCE_CADDY_IN_DM = "Hi, I'm Caddy! \n\n I'm an AI powered co-pilot for Citizens Advice advisers, I'm here to help give advice to support in resolving your client queries."
 
-INTRODUCE_CADDY_IN_SPACE = "Hi, thank you for adding me to {space_name}, I'm Caddy! I'm an AI support for Citizens Advice advisers, I'm here to help give advice to support in resolving your client queries. \n\n *Just remember to type `@Caddy` at the start of your query if you would like my help.*"
+INTRODUCE_CADDY_IN_SPACE = "Hi, I'm Caddy! \n\n Thank you for adding me to {space_name}. \n\n I'm an AI powered co-pilot for Citizens Advice advisers, I'm here to help give advice to support in resolving your client queries."
 
 SURVEY_ALREADY_COMPLETED = {
     "text": "_*This thread is now closed, please start a new call thread*_"
@@ -28,11 +26,249 @@ SURVEY_ALREADY_COMPLETED = {
 
 PII_DETECTED = '<b><font color="#FF0000">PII DETECTED</font><b> <i>Please ensure all queries to Caddy are anonymised. \n\n Choose whether to proceed anyway or edit your original query<i>'
 
-INTRODUCE_CADDY_SUPERVISOR_IN_DM = {
-    "text": "Hi, I'm the supervisor assistant for Caddy! Caddy is an AI support for Citizens Advice advisers. \n *To get started you will need to register the advisers into your supervision space so their messages come to you, you can do this by typing `/addUser` into the chat, other user management functionality can be seen using /help*"
-}
+INTRODUCE_CADDY_SUPERVISOR_IN_DM = "Hi, I'm the supervisor assistant for Caddy! Caddy is an AI powered co-pilot for Citizens Advice advisers. \n *To get started you will need to register the advisers into your supervision space so their messages come to you, you can do this by typing `/addUser` into the chat, other user management functionality can be seen using /help*"
 
 INTRODUCE_CADDY_SUPERVISOR_IN_SPACE = "Hi, thank you for adding me to {space_name}, I'm the supervisor assistant for Caddy! Caddy is an AI support for Citizens Advice advisers. \n\nCaddy uses information from the below sites to form answers: \nGOV UK \nCitizens Advice \nAdviserNet \n\n*To get started you will need to register the advisers into your supervision space so their messages come to you, you can do this by typing `/addUser` into the chat, other user management functionality can be seen using `/help`*"
+
+# --- Google Chat Cards --- #
+
+PROCESSING_MESSAGE = {
+    "cardsV2": [
+        {
+            "cardId": "StatusCard",
+            "card": {
+                "sections": [
+                    {
+                        "widgets": [
+                            {
+                                "decoratedText": {
+                                    "icon": {"materialIcon": {"name": "pending"}},
+                                    "topLabel": "Status",
+                                    "text": PROCESSING,
+                                },
+                            }
+                        ]
+                    }
+                ]
+            },
+        },
+    ],
+}
+
+COMPOSING_MESSAGE = {
+    "cardsV2": [
+        {
+            "cardId": "StatusCard",
+            "card": {
+                "sections": [
+                    {
+                        "widgets": [
+                            {
+                                "decoratedText": {
+                                    "icon": {"materialIcon": {"name": "notes"}},
+                                    "topLabel": "Status",
+                                    "text": GENERATING_RESPONSE,
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+        },
+    ],
+}
+
+AWAITING_SUPERVISOR_APPROVAL = {
+    "cardsV2": [
+        {
+            "cardId": "StatusCard",
+            "card": {
+                "sections": [
+                    {
+                        "widgets": [
+                            {
+                                "decoratedText": {
+                                    "icon": {
+                                        "materialIcon": {"name": "supervisor_account"}
+                                    },
+                                    "topLabel": "Status",
+                                    "text": AWAITING_APPROVAL,
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+        },
+    ],
+}
+
+CALL_COMPLETE = {
+    "cardsV2": [
+        {
+            "cardId": "callCompleteConfirmed",
+            "card": {
+                "sections": [
+                    {
+                        "widgets": [
+                            {
+                                "decoratedText": {
+                                    "icon": {"materialIcon": {"name": "support_agent"}},
+                                    "topLabel": "",
+                                    "text": '<b><font color="#00ba01">Call complete</font></b>',
+                                    "bottomLabel": "<b>Please complete the post call survey below</b>",
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+        },
+    ],
+}
+
+SURVEY_COMPLETE_WIDGET = {
+    "widgets": [
+        {
+            "decoratedText": {
+                "icon": {"materialIcon": {"name": "data_exploration"}},
+                "topLabel": "<b>Survey complete</b>",
+                "bottomLabel": "Thank you for completing your post call survey!",
+            }
+        }
+    ]
+}
+
+INTRODUCE_CADDY_DM_CARD = {
+    "cardsV2": [
+        {
+            "cardId": "IntroductionCard",
+            "card": {
+                "sections": [
+                    {
+                        "widgets": [
+                            {
+                                "columns": {
+                                    "columnItems": [
+                                        {
+                                            "horizontalSizeStyle": "FILL_AVAILABLE_SPACE",
+                                            "horizontalAlignment": "CENTER",
+                                            "verticalAlignment": "CENTER",
+                                            "widgets": [
+                                                {
+                                                    "textParagraph": {
+                                                        "text": INTRODUCE_CADDY_IN_DM
+                                                    }
+                                                },
+                                                {
+                                                    "decoratedText": {
+                                                        "icon": {
+                                                            "materialIcon": {
+                                                                "name": "priority_high"
+                                                            }
+                                                        },
+                                                        "topLabel": "Getting started",
+                                                        "text": "Just message for my help",
+                                                    }
+                                                },
+                                            ],
+                                        },
+                                        {
+                                            "widgets": [
+                                                {
+                                                    "image": {
+                                                        "imageUrl": "https://ai.gov.uk/img/caddy1.webp",
+                                                        "altText": "Caddy, an owl icon",
+                                                    }
+                                                }
+                                            ]
+                                        },
+                                    ]
+                                }
+                            },
+                        ],
+                    }
+                ]
+            },
+        }
+    ]
+}
+
+INTRODUCE_CADDY_SUPERVISOR_DM_CARD = {
+    "sections": [
+        {
+            "widgets": [
+                {
+                    "columns": {
+                        "columnItems": [
+                            {
+                                "horizontalSizeStyle": "FILL_AVAILABLE_SPACE",
+                                "horizontalAlignment": "CENTER",
+                                "verticalAlignment": "CENTER",
+                                "widgets": [
+                                    {
+                                        "textParagraph": {
+                                            "text": "Hi, I'm Caddy's supervisor companion! \n\n Caddy is an AI powered co-pilot for Citizens Advice advisers using content from the below:"
+                                        }
+                                    },
+                                    {
+                                        "decoratedText": {
+                                            "icon": {"materialIcon": {"name": "web"}},
+                                            "text": "Citizens Advice",
+                                        }
+                                    },
+                                    {
+                                        "decoratedText": {
+                                            "icon": {"materialIcon": {"name": "web"}},
+                                            "text": "Advisernet",
+                                        }
+                                    },
+                                    {
+                                        "decoratedText": {
+                                            "icon": {"materialIcon": {"name": "web"}},
+                                            "text": "GOV.UK",
+                                        }
+                                    },
+                                    {
+                                        "textParagraph": {
+                                            "text": "To get started you will need to register the advisers into your supervision space so their messages come to you."
+                                        }
+                                    },
+                                    {
+                                        "decoratedText": {
+                                            "icon": {
+                                                "materialIcon": {"name": "person_add"}
+                                            },
+                                            "topLabel": "Register an adviser",
+                                            "text": "<b>/addUser</b>",
+                                        }
+                                    },
+                                    {
+                                        "decoratedText": {
+                                            "icon": {"materialIcon": {"name": "help"}},
+                                            "topLabel": "Other commands",
+                                            "text": "<b>/help</b>",
+                                        }
+                                    },
+                                ],
+                            },
+                            {
+                                "widgets": [
+                                    {
+                                        "image": {
+                                            "imageUrl": "https://ai.gov.uk/img/caddy1.webp",
+                                            "altText": "Caddy, an owl icon",
+                                        }
+                                    }
+                                ]
+                            },
+                        ]
+                    }
+                }
+            ]
+        }
+    ]
+}
 
 # --- Google Chat Dialogs --- #
 

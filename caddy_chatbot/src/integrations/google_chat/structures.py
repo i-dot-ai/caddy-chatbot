@@ -63,8 +63,11 @@ class GoogleChat:
 
                 return "PII Detected"
 
-        thread_id, message_id = self.send_message_to_adviser_space(
-            space_id=space_id, thread_id=thread_id, message=self.messages.PROCESSING
+        thread_id, message_id = self.send_dynamic_to_adviser_space(
+            response_type="cardsV2",
+            space_id=space_id,
+            thread_id=thread_id,
+            message=self.messages.PROCESSING_MESSAGE,
         )
 
         caddy_message = CaddyMessageEvent(
@@ -181,7 +184,7 @@ class GoogleChat:
         ).execute()
 
     def update_message_in_adviser_space(
-        self, space_id: str, message_id: str, message
+        self, message_type: str, space_id: str, message_id: str, message
     ) -> None:
         """
         Updates an existing text message in an adviser space
@@ -194,11 +197,19 @@ class GoogleChat:
         Returns:
             None
         """
-        self.caddy.spaces().messages().patch(
-            name=f"spaces/{space_id}/messages/{message_id}",
-            body=message,
-            updateMask="text",
-        ).execute()
+        match message_type:
+            case "text":
+                self.caddy.spaces().messages().patch(
+                    name=f"spaces/{space_id}/messages/{message_id}",
+                    body=message,
+                    updateMask="text",
+                ).execute()
+            case "cardsV2":
+                self.caddy.spaces().messages().patch(
+                    name=f"spaces/{space_id}/messages/{message_id}",
+                    body=message,
+                    updateMask="cardsV2",
+                ).execute()
 
     def update_survey_card_in_adviser_space(
         self, space_id: str, message_id: str, card: dict
@@ -255,16 +266,14 @@ class GoogleChat:
                 ReturnValues="UPDATED_NEW",
             )
 
-        response_received = {
-            "textParagraph": {
-                "text": '<font color="#00ba01"><b>✅ survey response received</b></font>'
-            }
-        }
+        card[0]["card"]["sections"] = [
+            section
+            for section in card[0]["card"]["sections"]
+            if section["widgets"][0]["textParagraph"]["text"] != question
+        ]
 
-        for section in card[0]["card"]["sections"]:
-            if section["widgets"][0]["textParagraph"]["text"] == question:
-                del section["widgets"][1]["buttonList"]
-                section["widgets"].append(response_received)
+        if len(card[0]["card"]["sections"]) == 0:
+            card[0]["card"]["sections"].append(self.messages.SURVEY_COMPLETE_WIDGET)
 
         self.update_survey_card_in_adviser_space(
             space_id=spaceId, message_id=messageId, card={"cardsV2": card}
@@ -370,7 +379,7 @@ class GoogleChat:
 
     def send_dynamic_to_adviser_space(
         self, response_type: str, space_id: str, message: dict, thread_id: str
-    ) -> None:
+    ) -> tuple:
         """
         Sends a dynamic message to the adviser space given a type of response
 
@@ -381,27 +390,46 @@ class GoogleChat:
             thread_id (str): The thread ID of the conversation
 
         Returns:
-            None
+            thread_id, message_id
         """
         match response_type:
             case "text":
-                self.caddy.spaces().messages().create(
-                    parent=f"spaces/{space_id}",
-                    body={
-                        "text": message,
-                        "thread": {"name": f"spaces/{space_id}/threads/{thread_id}"},
-                    },
-                    messageReplyOption="REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD",
-                ).execute()
+                response = (
+                    self.caddy.spaces()
+                    .messages()
+                    .create(
+                        parent=f"spaces/{space_id}",
+                        body={
+                            "text": message,
+                            "thread": {
+                                "name": f"spaces/{space_id}/threads/{thread_id}"
+                            },
+                        },
+                        messageReplyOption="REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD",
+                    )
+                    .execute()
+                )
             case "cardsV2":
-                self.caddy.spaces().messages().create(
-                    parent=f"spaces/{space_id}",
-                    body={
-                        "cardsV2": message["cardsV2"],
-                        "thread": {"name": f"spaces/{space_id}/threads/{thread_id}"},
-                    },
-                    messageReplyOption="REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD",
-                ).execute()
+                response = (
+                    self.caddy.spaces()
+                    .messages()
+                    .create(
+                        parent=f"spaces/{space_id}",
+                        body={
+                            "cardsV2": message["cardsV2"],
+                            "thread": {
+                                "name": f"spaces/{space_id}/threads/{thread_id}"
+                            },
+                        },
+                        messageReplyOption="REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD",
+                    )
+                    .execute()
+                )
+
+        thread_id = response["thread"]["name"].split("/")[3]
+        message_id = response["name"].split("/")[3]
+
+        return thread_id, message_id
 
     def run_new_survey(self, user: str, thread_id: str, user_space: str) -> None:
         """
@@ -567,92 +595,17 @@ class GoogleChat:
         ).execute()
 
     def create_supervision_request_card(self, user, initial_query):
-        request_awaiting = {
-            "cardsV2": [
-                {
-                    "cardId": "aiResponseCard",
-                    "card": {
-                        "sections": [
-                            {
-                                "widgets": [
-                                    {
-                                        "decoratedText": {
-                                            "startIcon": {
-                                                "iconUrl": "https://storage.googleapis.com/sort_assets/adviser_icon.png",
-                                            },
-                                            "text": '<b><font color="#004f88"><i>AWAITING RESPONSE APPROVAL</i></font></b>',
-                                        },
-                                    },
-                                    {
-                                        "textParagraph": {
-                                            "text": f"<b>{user}:</b> <i>{initial_query}</i>",
-                                        }
-                                    },
-                                ],
-                            }
-                        ],
-                    },
-                },
-            ],
-        }
+        request_awaiting = self.responses.supervisor_request_pending(
+            user, initial_query
+        )
 
-        request_approved = {
-            "cardsV2": [
-                {
-                    "cardId": "aiResponseCard",
-                    "card": {
-                        "sections": [
-                            {
-                                "widgets": [
-                                    {
-                                        "decoratedText": {
-                                            "startIcon": {
-                                                "iconUrl": "https://storage.googleapis.com/sort_assets/approved.png",
-                                            },
-                                            "text": '<b><font color="#00ba01"><i>APPROVED</i></font></b>',
-                                        },
-                                    },
-                                    {
-                                        "textParagraph": {
-                                            "text": f"<b>{user}:</b> <i>{initial_query}</i>",
-                                        }
-                                    },
-                                ],
-                            }
-                        ],
-                    },
-                },
-            ],
-        }
+        request_approved = self.responses.supervisor_request_approved(
+            user, initial_query
+        )
 
-        request_rejected = {
-            "cardsV2": [
-                {
-                    "cardId": "aiResponseCard",
-                    "card": {
-                        "sections": [
-                            {
-                                "widgets": [
-                                    {
-                                        "decoratedText": {
-                                            "startIcon": {
-                                                "iconUrl": "https://storage.googleapis.com/sort_assets/rejected_icon.png",
-                                            },
-                                            "text": '<b><font color="#ec0101"><i>RESPONSE REJECTED</i></font></b>',
-                                        },
-                                    },
-                                    {
-                                        "textParagraph": {
-                                            "text": f"<b>{user}:</b> <i>{initial_query}</i>",
-                                        }
-                                    },
-                                ],
-                            }
-                        ],
-                    },
-                },
-            ],
-        }
+        request_rejected = self.responses.supervisor_request_rejected(
+            user, initial_query
+        )
 
         return request_awaiting, request_approved, request_rejected
 
@@ -778,17 +731,9 @@ class GoogleChat:
         )
 
     def create_approved_card(self, card, approver):
-        approval_json = {
-            "widgets": [
-                {
-                    "textParagraph": {
-                        "text": f'<font color="#00ba01"><b>✅ Response approved by {approver}</b></font>'
-                    }
-                },
-            ],
-        }
-
-        card["cardsV2"][0]["card"]["sections"].append(approval_json)
+        card["cardsV2"][0]["card"]["sections"].append(
+            self.responses.approval_json_widget(approver)
+        )
 
         return card
 
@@ -824,13 +769,6 @@ class GoogleChat:
             space_id=supervisor_space,
             message_id=request_message_id,
             new_message=request_card,
-        )
-
-        self.update_dynamic_message_in_adviser_space(
-            space_id=user_space,
-            message_id=user_message_id,
-            response_type="text",
-            message={"text": "*Status:* _*Completed*_"},
         )
 
         self.update_dynamic_message_in_adviser_space(
@@ -877,15 +815,10 @@ class GoogleChat:
         self.update_dynamic_message_in_adviser_space(
             space_id=user_space,
             message_id=user_message_id,
-            response_type="text",
-            message={"text": f"*Status:* _*AI response rejected by {approver}*_"},
-        )
-
-        self.send_dynamic_to_adviser_space(
-            response_type="text",
-            space_id=user_space,
-            thread_id=thread_id,
-            message=f"*{approver} says:* \n\n {supervisor_message}",
+            response_type="cardsV2",
+            message=self.responses.supervisor_rejection(
+                approver=approver, supervisor_message=supervisor_message
+            ),
         )
 
         updated_supervision_card = self.create_updated_supervision_card(
@@ -918,25 +851,11 @@ class GoogleChat:
         self, supervision_card, approver, approved, supervisor_message
     ):
         if approved:
-            approval_section = {
-                "widgets": [
-                    {
-                        "textParagraph": {
-                            "text": f'<font color="#00ba01"><b>✅ Response approved by {approver}</b></font>'
-                        }
-                    },
-                ],
-            }
+            approval_section = self.responses.approval_json_widget(approver)
         else:
-            approval_section = {
-                "widgets": [
-                    {
-                        "textParagraph": {
-                            "text": f'<font color="#ec0101"><b>❌ Response rejected by {approver}.</b></font> \n\n <font color="#004F88"><i><b>Supervisor response:</b> {supervisor_message}</i></font>'
-                        }
-                    },
-                ],
-            }
+            approval_section = self.responses.rejection_json_widget(
+                approver, supervisor_message
+            )
 
         card_for_approval_sections = deque(
             supervision_card["cardsV2"][0]["card"]["sections"]
@@ -951,15 +870,7 @@ class GoogleChat:
         return supervision_card
 
     def create_rejected_card(self, card, approver):
-        rejection_json = {
-            "widgets": [
-                {
-                    "textParagraph": {
-                        "text": f'<font color="#ec0101"><b>❌ Response rejected by {approver}.</b> Please await supervisor response.</font>'
-                    }
-                },
-            ],
-        }
+        rejection_json = self.responses.rejection_json_widget(approver)
 
         card["cardsV2"][0]["card"]["sections"].append(rejection_json)
 
@@ -1228,26 +1139,7 @@ class GoogleChat:
             self.update_survey_card_in_adviser_space(
                 space_id=user_space,
                 message_id=event["message"]["name"].split("/")[3],
-                card={
-                    "cardsV2": [
-                        {
-                            "cardId": "callCompleteConfirmed",
-                            "card": {
-                                "sections": [
-                                    {
-                                        "widgets": [
-                                            {
-                                                "textParagraph": {
-                                                    "text": '<font color="#00ba01"><b>📞 Call complete, please complete the post call survey below</b></font>'
-                                                }
-                                            },
-                                        ],
-                                    },
-                                ],
-                            },
-                        },
-                    ],
-                },
+                card=self.messages.CALL_COMPLETE,
             )
             self.run_survey(survey_card, user_space, thread_id)
 
