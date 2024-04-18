@@ -249,30 +249,28 @@ class GoogleChat:
 
         survey_response = [{question: response}]
 
-        evaluation_entry = evaluation_table.get_item(Key={"threadId": str(threadId)})
+        evaluation_table.update_item(
+            Key={"threadId": str(threadId)},
+            UpdateExpression="set surveyResponse = list_append(if_not_exists(surveyResponse, :empty_list), :surveyResponse)",
+            ExpressionAttributeValues={
+                ":surveyResponse": survey_response,
+                ":empty_list": [],
+            },
+            ReturnValues="UPDATED_NEW",
+        )
 
-        if "Item" in evaluation_entry and "surveyResponse" in evaluation_entry["Item"]:
-            evaluation_table.update_item(
-                Key={"threadId": str(threadId)},
-                UpdateExpression="set surveyResponse = list_append(surveyResponse, :surveyResponse)",
-                ExpressionAttributeValues={":surveyResponse": survey_response},
-                ReturnValues="UPDATED_NEW",
-            )
-        else:
-            evaluation_table.update_item(
-                Key={"threadId": str(threadId)},
-                UpdateExpression="set surveyResponse = :surveyResponse",
-                ExpressionAttributeValues={":surveyResponse": survey_response},
-                ReturnValues="UPDATED_NEW",
-            )
+        remaining_sections = len(card[0]["card"]["sections"])
 
-        card[0]["card"]["sections"] = [
-            section
-            for section in card[0]["card"]["sections"]
-            if section["widgets"][0]["textParagraph"]["text"] != question
-        ]
+        for i in range(remaining_sections):
+            if (
+                card[0]["card"]["sections"][i]["widgets"][1]["textParagraph"]["text"]
+                == f"<b>{question}</b>"
+            ):
+                del card[0]["card"]["sections"][i]
+                remaining_sections -= 1
+                break
 
-        if len(card[0]["card"]["sections"]) == 0:
+        if remaining_sections == 0:
             card[0]["card"]["sections"].append(self.messages.SURVEY_COMPLETE_WIDGET)
 
         self.update_survey_card_in_adviser_space(
@@ -443,11 +441,9 @@ class GoogleChat:
         Returns:
             None
         """
-        post_call_survey_questions, post_call_survey_values = get_survey(user)
+        post_call_survey_questions = get_survey(user)
 
-        survey_card = self.get_post_call_survey_card(
-            post_call_survey_questions, post_call_survey_values
-        )
+        survey_card = self.get_post_call_survey_card(post_call_survey_questions)
 
         self.send_dynamic_to_adviser_space(
             response_type="cardsV2",
@@ -457,14 +453,14 @@ class GoogleChat:
         )
 
     def get_post_call_survey_card(
-        self, post_call_survey_questions: List[str], post_call_survey_values: List[str]
+        self,
+        post_call_survey_questions: List[dict[str, List[str]]],
     ) -> dict:
         """
         Create a post call survey card with the given questions and values
 
         Args:
-            post_call_survey_questions (List[str]): The questions for the survey
-            post_call_survey_values (List[str]): The values for the survey
+            post_call_survey_questions (List[dict[str, List[str]]]): The questions and values for the survey
 
         Returns:
             dict: The survey card
@@ -480,14 +476,24 @@ class GoogleChat:
             ],
         }
 
-        for question in post_call_survey_questions:
+        i = 0
+        for question_dict in post_call_survey_questions:
+            i += 1
+            question = question_dict["question"]
+            values = question_dict["values"]
             section = {"widgets": []}
 
-            question_section = {"textParagraph": {"text": question}}
+            label_section = {
+                "decoratedText": {
+                    "topLabel": f"Question {i}",
+                }
+            }
+
+            question_section = {"textParagraph": {"text": f"<b>{question}</b>"}}
 
             button_section = {"buttonList": {"buttons": []}}
 
-            for value in post_call_survey_values:
+            for value in values:
                 button_section["buttonList"]["buttons"].append(
                     {
                         "text": value,
@@ -503,6 +509,7 @@ class GoogleChat:
                     }
                 )
 
+            section["widgets"].append(label_section)
             section["widgets"].append(question_section)
             section["widgets"].append(button_section)
 
@@ -1051,11 +1058,9 @@ class GoogleChat:
         Returns:
             dict: The survey card
         """
-        post_call_survey_questions, post_call_survey_values = get_survey(user)
+        post_call_survey_questions = get_survey(user)
 
-        survey_card = self.get_post_call_survey_card(
-            post_call_survey_questions, post_call_survey_values
-        )
+        survey_card = self.get_post_call_survey_card(post_call_survey_questions)
 
         return survey_card
 

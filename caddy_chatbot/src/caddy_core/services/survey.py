@@ -28,7 +28,7 @@ def get_survey(user: str) -> Tuple[List[str], List[str]]:
         user (str): The email of the user
 
     Returns:
-        Tuple[List[str], List[str]]: The questions for the survey and the values for the survey
+        List[dict[str, List[str]]]: A list of questions and values for the survey
     """
     user_workspace_variables = get_user_workspace_variables(user)
 
@@ -37,9 +37,8 @@ def get_survey(user: str) -> Tuple[List[str], List[str]]:
     ]
 
     post_call_survey_questions = post_call_module["questions"]
-    post_call_survey_values = post_call_module["values"]
 
-    return post_call_survey_questions, post_call_survey_values
+    return post_call_survey_questions
 
 
 def get_user_workspace_variables(user_email: str):
