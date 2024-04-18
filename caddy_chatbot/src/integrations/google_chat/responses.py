@@ -358,8 +358,12 @@ def supervisor_request_rejected(user: str, initial_query: str) -> dict:
                                     }
                                 },
                                 {
-                                    "decoratedText": {
+                                    "textParagraph": {
                                         "text": initial_query,
+                                    }
+                                },
+                                {
+                                    "decoratedText": {
                                         "bottomLabel": user,
                                     }
                                 },
@@ -399,8 +403,12 @@ def supervisor_request_approved(user: str, initial_query: str) -> dict:
                                     }
                                 },
                                 {
-                                    "decoratedText": {
+                                    "textParagraph": {
                                         "text": initial_query,
+                                    }
+                                },
+                                {
+                                    "decoratedText": {
                                         "bottomLabel": user,
                                     }
                                 },
@@ -440,8 +448,12 @@ def supervisor_request_pending(user: str, initial_query: str) -> dict:
                                     }
                                 },
                                 {
-                                    "decoratedText": {
+                                    "textParagraph": {
                                         "text": initial_query,
+                                    }
+                                },
+                                {
+                                    "decoratedText": {
                                         "bottomLabel": user,
                                     }
                                 },
