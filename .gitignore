@@ -1,0 +1,24 @@
+.env
+env.json
+.builds
+.aws-sam
+.DS_Store
+docker/
+__pychache__/
+__pycache__/
+cachedir
+.idea
+.vscode
+.venv
+.pytest_cache
+junit
+*.cache/*
+notebooks/*
+.pre-commit-trivy-cache
+caddy_chatbot/src/pyproject.toml
+# Ignore virtual environments
+**/venv/
+.ruff_cache
+_site
+/_site/
+/.quarto/

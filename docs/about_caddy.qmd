@@ -1,0 +1,89 @@
+---
+title: "Quickstart"
+format: html
+---
+
+**Introducing Caddy**
+
+Caddy is an AI-powered assistant acts as a copilot for customer service agents, empowering them to provide high-quality, actionable advice quickly and securely. When agents Caddy a question, Caddy will provide an answer based on all the content sources it's been provided and give the agent references to the information.
+
+Caddy is designed to be used in settings where customer service advisers are supervised by experienced staff who can verify Caddy's responses. Caddy's responses are sent to a supervisor to review before they are made available to the customer-facing adviser. This "human in the loop" validation system is employed to mitigate risk, ensuring advice accuracy and reliability.
+
+**Environments**
+
+Caddy is built using AWS Serverless architecture and currently integrates with Google Workspace. We plan on building a Teams version later in the year.
+
+![Caddy Workflow](assets/Caddy%20Business%20Process.png)
+
+**Installation**
+
+
+
+
+**Adding users**
+
+There are two levels of user: supervisors and advisors.
+
+Advisors can ask questions to Caddy, and will only see responses that have been approved by a supervisor (they will see a supervisor's comments if the supervisor does not approve Caddy's response).
+
+Supervisors have elevated privileges. They can: approve Caddy's responses, add users (including other supervisors) and remove users.
+
+The mechanism for adding both types of user is the same. To add a user, a user with supervisor permissions types '/addUser' in the chat bar of a supervisor space.
+
+![Add users through slash commands in the chat](assets/CaddyAddUser1.png)
+
+![Input the user's email address](assets/CaddyAddUser2.png)
+
+**Removing users**
+
+Supervisors can remove other users.
+
+![Remove users through slash commands in the chat](assets/removeuser1.png)
+![Enter the email address of the user to remove](assets/removeuser2.png)
+
+
+```{mermaid}
+
+classDiagram
+    class Messages {
+        messageId
+        message
+        conversationId
+        userEmail
+        client
+        messageRecievedTimestamp
+        messageSentTimestamp
+    }
+    class Responses {
+        responseId
+        llmResponseJson
+        llmPrompt
+        messageId
+        llmAnswer
+        userThankedTimestamp
+        llmPromptTimestamp
+        llmResponseTimestamp
+        approverEmail
+        approved
+        approvalTimestamp
+        userResponseTimestamp
+    }
+    class Users {
+        userEmail
+        supervisionSpaceId
+        createdAt
+        isApprover
+        isSuperUser
+    }
+    Users -- Messages : UserId
+    Messages -- Responses : MessageId
+```
+
+**Reviewing a Caddy response**
+
+![Review a response 1](assets/ResponseApproval1.png)
+![Review a response 1](assets/ResponseApproval2.png)
+
+**Approve the response**
+
+**Reject the response**
