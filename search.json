@@ -1,0 +1,20 @@
+[
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "Caddy",
+    "section": "",
+    "text": "This is the homepage for Caddy and how wonderful it is."
+  },
+  {
+    "objectID": "docs/about_caddy.html",
+    "href": "docs/about_caddy.html",
+    "title": "Quickstart",
+    "section": "",
+    "text": "Introducing Caddy\nCaddy is an AI-powered assistant acts as a copilot for customer service agents, empowering them to provide high-quality, actionable advice quickly and securely. When agents Caddy a question, Caddy will provide an answer based on all the content sources it’s been provided and give the agent references to the information.\nCaddy is designed to be used in settings where customer service advisers are supervised by experienced staff who can verify Caddy’s responses. Caddy’s responses are sent to a supervisor to review before they are made available to the customer-facing adviser. This “human in the loop” validation system is employed to mitigate risk, ensuring advice accuracy and reliability.\nEnvironments\nCaddy is built using AWS Serverless architecture and currently integrates with Google Workspace. We plan on building a Teams version later in the year.\n\n\n\nCaddy Workflow\n\n\nInstallation\nAdding users\nThere are two levels of user: supervisors and advisors.\nAdvisors can ask questions to Caddy, and will only see responses that have been approved by a supervisor (they will see a supervisor’s comments if the supervisor does not approve Caddy’s response).\nSupervisors have elevated privileges. They can: approve Caddy’s responses, add users (including other supervisors) and remove users.\nThe mechanism for adding both types of user is the same. To add a user, a user with supervisor permissions types ‘/addUser’ in the chat bar of a supervisor space.\n\n\n\nAdd users through slash commands in the chat\n\n\n\n\n\nInput the user’s email address\n\n\nRemoving users\nSupervisors can remove other users.\n \n\n\n\n\n\nclassDiagram\n    class Messages {\n        messageId\n        message\n        conversationId\n        userEmail\n        client\n        messageRecievedTimestamp\n        messageSentTimestamp\n    }\n    class Responses {\n        responseId\n        llmResponseJson\n        llmPrompt\n        messageId\n        llmAnswer\n        userThankedTimestamp\n        llmPromptTimestamp\n        llmResponseTimestamp\n        approverEmail\n        approved\n        approvalTimestamp\n        userResponseTimestamp\n    }\n    class Users {\n        userEmail\n        supervisionSpaceId\n        createdAt\n        isApprover\n        isSuperUser\n    }\n    Users -- Messages : UserId\n    Messages -- Responses : MessageId\n\n\n\n\n\n\nReviewing a Caddy response\n \nApprove the response\nReject the response",
+    "crumbs": [
+      "Docs",
+      "Quickstart"
+    ]
+  }
+]
