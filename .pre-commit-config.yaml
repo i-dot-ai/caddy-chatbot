@@ -14,14 +14,11 @@ repos:
         name: Check for trailing whitespaces (auto-fixes)
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    # Ruff version.
     rev: v0.3.5
     hooks:
-      # Run the linter.
       - id: ruff
         types_or: [ python ]
         args: [ --fix ]
-      # Run the formatter.
       - id: ruff-format
         types_or: [ python, pyi, jupyter ]
   - repo: https://github.com/Yelp/detect-secrets
@@ -53,18 +50,10 @@ repos:
     hooks:
       - id: trivyfs-docker
         args:
-          - --skip-dirs
-          - ./tests
-          - --skip-dirs
-          - .venv
-          - --skip-dirs
-          - caddy/conversations/.venv
-          - --skip-dirs
-          - caddy/llm/.venv
-          - --skip-dirs
-          - caddy/supervise/.venv
-          - --ignore-unfixed
-          - . # last arg indicates the path/file to scan
+        - --skip-dirs=./tests,.venv
+        - --skip-files=.env
+        - --ignore-unfixed
+        - .
   - repo: https://github.com/psf/black
     rev: 24.3.0
     hooks:
