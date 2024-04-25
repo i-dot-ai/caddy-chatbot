@@ -66,7 +66,7 @@ You will also be expected to pay your ongoing bills during a standard moratorium
 -----
 Another example is: "I’m about to get evicted by the bank but I don’t have anywhere to go. I’m worried as my employment contract says I might lose my job if I get a court judgment against me. Can you help me?" you could respond with:
 -----
-Most lenders will apply for a money judgment as well as possession, so you might need employment advice about your work contract. 
+Debt answer: Most lenders will apply for a money judgment as well as possession, so you might need employment advice about your work contract. 
 
 It’s important to know where you are in the eviction process. Before you are evicted your lender has to take you to court for a possession hearing. If the Judge gives the lender a possession order, you will be given a date to leave your home. On that date, if you do not move out, the lender will have to apply for a warrant of possession. That warrant allows bailiffs to return on a given date to evict you. If you do not leave they do have powers to use reasonable force to make you leave. If you have not yet been to court at all, you will have more opportunity to negotiate with the lender. If you feel able to, you should always contact your mortgage lender whatever the stage. 
 
@@ -102,6 +102,38 @@ Finally, you might be able to get something called a ‘breathing space.’ This
 If you are receiving mental health crisis treatment you might be able to get a breathing space that lasts as long as your treatment, plus 30 days. Again a debt adviser will discuss this with you. 
 
 The breathing space protections apply the day after application is submitted. Therefore, you will not be protected from eviction if you apply on the same day as your eviction unless the lender agrees to call off the bailiff.   
+
+Employment: If you have been employed less than 2 years your employer can dismiss you for any reason - whether it’s fair or not.  If you have more than 2 years service your employer can only dismiss you if it’s fair to do so - an employment tribunal would have to decide whether it was fair if you made a complaint to them.  It might be fair if it was important for your work that you have no county court judgments against you, for example if you are responsible for finance or money at work.  Get advice about whether it would be fair in your own case.  
+
+Housing: If you are homeless or threatened with homelessness within 56 days then you can make a homelessness application to your Local Authority. It depends where you are in the process - a notice has been served or a possession order/warrant of eviction has been obtained to determine whether you will be accepted as homeless or threatened with homelessness. 
+
+You can in theory make a homelessness application to any Local Authority however the Local Authority will consider whether you have a local connection to the area (you have lived in the area 6/12 months or 3 ⁄ 5 years, employment, family associations etc) when considering what further duties they owe you. 
+
+The distinction between the both is that with “threatened with homelessness” the Local Authority would try and keep you in the property by preventing homelessness. This will depend on the amount of arrears and will usually include a referral for debt advice and following the advice the debt team have given above. With “homelessness” they will look to assist you to secure accommodation. 
+
+If it is clear that homelessness cannot be prevented, then a homelessness application should be accepted. In order to carry out enquiries, the Local Authority must have reason to believe you may be homeless and may be eligible (this is purposely a lower threshold). Eligibility is ascertaining if someone has a recourse to public funds. 
+
+You should be placed on a “relief duty” which is time limited for 56 days. The Local Authority should complete a housing needs assessment and personalised housing plan. If the client falls into a priority need category (has dependent children, vulnerable as a result of some special reason etc) they will be provided interim accommodation. If they do not fall into a priority need category, they will not be offered accommodation during the 56 relief duty period. 
+
+As the end of the relief duty 56 day period approached, the Local Authority must satisfy themselves that the applicant is:- 
+
+●	Eligible
+●	Homeless
+●	In priority need
+●	Has a local connection 
+●	Is unintentionally homeless 
+
+For them to proceed to “main duty.” 
+
+Main duty is not time limited and the burden is on the Local Authority to find you a permanent offer of accommodation. You will remain in interim accommodation and the Local Authority will need to find you a suitable offer of social or private rented accommodation. 
+
+When considering “intentionality” the Local Authority Homelessness Officer must consider whether the mortgage arrears were a “deliberate act or omission.” Factors that can be used to argue an act was not deliberate would be unaffordability, increase in interest rates etc. 
+
+If you are deemed to be intentionally homeless then you would not proceed to a main duty and the Local Authority would have little to no obligation to find you accommodation. If you are in priority need and are in interim accommodation, they will give you “reasonable time” to vacate which could be days or weeks. There are different rules for when someone is still owed a housing duty where they have been found intentionally homeless. 
+
+You can also at the same time make a housing allocations application, either in tandem with the homelessness application or standalone. Some allocation policies exclude homeowners or give them very little priority however if the house is repossessed you may not have these barriers. 
+
+You may look at finding suitable private rented accommodation. Most letting agents carry out credit checks and therefore it may be difficult to obtain private rented accommodation. 
 -----
 NOTE: Advisors will ask you to provide advice on a citizen's question which can often be
 cross-cutting - this means that the question will have multiple themes. It's important to
