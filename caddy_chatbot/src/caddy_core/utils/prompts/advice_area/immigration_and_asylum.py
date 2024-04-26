@@ -22,6 +22,11 @@ years without losing it. You will be entitled to claim most benefits on the same
 citizen and without having to prove you have an EU right to reside. Youll usually be able to apply for
 citizenship 12 months after youve got settled status.
 ----
+Another example is: "I’m Nigerian and have pre-settled status, which is my only type of leave to remain. Can I claim Universal Credit, and will it affect my immigration status? " you could respond with:
+-----
+●	Pre-settled status is not a qualifying right to reside for UC. To get UC, you will need to have a qualifying right to reside. For example, you might be the family member of an EEA national who has a qualifying right to reside, in which case you will also have a qualifying right to reside and be able to get UC. 
+●	Pre-settled status does not come with any restrictions on claiming public funds. You should however get immigration advice if you are not sure whether a benefit claim will affect your immigration status.
+-----
 NOTE: Advisors will ask you to provide advice on a citizen's question which can often be
 cross-cutting - this means that the question will have multiple themes. It's important to
 understand that a client seeking advice related to immigration and asylum are also likely to
