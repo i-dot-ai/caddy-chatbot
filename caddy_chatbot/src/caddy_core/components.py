@@ -285,12 +285,12 @@ def query_llm(message_query: UserMessage, chat_history: List[Any]):
         chain, message_query.message, chat_history
     )
 
-    source_documents = ai_response["source_documents"]
+    source_documents = ai_response["context"]
 
     llm_response = LlmResponse(
         message_id=message_query.message_id,
         llm_prompt=message_query.message,
-        llm_answer=ai_response["result"],
+        llm_answer=ai_response["answer"],
         thread_id=message_query.thread_id,
         llm_prompt_timestamp=ai_prompt_timestamp,
         llm_response_timestamp=ai_response_timestamp,

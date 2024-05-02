@@ -1,4 +1,5 @@
 import os
+import re
 import json
 from datetime import datetime
 
@@ -517,7 +518,17 @@ class GoogleChat:
 
         return card
 
-    def create_card(self, llm_response, source_documents):
+    def create_card(self, llm_response, source_documents) -> dict:
+        """
+        Takes in the LLM response, extracts out any citations to the documents and adds them as reference links in the Google Chat card
+
+        Args:
+            llm_response: Response from LLM
+            source_documents: List of source documents
+
+        Returns:
+            Google Chat Card
+        """
         card = {
             "cardsV2": [
                 {
@@ -529,6 +540,22 @@ class GoogleChat:
             ],
         }
 
+        reference_links_section = {"header": "Reference links", "widgets": []}
+
+        urls = re.findall(r"<ref_(http[s]?://[^>]+)>", llm_response.llm_answer)
+
+        for i, url in enumerate(urls):
+            ref = i + 1
+            llm_response.llm_answer = llm_response.llm_answer.replace(
+                f"<ref_{url}>", f'<a href="{url}">[{ref}]</a>'
+            )
+
+            reference_link = {
+                "textParagraph": {"text": f'<a href="{url}">[{ref}] {url}</a>'}
+            }
+            if reference_link not in reference_links_section["widgets"]:
+                reference_links_section["widgets"].append(reference_link)
+
         llm_response_section = {
             "widgets": [
                 {"textParagraph": {"text": llm_response.llm_answer}},
@@ -536,18 +563,6 @@ class GoogleChat:
         }
 
         card["cardsV2"][0]["card"]["sections"].append(llm_response_section)
-
-        reference_links_section = {"header": "Reference links", "widgets": []}
-
-        for document in source_documents:
-            reference_link = {
-                "textParagraph": {
-                    "text": f"<a href=\"{document.metadata['source_url']}\">{document.metadata['source_url']}</a>"
-                }
-            }
-            if reference_link not in reference_links_section["widgets"]:
-                reference_links_section["widgets"].append(reference_link)
-
         card["cardsV2"][0]["card"]["sections"].append(reference_links_section)
 
         return card

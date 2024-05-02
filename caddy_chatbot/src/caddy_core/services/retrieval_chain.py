@@ -3,7 +3,11 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import OpenSearchVectorSearch
 from langchain_community.document_transformers import EmbeddingsClusteringFilter
 
-from langchain.chains import RetrievalQA
+from langchain.prompts import PromptTemplate
+
+from langchain.chains import create_retrieval_chain
+from langchain.chains.combine_documents import create_stuff_documents_chain
+
 from langchain.retrievers import ContextualCompressionRetriever
 from langchain.retrievers.merger_retriever import MergerRetriever
 from langchain.vectorstores.elasticsearch import ElasticsearchStore
@@ -93,6 +97,7 @@ def build_chain(CADDY_PROMPT):
         use_ssl=True,
         verify_certs=True,
         connection_class=RequestsHttpConnection,
+        attributes=["source_url"],
     )
 
     advisernet_retriever = vectorstore.as_retriever(
@@ -140,13 +145,16 @@ def build_chain(CADDY_PROMPT):
         model_kwargs={"temperature": 0.2, "max_tokens": 750},
     )
 
-    chain = RetrievalQA.from_chain_type(
-        llm=llm,
-        retriever=compression_retriever,
-        return_source_documents=True,
-        chain_type_kwargs={
-            "prompt": CADDY_PROMPT,
-        },
+    document_formatter = PromptTemplate(
+        input_variables=["page_content", "source_url"],
+        template="Content:{page_content}\nSOURCE_URL:{source_url}",
+    )
+
+    document_chain = create_stuff_documents_chain(
+        llm, prompt=CADDY_PROMPT, document_prompt=document_formatter
+    )
+    chain = create_retrieval_chain(
+        retriever=compression_retriever, combine_docs_chain=document_chain
     )
 
     ai_prompt_timestamp = datetime.now()
@@ -156,7 +164,7 @@ def build_chain(CADDY_PROMPT):
 def run_chain(chain, prompt: str, history: List[Any]):
     ai_response = chain.invoke(
         {
-            "query": prompt,
+            "input": prompt,
             "chat_history": history,
         }
     )
