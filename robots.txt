@@ -1,1 +1,1 @@
-Sitemap: https://i-dot-ai.github.io/caddy_chatbot/sitemap.xml
+Sitemap: https://i-dot-ai.github.io/caddy-chatbot/sitemap.xml
