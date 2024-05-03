@@ -544,8 +544,14 @@ class GoogleChat:
 
         urls = re.findall(r"<ref_(http[s]?://[^>]+)>", llm_response.llm_answer)
 
+        processed_urls = []
+        ref = 0
+
         for i, url in enumerate(urls):
-            ref = i + 1
+            if url in processed_urls:
+                continue
+
+            ref = ref + 1
             llm_response.llm_answer = llm_response.llm_answer.replace(
                 f"<ref_{url}>", f'<a href="{url}">[{ref}]</a>'
             )
@@ -555,6 +561,8 @@ class GoogleChat:
             }
             if reference_link not in reference_links_section["widgets"]:
                 reference_links_section["widgets"].append(reference_link)
+
+            processed_urls.append(url)
 
         llm_response_section = {
             "widgets": [
