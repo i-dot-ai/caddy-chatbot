@@ -253,7 +253,7 @@ def supervisor_rejection(approver: str, supervisor_message: str) -> dict:
                                 {"divider": {}},
                                 {
                                     "decoratedText": {
-                                        "topLabel": "Supervisor response",
+                                        "topLabel": "Supervisor Notes",
                                     }
                                 },
                                 {"textParagraph": {"text": supervisor_message}},
@@ -308,16 +308,21 @@ def control_group_selection(control_group_message) -> dict:
     return card
 
 
-def approval_json_widget(approver: str) -> dict:
+def approval_json_widget(approver: str, supervisor_notes: str) -> dict:
     """
     This takes in an approver and generates the approved response widget
 
     Args:
         approver (str): the approver of the message
+        supervisor_notes (str): supervisor approval notes
 
     Response:
         widget (dict)
     """
+    url_pattern = r"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+"
+    supervisor_notes = re.sub(
+        url_pattern, r'<a href="\g<0>">\g<0></a>', supervisor_notes
+    )
     widget = {
         "widgets": [
             {
@@ -325,8 +330,15 @@ def approval_json_widget(approver: str) -> dict:
                     "icon": {"materialIcon": {"name": "verified"}},
                     "text": '<font color="#00ba01"><b>Response approved</b></font>',
                     "bottomLabel": f"by {approver}",
+                },
+            },
+            {"divider": {}},
+            {
+                "decoratedText": {
+                    "topLabel": "Supervisor Notes",
                 }
-            }
+            },
+            {"textParagraph": {"text": supervisor_notes}},
         ]
     }
     return widget
