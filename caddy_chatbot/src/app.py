@@ -127,14 +127,9 @@ def google_chat_supervision_endpoint(
                 case "Approved":
                     google_chat.handle_supervisor_approval(event)
                     return google_chat.responses.NO_CONTENT
-                case "rejected_dialog":
-                    reject_dialog = google_chat.get_supervisor_response(event)
-                    return JSONResponse(
-                        status_code=status.HTTP_200_OK, content=reject_dialog
-                    )
-                case "receiveSupervisorResponse":
+                case "Rejected":
                     google_chat.handle_supervisor_rejection(event)
-                    return google_chat.responses.SUCCESS_DIALOG
+                    return google_chat.responses.NO_CONTENT
                 case "receiveDialog":
                     match event["message"]["annotations"][0]["slashCommand"][
                         "commandName"

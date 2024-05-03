@@ -1,4 +1,5 @@
 import os
+import re
 import json
 from datetime import datetime
 
@@ -517,7 +518,17 @@ class GoogleChat:
 
         return card
 
-    def create_card(self, llm_response, source_documents):
+    def create_card(self, llm_response, source_documents) -> dict:
+        """
+        Takes in the LLM response, extracts out any citations to the documents and adds them as reference links in the Google Chat card
+
+        Args:
+            llm_response: Response from LLM
+            source_documents: List of source documents
+
+        Returns:
+            Google Chat Card
+        """
         card = {
             "cardsV2": [
                 {
@@ -529,6 +540,30 @@ class GoogleChat:
             ],
         }
 
+        reference_links_section = {"header": "Reference links", "widgets": []}
+
+        urls = re.findall(r"<ref_(http[s]?://[^>]+)>", llm_response.llm_answer)
+
+        processed_urls = []
+        ref = 0
+
+        for i, url in enumerate(urls):
+            if url in processed_urls:
+                continue
+
+            ref = ref + 1
+            llm_response.llm_answer = llm_response.llm_answer.replace(
+                f"<ref_{url}>", f'<a href="{url}">[{ref}]</a>'
+            )
+
+            reference_link = {
+                "textParagraph": {"text": f'<a href="{url}">[{ref}] {url}</a>'}
+            }
+            if reference_link not in reference_links_section["widgets"]:
+                reference_links_section["widgets"].append(reference_link)
+
+            processed_urls.append(url)
+
         llm_response_section = {
             "widgets": [
                 {"textParagraph": {"text": llm_response.llm_answer}},
@@ -536,18 +571,6 @@ class GoogleChat:
         }
 
         card["cardsV2"][0]["card"]["sections"].append(llm_response_section)
-
-        reference_links_section = {"header": "Reference links", "widgets": []}
-
-        for document in source_documents:
-            reference_link = {
-                "textParagraph": {
-                    "text": f"<a href=\"{document.metadata['source_url']}\">{document.metadata['source_url']}</a>"
-                }
-            }
-            if reference_link not in reference_links_section["widgets"]:
-                reference_links_section["widgets"].append(reference_link)
-
         card["cardsV2"][0]["card"]["sections"].append(reference_links_section)
 
         return card
@@ -633,6 +656,14 @@ class GoogleChat:
         approval_buttons_section = {
             "widgets": [
                 {
+                    "textInput": {
+                        "label": "Supervisor Notes",
+                        "type": "MULTIPLE_LINE",
+                        "hintText": "Add approval notes or an override response for rejection",
+                        "name": "supervisor_notes",
+                    }
+                },
+                {
                     "buttonList": {
                         "buttons": [
                             {
@@ -669,8 +700,7 @@ class GoogleChat:
                                 "text": "👎",
                                 "onClick": {
                                     "action": {
-                                        "function": "rejected_dialog",
-                                        "interaction": "OPEN_DIALOG",
+                                        "function": "Rejected",
                                         "parameters": [
                                             {
                                                 "key": "conversationId",
@@ -694,7 +724,7 @@ class GoogleChat:
                             },
                         ]
                     }
-                }
+                },
             ],
         }
 
@@ -737,9 +767,22 @@ class GoogleChat:
             space_id=supervisor_space, message=card, thread_id=new_request_thread
         )
 
-    def create_approved_card(self, card, approver):
+    def create_approved_card(
+        self, card: dict, approver: str, supervisor_notes: str
+    ) -> dict:
+        """
+        Takes a card and appends the supervisor approval section
+
+        Args:
+            Card: Google Card Card
+            approver: the approver email
+            supervisor_notes: supervisor approval notes
+
+        Returns:
+            Supervisor approved card
+        """
         card["cardsV2"][0]["card"]["sections"].append(
-            self.responses.approval_json_widget(approver)
+            self.responses.approval_json_widget(approver, supervisor_notes)
         )
 
         return card
@@ -757,14 +800,17 @@ class GoogleChat:
         request_message_id = event["common"]["parameters"]["newRequestId"]
         request_card = json.loads(event["common"]["parameters"]["requestApproved"])
         user_email = event["common"]["parameters"]["userEmail"]
+        supervisor_notes = event["common"]["formInputs"]["supervisor_notes"][
+            "stringInputs"
+        ]["value"][0]
 
-        approved_card = self.create_approved_card(card=card, approver=approver)
+        approved_card = self.create_approved_card(card, approver, supervisor_notes)
 
         updated_supervision_card = self.create_updated_supervision_card(
             supervision_card=supervisor_card,
             approver=approver,
             approved=True,
-            supervisor_message="",
+            supervisor_message=supervisor_notes,
         )
         self.update_message_in_supervisor_space(
             space_id=supervisor_space,
@@ -797,7 +843,16 @@ class GoogleChat:
 
         return user_email, user_space, thread_id, approval_event
 
-    def handle_supervisor_rejection(self, event):
+    def handle_supervisor_rejection(self, event) -> None:
+        """
+        Handle an incoming supervisor rejection from Google Chat
+
+        Args:
+            event: Google Chat Event
+
+        Returns:
+            None
+        """
         supervisor_card = {"cardsV2": event["message"]["cardsV2"]}
         user_space = event["common"]["parameters"]["conversationId"]
         approver = event["user"]["email"]
@@ -805,7 +860,7 @@ class GoogleChat:
         supervisor_space = event["space"]["name"].split("/")[1]
         message_id = event["message"]["name"].split("/")[3]
         user_message_id = event["common"]["parameters"]["messageId"]
-        supervisor_message = event["common"]["formInputs"]["supervisorResponse"][
+        supervisor_message = event["common"]["formInputs"]["supervisor_notes"][
             "stringInputs"
         ]["value"][0]
         thread_id = event["common"]["parameters"]["threadId"]
@@ -858,7 +913,9 @@ class GoogleChat:
         self, supervision_card, approver, approved, supervisor_message
     ):
         if approved:
-            approval_section = self.responses.approval_json_widget(approver)
+            approval_section = self.responses.approval_json_widget(
+                approver, supervisor_notes=supervisor_message
+            )
         else:
             approval_section = self.responses.rejection_json_widget(
                 approver, supervisor_message
@@ -907,118 +964,6 @@ class GoogleChat:
 
     def failed_dialog(self, error):
         print(f"### FAILED: {error} ###")
-
-    def get_supervisor_response_dialog(
-        self,
-        conversation_id,
-        response_id,
-        message_id,
-        thread_id,
-        new_request_message_id,
-        request_rejected,
-        user_email,
-    ):
-        supervisor_response_dialog = {
-            "action_response": {
-                "type": "DIALOG",
-                "dialog_action": {
-                    "dialog": {
-                        "body": {
-                            "sections": [
-                                {
-                                    "header": "Rejected response follow up",
-                                    "widgets": [
-                                        {
-                                            "textInput": {
-                                                "label": "Enter a valid response for the adviser to their question",
-                                                "type": "MULTIPLE_LINE",
-                                                "name": "supervisorResponse",
-                                            }
-                                        },
-                                        {
-                                            "buttonList": {
-                                                "buttons": [
-                                                    {
-                                                        "text": "Submit response",
-                                                        "onClick": {
-                                                            "action": {
-                                                                "function": "receiveSupervisorResponse",
-                                                                "parameters": [
-                                                                    {
-                                                                        "key": "conversationId",
-                                                                        "value": conversation_id,
-                                                                    },
-                                                                    {
-                                                                        "key": "responseId",
-                                                                        "value": response_id,
-                                                                    },
-                                                                    {
-                                                                        "key": "messageId",
-                                                                        "value": message_id,
-                                                                    },
-                                                                    {
-                                                                        "key": "threadId",
-                                                                        "value": thread_id,
-                                                                    },
-                                                                    {
-                                                                        "key": "newRequestId",
-                                                                        "value": new_request_message_id,
-                                                                    },
-                                                                    {
-                                                                        "key": "requestRejected",
-                                                                        "value": request_rejected,
-                                                                    },
-                                                                    {
-                                                                        "key": "userEmail",
-                                                                        "value": user_email,
-                                                                    },
-                                                                ],
-                                                            }
-                                                        },
-                                                    }
-                                                ]
-                                            },
-                                            "horizontalAlignment": "END",
-                                        },
-                                    ],
-                                }
-                            ]
-                        }
-                    }
-                },
-            }
-        }
-        return supervisor_response_dialog
-
-    def get_supervisor_response(self, event):
-        """
-        Upon supervisor rejection returns a dialog box for supervisor response
-
-        Args:
-            Google Chat Event
-
-        Returns:
-            Google Chat Dialog
-        """
-        conversation_id = event["common"]["parameters"]["conversationId"]
-        response_id = event["common"]["parameters"]["responseId"]
-        message_id = event["common"]["parameters"]["messageId"]
-        thread_id = event["common"]["parameters"]["threadId"]
-        new_request_message_id = event["common"]["parameters"]["newRequestId"]
-        request_rejected = event["common"]["parameters"]["requestRejected"]
-        user_email = event["common"]["parameters"]["userEmail"]
-
-        dialog = self.get_supervisor_response_dialog(
-            conversation_id,
-            response_id,
-            message_id,
-            thread_id,
-            new_request_message_id,
-            request_rejected,
-            user_email,
-        )
-
-        return dialog
 
     def add_user(self, event):
         user = event["common"]["formInputs"]["email"]["stringInputs"]["value"][0]

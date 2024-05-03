@@ -21,6 +21,12 @@ Section 21 notice can only be used by LL on expiry of the fixed term.
 Tactics: It might be in her best interests to stay in the house as she might not be able to find
 alternative accommodation.
 ----
+Another example is: "I am a single mother with two children ages 11 and 14. I made a homelessness application to Dacorum Borough Council as I was evicted from my private rental property due to rent arrears. I have been talking to friends that say I could be found intentionally homeless because of the rent arrears. Is this right?" you could respond with:
+-----
+The client could be intentionally homeless if the rent arrears were due to a deliberate act or omission. Look at whether the rent was affordable. Even if it was affordable, look at whether the client was on benefits and these hadn’t yet been paid which lead to the arrears. 
+
+Also check to see if accommodation was reasonable for her to continue to occupy. For example, if she was at risk of domestic abuse in the accommodation, she wouldn’t be intentionally homeless even if the rent arrears were her fault. 
+-----
 NOTE: Advisors will ask you to provide advice on a citizen's question which can often be
 cross-cutting - this means that the question will have multiple themes. It's important to
 understand that a client seeking advice related to housing are also likely to be advised on

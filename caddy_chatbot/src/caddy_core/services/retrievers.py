@@ -4,6 +4,7 @@ from langchain_core.documents import Document
 from typing import List
 from langchain.retrievers.merger_retriever import MergerRetriever
 from langchain_core.language_models.chat_models import BaseChatModel
+import ast
 
 
 class LLMPriorityRetriever(BaseRetriever):
@@ -38,7 +39,7 @@ class LLMPriorityRetriever(BaseRetriever):
 
         llm_priority = self.llm.predict(document_prioritisation_prompt)
 
-        response_as_list = eval(llm_priority)
+        response_as_list = ast.literal_eval(llm_priority)
 
         try:
             # get the top 5 documents
