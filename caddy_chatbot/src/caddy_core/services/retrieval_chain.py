@@ -142,7 +142,7 @@ def build_chain(CADDY_PROMPT):
     llm = BedrockChat(
         model_id=os.environ.get("LLM"),
         region_name="eu-west-3",
-        model_kwargs={"temperature": 0.2, "max_tokens": 750},
+        model_kwargs={"temperature": 0.2, "max_tokens": 4000},
     )
 
     document_formatter = PromptTemplate(
