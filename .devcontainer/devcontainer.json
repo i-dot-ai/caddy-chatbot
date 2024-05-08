@@ -13,5 +13,12 @@
 	"postCreateCommand": "make setup-dev-container",
 	"runArgs": [
 		"--add-host=host.docker.internal:host-gateway"
-	]
+	],
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"github.vscode-github-actions"
+			]
+		}
+	}
 }

@@ -1,11 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Transform: AWS::Serverless-2016-10-31
 Description: |
   Caddy - AWS Cloudformation Template
-
-Globals:
-  Function:
-    Timeout: 100
 
 Parameters:
   StageName:
@@ -14,7 +9,6 @@ Parameters:
     AllowedValues:
       - dev
       - prod
-      - fast
   UserTableName:
     Type: String
     Description: Name of the DynamoDB table for users
@@ -30,9 +24,6 @@ Parameters:
   EvaluationTableName:
     Type: String
     Description: Name of the DynamoDB table for evaluation
-  OpensearchUrl:
-    Type: String
-    Description: Url of Opensearch Index
   CaddyServiceAccountSecretArn:
     Type: String
     Description: AWS Arn for Caddy service account
@@ -54,9 +45,11 @@ Parameters:
   DomainName:
     Type: String
     Description: Domain for Cert
+  OpensearchUrl:
+    Type: String
+    Description: Url for Opensearch
 
 Resources:
-
   CaddyVPC:
     Type: AWS::EC2::VPC
     Properties:

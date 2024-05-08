@@ -1,0 +1,50 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: |
+  Caddy Opensearch - AWS Cloudformation Template
+
+Parameters:
+  StageName:
+    Type: String
+    Description: Name of the stage (e.g., dev, prod)
+    AllowedValues:
+      - dev
+      - prod
+  CaddyRoleArn:
+    Type: String
+    Description: ARN for CaddyRole
+
+Resources:
+  CaddyOpensearch:
+    Type: AWS::OpenSearchServerless::Collection
+    Properties:
+      Name: !Sub caddy-${StageName}
+      Type: VECTORSEARCH
+      Description: Caddy Opensearch Collection
+    DependsOn: CaddyEncryptionPolicy
+
+  CaddyDataAccessPolicy:
+    Type: AWS::OpenSearchServerless::AccessPolicy
+    Properties:
+      Name: !Sub caddy-aoss-access-${StageName}
+      Type: data
+      Description: Access policy for Caddy opensearch collection
+      Policy: !Sub >-
+        [{"Description":"Access for Caddy","Rules":[{"ResourceType":"index","Resource":["index/*/*"],"Permission":["aoss:*"]},{"ResourceType":"collection","Resource":["collection/caddy-${StageName}"],"Permission":["aoss:*"]}],"Principal":["${CaddyRoleArn}"]}]
+
+  CaddyNetworkPolicy:
+    Type: AWS::OpenSearchServerless::SecurityPolicy
+    Properties:
+      Name: !Sub caddy-aoss-network-${StageName}
+      Type: network
+      Description: Network policy for Caddy opensearch collection
+      Policy: !Sub >-
+        [{"Rules":[{"ResourceType":"collection","Resource":["collection/caddy-${StageName}"]},{"ResourceType":"dashboard","Resource":["collection/caddy-${StageName}"]}],"AllowFromPublic":true}]
+
+  CaddyEncryptionPolicy:
+    Type: 'AWS::OpenSearchServerless::SecurityPolicy'
+    Properties:
+      Name: !Sub caddy-aoss-security-${StageName}
+      Type: encryption
+      Description: Encryption policy for Caddy opensearch collection
+      Policy: !Sub >-
+        {"Rules":[{"ResourceType":"collection","Resource": ["collection/caddy-${StageName}"]}],"AWSOwnedKey":true}
