@@ -113,6 +113,10 @@ def google_chat_supervision_endpoint(
     if user_enrolled is not True:
         return google_chat.responses.USER_NOT_ENROLLED
 
+    user_supervisor = enrolment.check_user_role(user)
+    if user_supervisor is not True:
+        return google_chat.responses.USER_NOT_SUPERVISOR
+
     match event["type"]:
         case "ADDED_TO_SPACE":
             match event["space"]["type"]:
