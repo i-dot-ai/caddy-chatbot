@@ -16,6 +16,10 @@ USER_NOT_ENROLLED = {
     "text": "Caddy is not currently registered for you. Please contact your administrator for support in onboarding to Caddy"
 }
 
+USER_NOT_SUPERVISOR = {
+    "text": "Only registered supervisors can use Caddy Supervisor. Please contact your administrator to gain the supervisor role."
+}
+
 INTRODUCE_CADDY_IN_DM = "Hi, I'm Caddy! \n\n I'm an AI powered co-pilot for Citizens Advice advisers, I'm here to help give advice to support in resolving your client queries."
 
 INTRODUCE_CADDY_IN_SPACE = "Hi, I'm Caddy! \n\n Thank you for adding me to {space_name}. \n\n I'm an AI powered co-pilot for Citizens Advice advisers, I'm here to help give advice to support in resolving your client queries."

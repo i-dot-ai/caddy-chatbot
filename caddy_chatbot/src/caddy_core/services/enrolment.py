@@ -28,6 +28,17 @@ def check_user_status(user: str):
         return False
 
 
+def check_user_role(user: str):
+    """
+    Checks whether the user has the role of supervisor
+    """
+    user_registered = users_table.get_item(Key={"userEmail": user})
+    if "Item" in user_registered:
+        if "isApprover" in user_registered["Item"]:
+            return user_registered["Item"]["isApprover"]
+    return False
+
+
 def get_office_coverage(domain: str):
     """
     Gets areas covered for the office

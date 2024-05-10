@@ -18,6 +18,10 @@ USER_NOT_ENROLLED = JSONResponse(
     content=content.USER_NOT_ENROLLED,
 )
 
+USER_NOT_SUPERVISOR = JSONResponse(
+    status_code=status.HTTP_200_OK,
+    content=content.USER_NOT_SUPERVISOR,
+)
 
 INTRODUCE_CADDY_IN_DM = JSONResponse(
     status_code=status.HTTP_200_OK, content=content.INTRODUCE_CADDY_DM_CARD
