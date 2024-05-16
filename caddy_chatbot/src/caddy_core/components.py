@@ -33,6 +33,21 @@ from pytz import timezone
 from typing import List, Any, Dict, Tuple
 
 
+def rct_survey_reminder(event, user_record, chat_client):
+    """
+    When a user has an existing call remind them to complete survey
+    """
+    call_start_time = user_record["callStart"]
+    survey_thread_id = user_record["activeThreadId"]
+    space_id = event["space"]["name"].split("/")[1]
+    thread_id = None
+    if "thread" in event["message"]:
+        thread_id = event["message"]["thread"]["name"].split("/")[3]
+    chat_client.send_existing_call_reminder(
+        space_id, thread_id, call_start_time, survey_thread_id, event
+    )
+
+
 def handle_message(caddy_message, chat_client):
     module_values, survey_complete = check_existing_call(caddy_message)
 
@@ -235,9 +250,11 @@ def store_evaluation_module(user, thread_id, module_values):
     user_arguments["module_arguments"]["split"] = str(
         user_arguments["module_arguments"]["split"]
     )
+    call_start_time = datetime.now(timezone("Europe/London")).strftime("%d-%m-%Y %H:%M")
     evaluation_table.put_item(
         Item={
             "threadId": thread_id,
+            "callStart": call_start_time,
             "modulesUsed": user_arguments,
             "moduleOutputs": argument_output,
             "continueConversation": continue_conversation,
@@ -247,9 +264,11 @@ def store_evaluation_module(user, thread_id, module_values):
     )
     users_table.update_item(
         Key={"userEmail": user},
-        UpdateExpression="set activeCall = :ac, modulesUsed = :mu, moduleOutputs = :mo, continueConversation = :cc, controlGroupMessage = :cg",
+        UpdateExpression="set activeCall = :ac, callStart = :cs, activeThreadId = :ati, modulesUsed = :mu, moduleOutputs = :mo, continueConversation = :cc, controlGroupMessage = :cg",
         ExpressionAttributeValues={
             ":ac": True,
+            ":cs": call_start_time,
+            ":ati": thread_id,
             ":mu": user_arguments,
             ":mo": argument_output,
             ":cc": continue_conversation,

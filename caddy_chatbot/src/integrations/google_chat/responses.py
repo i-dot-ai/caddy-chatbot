@@ -2,6 +2,7 @@ from fastapi import status
 from fastapi.responses import JSONResponse, Response
 from integrations.google_chat import content
 import re
+import json
 
 # --- Status Responses --- #
 NO_CONTENT = Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -218,6 +219,84 @@ def introduce_caddy_supervisor_in_space(space_name: str) -> JSONResponse:
     return JSONResponse(status_code=status.HTTP_200_OK, content=card)
 
 
+def existing_call_reminder(
+    event, space_id, thread_id, call_start_time, survey_thread_id
+):
+    """
+    Existing call reminder
+    """
+    existing_call_reminder_card = {
+        "cardsV2": [
+            {
+                "cardId": "survey_reminder",
+                "card": {
+                    "sections": [
+                        {
+                            "widgets": [
+                                {
+                                    "textParagraph": {
+                                        "text": content.EXISTING_CALL_REMINDER.format(
+                                            call_start_time=call_start_time
+                                        )
+                                    }
+                                },
+                            ],
+                        },
+                        {
+                            "widgets": [
+                                {
+                                    "buttonList": {
+                                        "buttons": [
+                                            {
+                                                "text": "New Interaction",
+                                                "onClick": {
+                                                    "action": {
+                                                        "function": "end_existing_interaction",
+                                                        "parameters": [
+                                                            {
+                                                                "key": "message_event",
+                                                                "value": json.dumps(
+                                                                    event
+                                                                ),
+                                                            },
+                                                            {
+                                                                "key": "thread_id",
+                                                                "value": survey_thread_id,
+                                                            },
+                                                        ],
+                                                    }
+                                                },
+                                            },
+                                            {
+                                                "text": "Continue Existing Interaction",
+                                                "onClick": {
+                                                    "action": {
+                                                        "function": "continue_existing_interaction",
+                                                        "parameters": [
+                                                            {
+                                                                "key": "message_event",
+                                                                "value": json.dumps(
+                                                                    event
+                                                                ),
+                                                            },
+                                                        ],
+                                                    }
+                                                },
+                                            },
+                                        ]
+                                    }
+                                }
+                            ],
+                        },
+                    ],
+                },
+            },
+        ],
+        "thread": {"name": f"spaces/{space_id}/threads/{thread_id}"},
+    }
+    return existing_call_reminder_card
+
+
 # --- Card Responses --- #
 
 # TODO Add clean card responses
@@ -234,11 +313,6 @@ def supervisor_rejection(approver: str, supervisor_message: str) -> dict:
     Returns:
         card (dict)
     """
-    url_pattern = r"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+"
-    supervisor_message = re.sub(
-        url_pattern, r'<a href="\g<0>">\g<0></a>', supervisor_message
-    )
-
     card = {
         "cardsV2": [
             {
@@ -254,18 +328,6 @@ def supervisor_rejection(approver: str, supervisor_message: str) -> dict:
                                         "text": '<font color="#ec0101"><B>Caddy response rejected<b></font>',
                                     }
                                 },
-                                {"divider": {}},
-                                {
-                                    "decoratedText": {
-                                        "topLabel": "Supervisor Notes",
-                                    }
-                                },
-                                {"textParagraph": {"text": supervisor_message}},
-                                {
-                                    "decoratedText": {
-                                        "bottomLabel": f"{approver}",
-                                    }
-                                },
                             ]
                         }
                     ]
@@ -273,6 +335,31 @@ def supervisor_rejection(approver: str, supervisor_message: str) -> dict:
             },
         ],
     }
+
+    if supervisor_message != "":
+        url_pattern = r"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+"
+        supervisor_message = re.sub(
+            url_pattern, r'<a href="\g<0>">\g<0></a>', supervisor_message
+        )
+        card["cardsV2"][0]["card"]["sections"][0]["widgets"].append({"divider": {}})
+        card["cardsV2"][0]["card"]["sections"][0]["widgets"].append(
+            {
+                "decoratedText": {
+                    "topLabel": "Supervisor Notes",
+                }
+            }
+        )
+        card["cardsV2"][0]["card"]["sections"][0]["widgets"].append(
+            {"textParagraph": {"text": supervisor_message}}
+        )
+
+    card["cardsV2"][0]["card"]["sections"][0]["widgets"].append(
+        {
+            "decoratedText": {
+                "bottomLabel": f"{approver}",
+            }
+        }
+    )
     return card
 
 
@@ -323,10 +410,6 @@ def approval_json_widget(approver: str, supervisor_notes: str) -> dict:
     Response:
         widget (dict)
     """
-    url_pattern = r"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+"
-    supervisor_notes = re.sub(
-        url_pattern, r'<a href="\g<0>">\g<0></a>', supervisor_notes
-    )
     widget = {
         "widgets": [
             {
@@ -335,16 +418,25 @@ def approval_json_widget(approver: str, supervisor_notes: str) -> dict:
                     "text": '<font color="#00ba01"><b>Response approved</b></font>',
                     "bottomLabel": f"by {approver}",
                 },
-            },
-            {"divider": {}},
+            }
+        ]
+    }
+
+    if supervisor_notes != "":
+        url_pattern = r"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+"
+        supervisor_notes = re.sub(
+            url_pattern, r'<a href="\g<0>">\g<0></a>', supervisor_notes
+        )
+        widget["widgets"].append({"divider": {}})
+        widget["widgets"].append(
             {
                 "decoratedText": {
                     "topLabel": "Supervisor Notes",
                 }
-            },
-            {"textParagraph": {"text": supervisor_notes}},
-        ]
-    }
+            }
+        )
+        widget["widgets"].append({"textParagraph": {"text": supervisor_notes}})
+
     return widget
 
 
@@ -502,15 +594,76 @@ def rejection_json_widget(approver: str, supervisor_message: str) -> dict:
                     "bottomLabel": f"by {approver}",
                 }
             },
-            {
-                "textParagraph": {
-                    "text": f'<font color="#004f88"><b>Supervisor response</b> \n\n {supervisor_message}</font>'
-                }
-            },
         ]
     }
 
+    if supervisor_message != "":
+        url_pattern = r"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+"
+        supervisor_message = re.sub(
+            url_pattern, r'<a href="\g<0>">\g<0></a>', supervisor_message
+        )
+        widget["widgets"].append({"divider": {}})
+        widget["widgets"].append(
+            {
+                "decoratedText": {
+                    "topLabel": "Supervisor Notes",
+                }
+            }
+        )
+        widget["widgets"].append({"textParagraph": {"text": supervisor_message}})
+
     return widget
+
+
+def call_complete_card(survey_card: dict) -> dict:
+    """
+    Creates a mark call complete button storing the survey card for when activated
+
+    Args:
+        survey_card: The post call sruvey
+
+    Returns:
+        Google Chat call complete button
+    """
+    call_complete_card = {
+        "cardsV2": [
+            {
+                "cardId": "callCompleteCard",
+                "card": {
+                    "sections": [
+                        {
+                            "widgets": [
+                                {
+                                    "buttonList": {
+                                        "buttons": [
+                                            {
+                                                "text": "Mark call complete",
+                                                "onClick": {
+                                                    "action": {
+                                                        "function": "call_complete",
+                                                        "parameters": [
+                                                            {
+                                                                "key": "survey",
+                                                                "value": json.dumps(
+                                                                    survey_card
+                                                                ),
+                                                            },
+                                                        ],
+                                                    }
+                                                },
+                                            }
+                                        ]
+                                    }
+                                }
+                            ]
+                        }
+                    ],
+                },
+            },
+        ],
+    }
+
+    return call_complete_card
 
 
 # --- Dialog Responses --- #
