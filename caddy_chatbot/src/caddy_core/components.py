@@ -6,6 +6,8 @@ from langchain.prompts import PromptTemplate
 from caddy_core.utils.prompts.default_template import CADDY_PROMPT_TEMPLATE
 from caddy_core.utils.prompts.prompt import retrieve_route_specific_augmentation
 
+from time import sleep
+
 from caddy_core.models import (
     ProcessChatMessageEvent,
     UserMessage,
@@ -379,7 +381,29 @@ def check_existing_call(caddy_message) -> Tuple[Dict[str, Any], bool]:
 def send_to_llm(caddy_query: UserMessage, chat_client):
     chat_history = get_chat_history(caddy_query)
 
-    llm_response, source_documents = query_llm(caddy_query, chat_history)
+    for attempt in range(4):
+        try:
+            llm_response, source_documents = query_llm(caddy_query, chat_history)
+            break
+        except Exception as error:
+            print(f"Attempt {attempt+1} failed with error: {error}")
+            if attempt == 3:
+                chat_client.update_message_in_adviser_space(
+                    message_type="cardsV2",
+                    space_id=caddy_query.conversation_id,
+                    message_id=caddy_query.message_id,
+                    message=chat_client.messages.REQUEST_FAILURE,
+                )
+                raise Exception(f"Caddy failed to response, error: {error}")
+            chat_client.update_message_in_adviser_space(
+                message_type="cardsV2",
+                space_id=caddy_query.conversation_id,
+                message_id=caddy_query.message_id,
+                message=chat_client.messages.COMPOSING_MESSAGE_RETRY,
+            )
+            wait = attempt**2
+            print(f"Retrying in {wait}...")
+            sleep(wait)
 
     response_card = chat_client.create_card(llm_response, source_documents)
     response_card = json.dumps(response_card)

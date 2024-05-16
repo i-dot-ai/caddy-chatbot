@@ -4,6 +4,8 @@ PROCESSING = "<b>Requesting Caddy to help with this query</b>"
 
 GENERATING_RESPONSE = "<b>Composing answer to your query</b>"
 
+FAILURE = '<b><font color="#FF0000">Caddy failed to respond</font></b>'
+
 AWAITING_APPROVAL = "<b>Awaiting approval</b>"
 
 # --- Google Chat Messages ---
@@ -72,6 +74,54 @@ COMPOSING_MESSAGE = {
                                     "icon": {"materialIcon": {"name": "notes"}},
                                     "topLabel": "Status",
                                     "text": GENERATING_RESPONSE,
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+        },
+    ],
+}
+
+COMPOSING_MESSAGE_RETRY = {
+    "cardsV2": [
+        {
+            "cardId": "StatusCard",
+            "card": {
+                "sections": [
+                    {
+                        "widgets": [
+                            {
+                                "decoratedText": {
+                                    "icon": {"materialIcon": {"name": "refresh"}},
+                                    "topLabel": "Status",
+                                    "text": GENERATING_RESPONSE,
+                                    "bottomLabel": "Something went wrong, retrying...",
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+        },
+    ],
+}
+
+REQUEST_FAILURE = {
+    "cardsV2": [
+        {
+            "cardId": "StatusCard",
+            "card": {
+                "sections": [
+                    {
+                        "widgets": [
+                            {
+                                "decoratedText": {
+                                    "icon": {"materialIcon": {"name": "feedback"}},
+                                    "topLabel": "Status",
+                                    "text": FAILURE,
+                                    "bottomLabel": "Please try again shortly",
                                 }
                             }
                         ]
