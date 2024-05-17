@@ -1,6 +1,6 @@
 # Caddy Chatbot
 
-Caddy is an LLM powered co-pilot for customer service functions everywhere. This contains the logic for the chatbot and responses, and also relies on storage of the data using [caddy_scraper](https://github.com/i-dot-ai/caddy_scraper).
+Caddy is an LLM powered co-pilot for customer service functions everywhere. This contains the logic for the chatbot and responses, and also relies on storage of the data using [caddy-scraper](https://github.com/i-dot-ai/caddy-scraper).
 
 ## How to Run
 
