@@ -10,11 +10,20 @@ def check_domain_status(domain: str):
     """
     Checks if the domain is enrolled with Caddy
     """
-    domain_registered = offices_table.get_item(Key={"emailDomain": domain})
-    if "Item" in domain_registered:
-        return True
+    office = offices_table.get_item(Key={"emailDomain": domain})
+    if "Item" in office:
+        return True, office["Item"]
     else:
         return False
+
+
+def check_rct_status(office: dict):
+    """
+    Checks if the domain is part of the RCT
+    """
+    if "rctParticipant" in office:
+        return office["rctParticipant"]
+    return False
 
 
 def check_user_status(user: str):
@@ -23,19 +32,28 @@ def check_user_status(user: str):
     """
     user_registered = users_table.get_item(Key={"userEmail": user})
     if "Item" in user_registered:
+        if "isApprover" in user_registered["Item"]:
+            return user_registered["Item"]["isApprover"], user_registered["Item"]
         return True
     else:
         return False
 
 
-def check_user_role(user: str):
+def check_user_call_status(user_record: dict):
+    """
+    Checks if the user has an active call on Caddy
+    """
+    if "activeCall" in user_record:
+        return user_record["activeCall"]
+    return False
+
+
+def check_user_role(user_record: dict):
     """
     Checks whether the user has the role of supervisor
     """
-    user_registered = users_table.get_item(Key={"userEmail": user})
-    if "Item" in user_registered:
-        if "isApprover" in user_registered["Item"]:
-            return user_registered["Item"]["isApprover"]
+    if "isApprover" in user_record:
+        return user_record["isApprover"]
     return False
 
 

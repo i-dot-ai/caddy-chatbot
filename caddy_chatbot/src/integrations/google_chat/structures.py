@@ -1,6 +1,10 @@
 import os
 import re
 import json
+from typing import Optional
+
+
+from pytz import timezone
 from datetime import datetime
 
 from caddy_core.models import CaddyMessageEvent, ApprovalEvent
@@ -115,6 +119,22 @@ class GoogleChat:
         message_id = response["name"].split("/")[3]
 
         return thread_id, message_id
+
+    def send_existing_call_reminder(
+        self,
+        space_id: str,
+        thread_id: str,
+        call_start_time: str,
+        survey_thread_id: str,
+        event,
+    ):
+        self.caddy.spaces().messages().create(
+            parent=f"spaces/{space_id}",
+            body=self.responses.existing_call_reminder(
+                event, space_id, thread_id, call_start_time, survey_thread_id
+            ),
+            messageReplyOption="REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD",
+        ).execute()
 
     def send_pii_warning_to_adviser_space(
         self, space_id: str, thread_id: str, message, message_event
@@ -241,9 +261,11 @@ class GoogleChat:
         return JSONResponse(status_code=status.HTTP_200_OK, content=edit_query_dialog)
 
     def handle_survey_response(self, event):
+        user = event["user"]["email"]
         question = event["common"]["parameters"]["question"]
         response = event["common"]["parameters"]["response"]
-        threadId = event["message"]["thread"]["name"].split("/")[3]
+        threadId = event["common"]["parameters"]["threadId"]
+        message_event = None
         card = event["message"]["cardsV2"]
         spaceId = event["space"]["name"].split("/")[1]
         messageId = event["message"]["name"].split("/")[3]
@@ -273,10 +295,23 @@ class GoogleChat:
 
         if remaining_sections == 0:
             card[0]["card"]["sections"].append(self.messages.SURVEY_COMPLETE_WIDGET)
+            evaluation_table.update_item(
+                Key={"threadId": str(threadId)},
+                UpdateExpression="set surveyCompleteTimestamp = :timestamp",
+                ExpressionAttributeValues={
+                    ":timestamp": datetime.now(timezone("Europe/London")).strftime(
+                        "%d-%m-%Y %H:%M:%S"
+                    ),
+                },
+                ReturnValues="UPDATED_NEW",
+            )
+            caddy.mark_call_complete(user=user, thread_id=threadId)
+            message_event = event["common"]["parameters"]["event"]
 
         self.update_survey_card_in_adviser_space(
             space_id=spaceId, message_id=messageId, card={"cardsV2": card}
         )
+        return message_event
 
     def similar_question_dialog(self, similar_question, question_answer, similarity):
         question_dialog = {
@@ -430,7 +465,13 @@ class GoogleChat:
 
         return thread_id, message_id
 
-    def run_new_survey(self, user: str, thread_id: str, user_space: str) -> None:
+    def run_new_survey(
+        self,
+        user: str,
+        thread_id: str,
+        user_space: str,
+        reminder_thread_id: Optional[str] = None,
+    ) -> None:
         """
         Run a survey in the adviser space by getting the survey questions and values by providing a user to the get_survey function
 
@@ -442,20 +483,28 @@ class GoogleChat:
         Returns:
             None
         """
-        post_call_survey_questions = get_survey(user)
+        post_call_survey_questions = get_survey(thread_id, user)
 
-        survey_card = self.get_post_call_survey_card(post_call_survey_questions)
+        survey_card = self.get_post_call_survey_card(
+            post_call_survey_questions, thread_id
+        )
+
+        thread_for_survey = thread_id
+        if reminder_thread_id:
+            thread_for_survey = reminder_thread_id
 
         self.send_dynamic_to_adviser_space(
             response_type="cardsV2",
             space_id=user_space,
             message=survey_card,
-            thread_id=thread_id,
+            thread_id=thread_for_survey,
         )
 
     def get_post_call_survey_card(
         self,
         post_call_survey_questions: List[dict[str, List[str]]],
+        thread_id: str,
+        event: Optional[dict] = None,
     ) -> dict:
         """
         Create a post call survey card with the given questions and values
@@ -504,6 +553,8 @@ class GoogleChat:
                                 "parameters": [
                                     {"key": "question", "value": question},
                                     {"key": "response", "value": value},
+                                    {"key": "threadId", "value": thread_id},
+                                    {"key": "event", "value": event},
                                 ],
                             }
                         },
@@ -907,7 +958,11 @@ class GoogleChat:
 
         caddy.store_approver_event(rejection_event)
 
-        self.call_complete_confirmation(user_email, user_space, thread_id)
+        domain = user_email.split("@")[1]
+        _, office = enrolment.check_domain_status(domain)
+        included_in_rct = enrolment.check_rct_status(office)
+        if included_in_rct is True:
+            self.call_complete_confirmation(user_email, user_space, thread_id)
 
     def create_updated_supervision_card(
         self, supervision_card, approver, approved, supervisor_message
@@ -993,7 +1048,9 @@ class GoogleChat:
             supervision_users=space_users, space_display_name=space_name
         )
 
-    def get_survey(self, user: str) -> dict:
+    def get_survey_card(
+        self, thread_id: str, user: str, event: Optional[dict] = None
+    ) -> dict:
         """
         Gets a post call survey card for the given user
 
@@ -1005,7 +1062,9 @@ class GoogleChat:
         """
         post_call_survey_questions = get_survey(user)
 
-        survey_card = self.get_post_call_survey_card(post_call_survey_questions)
+        survey_card = self.get_post_call_survey_card(
+            post_call_survey_questions, thread_id, event
+        )
 
         return survey_card
 
@@ -1023,44 +1082,8 @@ class GoogleChat:
         Returns:
             None
         """
-        survey_card = self.get_survey(user)
-        call_complete_card = {
-            "cardsV2": [
-                {
-                    "cardId": "callCompleteCard",
-                    "card": {
-                        "sections": [
-                            {
-                                "widgets": [
-                                    {
-                                        "buttonList": {
-                                            "buttons": [
-                                                {
-                                                    "text": "Mark call complete",
-                                                    "onClick": {
-                                                        "action": {
-                                                            "function": "call_complete",
-                                                            "parameters": [
-                                                                {
-                                                                    "key": "survey",
-                                                                    "value": json.dumps(
-                                                                        survey_card
-                                                                    ),
-                                                                },
-                                                            ],
-                                                        }
-                                                    },
-                                                }
-                                            ]
-                                        }
-                                    }
-                                ]
-                            }
-                        ],
-                    },
-                },
-            ],
-        }
+        survey_card = self.get_survey_card(thread_id, user)
+        call_complete_card = self.responses.call_complete_card(survey_card)
 
         self.send_dynamic_to_adviser_space(
             response_type="cardsV2",
@@ -1127,6 +1150,15 @@ class GoogleChat:
         return self.format_message(event)
 
     def handle_supervisor_approval(self, event):
+        """
+        Handles inbound Google Chat supervisor approvals
+
+        Args:
+            event: Google Chat Event
+
+        Returns:
+            None
+        """
         (
             user,
             user_space,
@@ -1134,4 +1166,51 @@ class GoogleChat:
             approval_event,
         ) = self.received_approval(event)
         caddy.store_approver_event(approval_event)
-        self.call_complete_confirmation(user, user_space, thread_id)
+
+        domain = user.split("@")[1]
+        _, office = enrolment.check_domain_status(domain)
+        included_in_rct = enrolment.check_rct_status(office)
+        if included_in_rct is True:
+            self.call_complete_confirmation(user, user_space, thread_id)
+
+    def continue_existing_interaction(self, event):
+        """
+        Updates the existing interaction card to reflect the chosen option of continue
+
+        Args:
+            event: google chat event
+
+        Returns:
+            None
+        """
+        self.update_survey_card_in_adviser_space(
+            space_id=event["space"]["name"].split("/")[1],
+            message_id=event["message"]["name"].split("/")[3],
+            card=self.messages.CONTINUE_EXISTING_INTERACTION,
+        )
+
+    def end_existing_interaction(self, event):
+        """
+        Updates the existing interaction card to reflect the chosen option of end
+
+        Args:
+            event: google chat event
+
+        Returns:
+            None
+        """
+        user = event["user"]["email"]
+        user_space = event["space"]["name"].split("/")[1]
+        thread_id = event["message"]["thread"]["name"].split("/")[3]
+        survey_thread_id = event["common"]["parameters"]["thread_id"]
+        message_event = json.loads(event["common"]["parameters"]["message_event"])
+        message_event = message_event["message"]["text"]
+        survey_card = self.get_survey_card(
+            thread_id=survey_thread_id, user=user, event=message_event
+        )
+        self.update_survey_card_in_adviser_space(
+            space_id=event["space"]["name"].split("/")[1],
+            message_id=event["message"]["name"].split("/")[3],
+            card=self.messages.END_EXISTING_INTERACTION,
+        )
+        self.run_survey(survey_card, user_space, thread_id)
