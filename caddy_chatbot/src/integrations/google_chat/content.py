@@ -36,7 +36,7 @@ INTRODUCE_CADDY_SUPERVISOR_IN_DM = "Hi, I'm the supervisor assistant for Caddy! 
 
 INTRODUCE_CADDY_SUPERVISOR_IN_SPACE = "Hi, thank you for adding me to {space_name}, I'm the supervisor assistant for Caddy! Caddy is an AI support for Citizens Advice advisers. \n\nCaddy uses information from the below sites to form answers: \nGOV UK \nCitizens Advice \nAdviserNet \n\n*To get started you will need to register the advisers into your supervision space so their messages come to you, you can do this by typing `/addUser` into the chat, other user management functionality can be seen using `/help`*"
 
-EXISTING_CALL_REMINDER = '<font color="#004F88"><b>Active Caddy Interaction from {call_start_time}</b></font>\n\n<i>It looks like you may still have an interaction active where the call complete button hasn\'t been selected and post call survey complete, as part of the evaluation of Caddy each interaction is seperated into interactions to be able to evaluate Caddy\'s effectiveness.</i> \n\n <font color="#004F88"><b>Please specify whether this query is part of the active interaction or a new one</b></font>'
+EXISTING_CALL_REMINDER = "<font color=\"#004F88\"><b>Active Caddy Interaction from {call_start_time}</b></font>\n\n<i>It looks like you've already got an open chat with Caddy that hasn't been marked as complete yet! While we're evaluating Caddy, it's really important we obtain a completed feedback survey from every call.</i> \n\n <font color=\"#004F88\"><b>Is this request to Caddy linked to a new call, or is your previous call still ongoing?</b></font>"
 
 # --- Google Chat Cards --- #
 
