@@ -8,6 +8,8 @@ FAILURE = '<b><font color="#FF0000">Caddy failed to respond</font></b>'
 
 AWAITING_APPROVAL = "<b>Awaiting approval</b>"
 
+SUPERVISOR_REVIEWING = "<b>Supervisor reviewing response</b>"
+
 # --- Google Chat Messages ---
 
 DOMAIN_NOT_ENROLLED = {
@@ -124,6 +126,38 @@ REQUEST_FAILURE = {
                                     "topLabel": "Status",
                                     "text": FAILURE,
                                     "bottomLabel": "Please try again shortly",
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+        },
+    ],
+}
+
+RESPONSE_STREAMING = {
+    "decoratedText": {
+        "icon": {"materialIcon": {"name": "pending"}},
+        "topLabel": "Caddy response still processing...",
+    }
+}
+
+SUPERVISOR_REVIEWING_RESPONSE = {
+    "cardsV2": [
+        {
+            "cardId": "StatusCard",
+            "card": {
+                "sections": [
+                    {
+                        "widgets": [
+                            {
+                                "decoratedText": {
+                                    "icon": {
+                                        "materialIcon": {"name": "quick_reference_all"}
+                                    },
+                                    "topLabel": "Status",
+                                    "text": SUPERVISOR_REVIEWING,
                                 }
                             }
                         ]

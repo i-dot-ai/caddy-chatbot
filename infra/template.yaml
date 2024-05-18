@@ -373,6 +373,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
                 Resource: '*'
         - PolicyName: !Sub CaddySecrets-${StageName}
           PolicyDocument:
