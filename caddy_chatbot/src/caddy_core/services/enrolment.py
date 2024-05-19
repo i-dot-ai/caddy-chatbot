@@ -14,7 +14,7 @@ def check_domain_status(domain: str):
     if "Item" in office:
         return True, office["Item"]
     else:
-        return False
+        return False, None
 
 
 def check_rct_status(office: dict):
@@ -34,9 +34,9 @@ def check_user_status(user: str):
     if "Item" in user_registered:
         if "isApprover" in user_registered["Item"]:
             return user_registered["Item"]["isApprover"], user_registered["Item"]
-        return True
+        return True, user_registered["Item"]
     else:
-        return False
+        return False, None
 
 
 def check_user_call_status(user_record: dict):
