@@ -1,7 +1,24 @@
+import boto3
 from semantic_router import Route, RouteLayer
-from semantic_router.encoders import HuggingFaceEncoder
+from semantic_router.encoders import BedrockEncoder
 
-embeddings = HuggingFaceEncoder(name="model")
+try:
+    credentials = boto3.Session().get_credentials()
+    embeddings = BedrockEncoder(
+        access_key_id=credentials.access_key,
+        secret_access_key=credentials.secret_key,
+        session_token=credentials.token or "",
+        region="eu-west-3",
+    )
+except Exception as error:
+    print(f"Error occured: {error}")
+    credentials = boto3.Session().get_credentials()
+    embeddings = BedrockEncoder(
+        access_key_id=credentials.access_key,
+        secret_access_key=credentials.secret_key,
+        session_token=credentials.token or "",
+        region="eu-west-3",
+    )
 
 benefits_and_tax_credits_route = Route(
     name="benefits_and_tax_credits",

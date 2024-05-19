@@ -31,13 +31,20 @@ def google_chat_endpoint(event=Depends(verify_google_chat_request)) -> dict:
     user = event["user"]["email"]
     domain = user.split("@")[1]
 
-    domain_enrolled = enrolment.check_domain_status(domain)
+    domain_enrolled, office = enrolment.check_domain_status(domain)
     if domain_enrolled is not True:
         return google_chat.responses.DOMAIN_NOT_ENROLLED
 
-    user_enrolled = enrolment.check_user_status(user)
+    user_enrolled, user_record = enrolment.check_user_status(user)
     if user_enrolled is not True:
         return google_chat.responses.USER_NOT_ENROLLED
+
+    included_in_rct = enrolment.check_rct_status(office)
+    if included_in_rct is True:
+        user_has_existing_call = enrolment.check_user_call_status(user_record)
+        if user_has_existing_call is True and event["type"] == "MESSAGE":
+            caddy.rct_survey_reminder(event, user_record, chat_client=google_chat)
+            return google_chat.responses.NO_CONTENT
 
     match event["type"]:
         case "ADDED_TO_SPACE":
@@ -84,8 +91,34 @@ def google_chat_endpoint(event=Depends(verify_google_chat_request)) -> dict:
                     )
                     process_message_thread.start()
                     return google_chat.responses.SUCCESS_DIALOG
+                case "continue_existing_interaction":
+                    google_chat.continue_existing_interaction(event)
+                    caddy_message = google_chat.handle_proceed_query(event)
+                    process_message_thread = Thread(
+                        target=caddy.handle_message,
+                        kwargs={
+                            "caddy_message": caddy_message,
+                            "chat_client": google_chat,
+                        },
+                    )
+                    process_message_thread.start()
+                    return google_chat.responses.NO_CONTENT
+                case "end_existing_interaction":
+                    google_chat.end_existing_interaction(event)
+                    return google_chat.responses.NO_CONTENT
                 case "survey_response":
-                    google_chat.handle_survey_response(event)
+                    message_event = google_chat.handle_survey_response(event)
+                    if message_event:
+                        event["message"]["text"] = message_event
+                        caddy_message = google_chat.format_message(event)
+                        process_message_thread = Thread(
+                            target=caddy.handle_message,
+                            kwargs={
+                                "caddy_message": caddy_message,
+                                "chat_client": google_chat,
+                            },
+                        )
+                        process_message_thread.start()
                     return google_chat.responses.ACCEPTED
                 case "call_complete":
                     google_chat.finalise_caddy_call(event)
@@ -105,15 +138,15 @@ def google_chat_supervision_endpoint(
     user = event["user"]["email"]
     domain = user.split("@")[1]
 
-    domain_enrolled = enrolment.check_domain_status(domain)
+    domain_enrolled, _ = enrolment.check_domain_status(domain)
     if domain_enrolled is not True:
         return google_chat.responses.DOMAIN_NOT_ENROLLED
 
-    user_enrolled = enrolment.check_user_status(user)
+    user_enrolled, user_record = enrolment.check_user_status(user)
     if user_enrolled is not True:
         return google_chat.responses.USER_NOT_ENROLLED
 
-    user_supervisor = enrolment.check_user_role(user)
+    user_supervisor = enrolment.check_user_role(user_record)
     if user_supervisor is not True:
         return google_chat.responses.USER_NOT_SUPERVISOR
 

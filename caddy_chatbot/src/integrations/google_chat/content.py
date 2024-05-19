@@ -36,6 +36,8 @@ INTRODUCE_CADDY_SUPERVISOR_IN_DM = "Hi, I'm the supervisor assistant for Caddy! 
 
 INTRODUCE_CADDY_SUPERVISOR_IN_SPACE = "Hi, thank you for adding me to {space_name}, I'm the supervisor assistant for Caddy! Caddy is an AI support for Citizens Advice advisers. \n\nCaddy uses information from the below sites to form answers: \nGOV UK \nCitizens Advice \nAdviserNet \n\n*To get started you will need to register the advisers into your supervision space so their messages come to you, you can do this by typing `/addUser` into the chat, other user management functionality can be seen using `/help`*"
 
+EXISTING_CALL_REMINDER = "<font color=\"#004F88\"><b>Active Caddy Interaction from {call_start_time}</b></font>\n\n<i>It looks like you've already got an open chat with Caddy that hasn't been marked as complete yet! While we're evaluating Caddy, it's really important we obtain a completed feedback survey from every call.</i> \n\n <font color=\"#004F88\"><b>Is this request to Caddy linked to a new call, or is your previous call still ongoing?</b></font>"
+
 # --- Google Chat Cards --- #
 
 PROCESSING_MESSAGE = {
@@ -171,6 +173,54 @@ CALL_COMPLETE = {
                                     "topLabel": "",
                                     "text": '<b><font color="#00ba01">Call complete</font></b>',
                                     "bottomLabel": "<b>Please complete the post call survey below</b>",
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+        },
+    ],
+}
+
+CONTINUE_EXISTING_INTERACTION = {
+    "cardsV2": [
+        {
+            "cardId": "continue_interaction",
+            "card": {
+                "sections": [
+                    {
+                        "widgets": [
+                            {
+                                "decoratedText": {
+                                    "icon": {"materialIcon": {"name": "resume"}},
+                                    "topLabel": "",
+                                    "text": '<b><font color="#004F88">Continuing existing interaction</font></b>',
+                                    "bottomLabel": "<b>Message sent to Caddy for processing</b>",
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+        },
+    ],
+}
+
+END_EXISTING_INTERACTION = {
+    "cardsV2": [
+        {
+            "cardId": "end_interaction",
+            "card": {
+                "sections": [
+                    {
+                        "widgets": [
+                            {
+                                "decoratedText": {
+                                    "icon": {"materialIcon": {"name": "call_end"}},
+                                    "topLabel": "",
+                                    "text": '<b><font color="#004F88">Finalising existing interaction</font></b>',
+                                    "bottomLabel": "<b>Complete the survey below for Caddy to process your new query.</b>",
                                 }
                             }
                         ]
