@@ -32,8 +32,6 @@ def check_user_status(user: str):
     """
     user_registered = users_table.get_item(Key={"userEmail": user})
     if "Item" in user_registered:
-        if "isApprover" in user_registered["Item"]:
-            return user_registered["Item"]["isApprover"], user_registered["Item"]
         return True, user_registered["Item"]
     else:
         return False, None
