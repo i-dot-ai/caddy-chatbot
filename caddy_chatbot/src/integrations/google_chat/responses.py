@@ -530,6 +530,101 @@ def supervisor_request_approved(user: str, initial_query: str) -> dict:
     return card
 
 
+def supervisor_request_processing(user: str, initial_query: str) -> dict:
+    """
+    Creates a supervisor request processing card
+
+    Args:
+        user (str): user who submitted the query
+        initial_query: query of the user
+
+    Returns:
+        card (dict)
+    """
+    card = {
+        "cardsV2": [
+            {
+                "cardId": "aiResponseCard",
+                "card": {
+                    "sections": [
+                        {
+                            "widgets": [
+                                {
+                                    "decoratedText": {
+                                        "icon": {
+                                            "materialIcon": {
+                                                "name": "quick_reference_all"
+                                            }
+                                        },
+                                        "text": '<b><font color="#171738">CADDY PROCESSING</font></b>',
+                                    }
+                                },
+                                {
+                                    "textParagraph": {
+                                        "text": initial_query,
+                                    }
+                                },
+                                {
+                                    "decoratedText": {
+                                        "bottomLabel": user,
+                                    }
+                                },
+                            ]
+                        }
+                    ],
+                },
+            },
+        ],
+    }
+    return card
+
+
+def supervisor_request_failed(user: str, initial_query: str) -> dict:
+    """
+    Creates a supervisor request failed card
+
+    Args:
+        user (str): user who submitted the query
+        initial_query: query of the user
+
+    Returns:
+        card (dict)
+    """
+    card = {
+        "cardsV2": [
+            {
+                "cardId": "aiResponseCard",
+                "card": {
+                    "sections": [
+                        {
+                            "widgets": [
+                                {
+                                    "decoratedText": {
+                                        "icon": {"materialIcon": {"name": "feedback"}},
+                                        "text": content.FAILURE,
+                                        "bottomLabel": "Please provide support if the adviser doesn't retry",
+                                    }
+                                },
+                                {
+                                    "textParagraph": {
+                                        "text": initial_query,
+                                    }
+                                },
+                                {
+                                    "decoratedText": {
+                                        "bottomLabel": user,
+                                    }
+                                },
+                            ]
+                        }
+                    ],
+                },
+            },
+        ],
+    }
+    return card
+
+
 def supervisor_request_pending(user: str, initial_query: str) -> dict:
     """
     Creates a supervisor request pending card

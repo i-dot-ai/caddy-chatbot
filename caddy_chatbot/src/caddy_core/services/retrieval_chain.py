@@ -20,7 +20,6 @@ from requests_aws4auth import AWS4Auth
 
 import re
 import os
-from typing import List, Any
 from datetime import datetime
 
 opensearch_https = os.environ.get("OPENSEARCH_HTTPS")
@@ -142,7 +141,7 @@ def build_chain(CADDY_PROMPT):
     llm = BedrockChat(
         model_id=os.environ.get("LLM"),
         region_name="eu-west-3",
-        model_kwargs={"temperature": 0.2, "max_tokens": 4000},
+        model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},
     )
 
     document_formatter = PromptTemplate(
@@ -159,16 +158,3 @@ def build_chain(CADDY_PROMPT):
 
     ai_prompt_timestamp = datetime.now()
     return chain, ai_prompt_timestamp
-
-
-def run_chain(chain, prompt: str, history: List[Any]):
-    ai_response = chain.invoke(
-        {
-            "input": prompt,
-            "chat_history": history,
-        }
-    )
-
-    ai_response_timestamp = datetime.now()
-
-    return ai_response, ai_response_timestamp
