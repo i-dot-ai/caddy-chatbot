@@ -1,7 +1,7 @@
 import os
 import re
 import json
-from typing import Optional
+from typing import Optional, Tuple, Dict
 
 
 from pytz import timezone
@@ -569,13 +569,12 @@ class GoogleChat:
 
         return card
 
-    def create_card(self, llm_response, source_documents) -> dict:
+    def create_card(self, llm_response) -> Dict:
         """
         Takes in the LLM response, extracts out any citations to the documents and adds them as reference links in the Google Chat card
 
         Args:
             llm_response: Response from LLM
-            source_documents: List of source documents
 
         Returns:
             Google Chat Card
@@ -593,7 +592,7 @@ class GoogleChat:
 
         reference_links_section = {"header": "Reference links", "widgets": []}
 
-        urls = re.findall(r"<ref_(http[s]?://[^>]+)>", llm_response.llm_answer)
+        urls = re.findall(r"<ref>(http[s]?://[^>]+)</ref>", llm_response)
 
         processed_urls = []
         ref = 0
@@ -602,13 +601,22 @@ class GoogleChat:
             if url in processed_urls:
                 continue
 
+            if "gov.uk" in url:
+                resource = "GOV UK"
+            elif "citizensadvice.org.uk/advisernet" in url:
+                resource = "Advisernet"
+            elif "citizensadvice.org.uk" in url:
+                resource = "Citizens Advice"
+
             ref = ref + 1
-            llm_response.llm_answer = llm_response.llm_answer.replace(
-                f"<ref_{url}>", f'<a href="{url}">[{ref}]</a>'
+            llm_response = llm_response.replace(
+                f"<ref>{url}</ref>", f'<a href="{url}">[{ref} - {resource}]</a>'
             )
 
             reference_link = {
-                "textParagraph": {"text": f'<a href="{url}">[{ref}] {url}</a>'}
+                "textParagraph": {
+                    "text": f'<a href="{url}">[{ref}- {resource}] {url}</a>'
+                }
             }
             if reference_link not in reference_links_section["widgets"]:
                 reference_links_section["widgets"].append(reference_link)
@@ -617,7 +625,7 @@ class GoogleChat:
 
         llm_response_section = {
             "widgets": [
-                {"textParagraph": {"text": llm_response.llm_answer}},
+                {"textParagraph": {"text": llm_response}},
             ],
         }
 
@@ -639,15 +647,36 @@ class GoogleChat:
 
         return thread_id, message_id
 
-    def respond_to_supervisor_thread(self, space_id, message, thread_id):
-        self.supervisor.spaces().messages().create(
-            parent=f"spaces/{space_id}",
-            body={
-                "cardsV2": message["cardsV2"],
-                "thread": {"name": f"spaces/{space_id}/threads/{thread_id}"},
-            },
-            messageReplyOption="REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD",
-        ).execute()
+    def respond_to_supervisor_thread(
+        self, space_id: str, message: Dict, thread_id: str
+    ) -> str:
+        """
+        Creates a message within a supervisor thread
+
+        Args:
+            space_id (str): id of the supervisor space
+            message (dict): card to be sent
+            thread_id (str): id of the supervisor space thread to create message in
+
+        Returns:
+            message_id: Id of the new message
+        """
+        response = (
+            self.supervisor.spaces()
+            .messages()
+            .create(
+                parent=f"spaces/{space_id}",
+                body={
+                    "cardsV2": message["cardsV2"],
+                    "thread": {"name": f"spaces/{space_id}/threads/{thread_id}"},
+                },
+                messageReplyOption="REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD",
+            )
+            .execute()
+        )
+
+        message_id = response["name"].split("/")[3]
+        return message_id
 
     # Update message in the supervisor space
     def update_message_in_supervisor_space(
@@ -675,7 +704,25 @@ class GoogleChat:
             name=f"spaces/{space_id}/messages/{message_id}"
         ).execute()
 
-    def create_supervision_request_card(self, user, initial_query):
+    def create_supervision_request_card(
+        self, user: str, initial_query: str
+    ) -> Tuple[Dict, Dict, Dict, Dict, Dict]:
+        """
+        Creates supervision request status cards
+
+        Args:
+            user (str): email of user who has submitted a query
+            initial_query (str): the user's query
+
+        Returns:
+            List[dict]: a list of the status cards
+        """
+        request_failed = self.responses.supervisor_request_failed(user, initial_query)
+
+        request_processing = self.responses.supervisor_request_processing(
+            user, initial_query
+        )
+
         request_awaiting = self.responses.supervisor_request_pending(
             user, initial_query
         )
@@ -688,7 +735,13 @@ class GoogleChat:
             user, initial_query
         )
 
-        return request_awaiting, request_approved, request_rejected
+        return (
+            request_failed,
+            request_processing,
+            request_awaiting,
+            request_approved,
+            request_rejected,
+        )
 
     def create_supervision_card(
         self,
@@ -697,8 +750,8 @@ class GoogleChat:
         new_request_message_id,
         request_approved,
         request_rejected,
+        card_for_approval,
     ):
-        card_for_approval = event.llm_response_json
         conversation_id = event.conversation_id
         response_id = event.response_id
         message_id = event.message_id
@@ -790,33 +843,6 @@ class GoogleChat:
         card_for_approval["cardsV2"][0]["card"]["sections"] = card_for_approval_sections
 
         return card_for_approval
-
-    def handle_new_supervision_event(self, user, supervisor_space, event):
-        (
-            request_awaiting,
-            request_approved,
-            request_rejected,
-        ) = self.create_supervision_request_card(
-            user=user, initial_query=event.llmPrompt
-        )
-        (
-            new_request_thread,
-            new_request_message_id,
-        ) = self.send_message_to_supervisor_space(
-            space_id=supervisor_space, message=request_awaiting
-        )
-
-        card = self.create_supervision_card(
-            user_email=user,
-            event=event,
-            new_request_message_id=new_request_message_id,
-            request_approved=request_approved,
-            request_rejected=request_rejected,
-        )
-
-        self.respond_to_supervisor_thread(
-            space_id=supervisor_space, message=card, thread_id=new_request_thread
-        )
 
     def create_approved_card(
         self, card: dict, approver: str, supervisor_notes: str
