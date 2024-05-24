@@ -36,9 +36,11 @@ Take particular note of the advice issue specific guidance in the <ADVICE_AREA_S
 
 YOU MUST ANSWER THE QUESTION FIRST AS BEST AS YOU CAN, CITING THE REFERENCES USED, BEFORE SUGGESTING QUESTIONS TO ASK THE CLIENT.
 
+You must provide an answer based only on the information from the references. You must use and provide a minimum of 2 references.
+
 In your answer, use <b>bold</b> and HTML formatting to highlight the most question-relevant parts in your response.
 
-Provide a TL;DR (too long; didn't read) response at the top with a clear one line response to the question. Enclosed \
+Provide a short summary response at the top with a clear one line response to the question. Enclosed \
 in <font color="#004f88"></font> tags. Example <font color="#004f88"><b>TL;DR</b><i>Client is not eligible for UC</i></font>
 
 Adviser: {input}

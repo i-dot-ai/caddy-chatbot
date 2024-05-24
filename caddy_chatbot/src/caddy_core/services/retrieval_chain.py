@@ -24,7 +24,7 @@ from typing import List, Any
 from datetime import datetime
 
 opensearch_https = os.environ.get("OPENSEARCH_HTTPS")
-embeddings = HuggingFaceEmbeddings(model_name="model")
+embeddings = HuggingFaceEmbeddings(model_name="all-mpnet-base-v2")  # distiluse-base-multilingual-cased-v2
 
 try:
     session = boto3.Session()
