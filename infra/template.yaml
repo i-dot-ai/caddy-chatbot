@@ -386,6 +386,14 @@ Resources:
                 Action:
                   - secretsmanager:GetSecretValue # pragma: allowlist secret
                 Resource: '*'
+        - PolicyName: !Sub CaddyAOSS-${StageName}
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - aoss:APIAccessAll
+                Resource: '*'
 
   UsersTable:
     Type: AWS::DynamoDB::Table
