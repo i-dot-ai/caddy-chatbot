@@ -67,11 +67,10 @@ def find_most_recent_caddy_vector_index():
     pattern = re.compile(opensearch_index + r"_(\d{8})$")
 
     # Fetch all indexes
-    index_list = client.cat.indices(format="json")
+    index_list = client.indices.get("*")
     most_recent_date = None
 
-    for index_info in index_list:
-        index_name = index_info["index"]
+    for index_name in index_list:
         match = pattern.match(index_name)
         if match:
             # Extract date from the index name
