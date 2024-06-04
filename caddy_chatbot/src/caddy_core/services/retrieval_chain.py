@@ -64,7 +64,7 @@ def find_most_recent_caddy_vector_index():
     most_recent_index = opensearch_index
 
     # Pattern to match indexes of interest
-    pattern = re.compile(r"caddy_vector_date_(\d{8})$")
+    pattern = re.compile(opensearch_index + r"_(\d{8})$")
 
     # Fetch all indexes
     index_list = client.cat.indices(format="json")

@@ -48,6 +48,9 @@ Parameters:
   OpensearchUrl:
     Type: String
     Description: Url for Opensearch
+  OpensearchIndex:
+    Type: String
+    Description: Index for Opensearch
 
 Resources:
   CaddyVPC:
@@ -247,7 +250,7 @@ Resources:
             - Name: OPENSEARCH_HTTPS
               Value: !Ref OpensearchUrl
             - Name: OPENSEARCH_INDEX
-              Value: caddy_vector_index
+              Value: !Ref OpensearchIndex
             - Name: CADDY_GOOGLE_CLOUD_PROJECT
               Value: !Ref CaddyGoogleCloudProject
             - Name: CADDY_SUPERVISOR_GOOGLE_CLOUD_PROJECT
