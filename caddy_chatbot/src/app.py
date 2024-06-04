@@ -104,8 +104,8 @@ def google_chat_endpoint(event=Depends(verify_google_chat_request)) -> dict:
                     return google_chat.responses.NO_CONTENT
                 case "end_existing_interaction":
                     google_chat.end_existing_interaction(event)
-                    return google_chat.responses.NO_CONTENT
-                case "survey_response":
+                    # Changes start here
+                    # Handle the final survey response directly
                     message_event = google_chat.handle_survey_response(event)
                     if message_event:
                         event["message"]["text"] = message_event
@@ -118,10 +118,11 @@ def google_chat_endpoint(event=Depends(verify_google_chat_request)) -> dict:
                             },
                         )
                         process_message_thread.start()
-                    return google_chat.responses.ACCEPTED
-                case "call_complete":
                     google_chat.finalise_caddy_call(event)
                     return google_chat.responses.ACCEPTED
+                '''case "call_complete":
+                    google_chat.finalise_caddy_call(event)
+                    return google_chat.responses.ACCEPTED'''
         case _:
             return Response(status_code=status.HTTP_404_NOT_FOUND)
 
