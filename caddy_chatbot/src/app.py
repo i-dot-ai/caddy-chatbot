@@ -123,6 +123,8 @@ def google_chat_endpoint(event=Depends(verify_google_chat_request)) -> dict:
                 # case "call_complete":
                 #    google_chat.finalise_caddy_call(event)
                 #    return google_chat.responses.ACCEPTED
+
+
         case _:
             return Response(status_code=status.HTTP_404_NOT_FOUND)
 
