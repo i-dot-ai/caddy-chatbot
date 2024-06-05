@@ -3,11 +3,11 @@ from semantic_router import Route, RouteLayer
 from semantic_router.encoders import BedrockEncoder
 
 session = boto3.Session()
-credentials = session.get_credentials().get_frozen_credentials()
+credentials = session.get_credentials()
 embeddings = BedrockEncoder(
     access_key_id=credentials.access_key,
     secret_access_key=credentials.secret_key,
-    session_token=credentials.token or "",
+    session_token=credentials.token,
     region="eu-west-3",
 )
 
