@@ -262,51 +262,43 @@ class GoogleChat:
 
     def handle_survey_response(self, event):
         user = event["user"]["email"]
-        question = event["common"]["parameters"]["question"]
-        response = event["common"]["parameters"]["response"]
+        survey_responses = event["common"]["formInputs"]
         threadId = event["common"]["parameters"]["threadId"]
         message_event = None
         card = event["message"]["cardsV2"]
         spaceId = event["space"]["name"].split("/")[1]
         messageId = event["message"]["name"].split("/")[3]
 
-        survey_response = [{question: response}]
+        questions_and_values = []
+        for question, response in survey_responses.items():
+            value = response["stringInputs"]["value"][0]
+            questions_and_values.append({question: value})
 
         evaluation_table.update_item(
             Key={"threadId": str(threadId)},
             UpdateExpression="set surveyResponse = list_append(if_not_exists(surveyResponse, :empty_list), :surveyResponse)",
             ExpressionAttributeValues={
-                ":surveyResponse": survey_response,
+                ":surveyResponse": questions_and_values,
                 ":empty_list": [],
             },
             ReturnValues="UPDATED_NEW",
         )
 
-        remaining_sections = len(card[0]["card"]["sections"])
+        card[0]["card"]["sections"].pop()
+        card[0]["card"]["sections"].append(self.messages.SURVEY_COMPLETE_WIDGET)
 
-        for i in range(remaining_sections):
-            if (
-                card[0]["card"]["sections"][i]["widgets"][1]["textParagraph"]["text"]
-                == f"<b>{question}</b>"
-            ):
-                del card[0]["card"]["sections"][i]
-                remaining_sections -= 1
-                break
-
-        if remaining_sections == 0:
-            card[0]["card"]["sections"].append(self.messages.SURVEY_COMPLETE_WIDGET)
-            evaluation_table.update_item(
-                Key={"threadId": str(threadId)},
-                UpdateExpression="set surveyCompleteTimestamp = :timestamp",
-                ExpressionAttributeValues={
-                    ":timestamp": datetime.now(timezone("Europe/London")).strftime(
-                        "%d-%m-%Y %H:%M:%S"
-                    ),
-                },
-                ReturnValues="UPDATED_NEW",
-            )
-            caddy.mark_call_complete(user=user, thread_id=threadId)
-            message_event = event["common"]["parameters"]["event"]
+        evaluation_table.update_item(
+            Key={"threadId": str(threadId)},
+            UpdateExpression="set surveyCompleteTimestamp = :timestamp",
+            ExpressionAttributeValues={
+                ":timestamp": datetime.now(timezone("Europe/London")).strftime(
+                    "%d-%m-%Y %H:%M:%S"
+                ),
+            },
+            ReturnValues="UPDATED_NEW",
+        )
+        caddy.mark_call_complete(user=user, thread_id=threadId)
+        message_event = event["common"]["parameters"]["event"]
 
         self.update_survey_card_in_adviser_space(
             space_id=spaceId, message_id=messageId, card={"cardsV2": card}
@@ -526,46 +518,49 @@ class GoogleChat:
             ],
         }
 
+        section = {"widgets": []}
+        button_section = {"buttonList": {"buttons": []}}
+
         i = 0
         for question_dict in post_call_survey_questions:
             i += 1
             question = question_dict["question"]
             values = question_dict["values"]
-            section = {"widgets": []}
 
-            label_section = {
-                "decoratedText": {
-                    "topLabel": f"Question {i}",
+            question_dropdown = {
+                "selectionInput": {
+                    "name": question,
+                    "label": question,
+                    "type": "DROPDOWN",
+                    "items": [],
                 }
             }
 
-            question_section = {"textParagraph": {"text": f"<b>{question}</b>"}}
-
-            button_section = {"buttonList": {"buttons": []}}
-
             for value in values:
-                button_section["buttonList"]["buttons"].append(
-                    {
-                        "text": value,
-                        "onClick": {
-                            "action": {
-                                "function": "survey_response",
-                                "parameters": [
-                                    {"key": "question", "value": question},
-                                    {"key": "response", "value": value},
-                                    {"key": "threadId", "value": thread_id},
-                                    {"key": "event", "value": event},
-                                ],
-                            }
-                        },
-                    }
+                question_dropdown["selectionInput"]["items"].append(
+                    {"text": value, "value": value, "selected": False}
                 )
 
-            section["widgets"].append(label_section)
-            section["widgets"].append(question_section)
-            section["widgets"].append(button_section)
+            section["widgets"].append(question_dropdown)
 
-            card["cardsV2"][0]["card"]["sections"].append(section)
+        submit_button = {
+            "text": "Submit",
+            "onClick": {
+                "action": {
+                    "function": "survey_response",
+                    "parameters": [
+                        {"key": "threadId", "value": thread_id},
+                        {"key": "event", "value": event},
+                    ],
+                }
+            },
+        }
+
+        button_section["buttonList"]["buttons"].append(submit_button)
+
+        section["widgets"].append(button_section)
+
+        card["cardsV2"][0]["card"]["sections"].append(section)
 
         return card
 
@@ -883,6 +878,21 @@ class GoogleChat:
 
         approved_card = self.create_approved_card(card, approver, supervisor_notes)
 
+        domain = user_email.split("@")[1]
+        _, office = enrolment.check_domain_status(domain)
+        included_in_rct = enrolment.check_rct_status(office)
+        if included_in_rct is True:
+            approved_card = self.append_survey_questions(
+                approved_card, thread_id, user_email
+            )
+
+        self.update_dynamic_message_in_adviser_space(
+            space_id=user_space,
+            message_id=user_message_id,
+            response_type="cardsV2",
+            message=approved_card,
+        )
+
         updated_supervision_card = self.create_updated_supervision_card(
             supervision_card=supervisor_card,
             approver=approver,
@@ -899,13 +909,6 @@ class GoogleChat:
             space_id=supervisor_space,
             message_id=request_message_id,
             new_message=request_card,
-        )
-
-        self.update_dynamic_message_in_adviser_space(
-            space_id=user_space,
-            message_id=user_message_id,
-            response_type="cardsV2",
-            message=approved_card,
         )
 
         approval_event = ApprovalEvent(
@@ -945,6 +948,18 @@ class GoogleChat:
         request_card = json.loads(event["common"]["parameters"]["requestRejected"])
         user_email = event["common"]["parameters"]["userEmail"]
 
+        rejection_card = self.responses.supervisor_rejection(
+            approver=approver, supervisor_message=supervisor_message
+        )
+
+        domain = user_email.split("@")[1]
+        _, office = enrolment.check_domain_status(domain)
+        included_in_rct = enrolment.check_rct_status(office)
+        if included_in_rct is True:
+            rejection_card = self.append_survey_questions(
+                rejection_card, thread_id, user_email
+            )
+
         self.update_message_in_supervisor_space(
             space_id=supervisor_space,
             message_id=request_message_id,
@@ -955,9 +970,7 @@ class GoogleChat:
             space_id=user_space,
             message_id=user_message_id,
             response_type="cardsV2",
-            message=self.responses.supervisor_rejection(
-                approver=approver, supervisor_message=supervisor_message
-            ),
+            message=rejection_card,
         )
 
         updated_supervision_card = self.create_updated_supervision_card(
@@ -983,12 +996,6 @@ class GoogleChat:
         )
 
         caddy.store_approver_event(rejection_event)
-
-        domain = user_email.split("@")[1]
-        _, office = enrolment.check_domain_status(domain)
-        included_in_rct = enrolment.check_rct_status(office)
-        if included_in_rct is True:
-            self.call_complete_confirmation(user_email, user_space, thread_id)
 
     def create_updated_supervision_card(
         self, supervision_card, approver, approved, supervisor_message
@@ -1175,6 +1182,20 @@ class GoogleChat:
         event["proceed"] = True
         return self.format_message(event)
 
+    def handle_control_group_query(self, event) -> CaddyMessageEvent:
+        """
+        Handles a control group forward
+
+        Args:
+            Google Chat Event
+
+        Returns:
+            CaddyMessageEvent
+        """
+        message_event = event["common"]["parameters"]["message_event"]
+        caddy_message_event = json.loads(message_event)
+        return CaddyMessageEvent.model_validate(caddy_message_event)
+
     def handle_supervisor_approval(self, event):
         """
         Handles inbound Google Chat supervisor approvals
@@ -1192,12 +1213,6 @@ class GoogleChat:
             approval_event,
         ) = self.received_approval(event)
         caddy.store_approver_event(approval_event)
-
-        domain = user.split("@")[1]
-        _, office = enrolment.check_domain_status(domain)
-        included_in_rct = enrolment.check_rct_status(office)
-        if included_in_rct is True:
-            self.call_complete_confirmation(user, user_space, thread_id)
 
     def continue_existing_interaction(self, event):
         """
@@ -1240,3 +1255,21 @@ class GoogleChat:
             card=self.messages.END_EXISTING_INTERACTION,
         )
         self.run_survey(survey_card, user_space, thread_id)
+
+    def append_survey_questions(self, card: dict, thread_id: dict, user: str) -> dict:
+        """
+        Appends survey directly to response card for RCT users
+
+        Args:
+            card (dict): response card
+            thread_id (str): the thread_id of the query
+            user (str): the user who provided the query
+
+        Returns:
+            card (dict): returns the processed card with survey questions appended
+        """
+        survey_card = self.get_survey_card(thread_id, user)
+        card["cardsV2"][0]["card"]["sections"].append(
+            survey_card["cardsV2"][0]["card"]["sections"]
+        )
+        return card
