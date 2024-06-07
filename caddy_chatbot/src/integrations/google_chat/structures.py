@@ -268,6 +268,7 @@ class GoogleChat:
         card = event["message"]["cardsV2"]
         spaceId = event["space"]["name"].split("/")[1]
         messageId = event["message"]["name"].split("/")[3]
+        message_event = event["common"]["parameters"]["event"]
 
         questions_and_values = []
         for question, response in survey_responses.items():
@@ -285,6 +286,8 @@ class GoogleChat:
         )
 
         card[0]["card"]["sections"].pop()
+        if message_event:
+            card[0]["card"]["sections"].pop()
         card[0]["card"]["sections"].append(self.messages.SURVEY_COMPLETE_WIDGET)
 
         evaluation_table.update_item(
@@ -298,7 +301,6 @@ class GoogleChat:
             ReturnValues="UPDATED_NEW",
         )
         caddy.mark_call_complete(user=user, thread_id=threadId)
-        message_event = event["common"]["parameters"]["event"]
 
         self.update_survey_card_in_adviser_space(
             space_id=spaceId, message_id=messageId, card={"cardsV2": card}
@@ -1242,21 +1244,21 @@ class GoogleChat:
         """
         user = event["user"]["email"]
         user_space = event["space"]["name"].split("/")[1]
-        thread_id = event["message"]["thread"]["name"].split("/")[3]
+        message_id = event["message"]["name"].split("/")[3]
         survey_thread_id = event["common"]["parameters"]["thread_id"]
         message_event = json.loads(event["common"]["parameters"]["message_event"])
         message_event = message_event["message"]["text"]
-        survey_card = self.get_survey_card(
-            thread_id=survey_thread_id, user=user, event=message_event
-        )
+        card = self.messages.END_EXISTING_INTERACTION
+        card = self.append_survey_questions(card, survey_thread_id, user, message_event)
         self.update_survey_card_in_adviser_space(
-            space_id=event["space"]["name"].split("/")[1],
-            message_id=event["message"]["name"].split("/")[3],
-            card=self.messages.END_EXISTING_INTERACTION,
+            space_id=user_space,
+            message_id=message_id,
+            card=card,
         )
-        self.run_survey(survey_card, user_space, thread_id)
 
-    def append_survey_questions(self, card: dict, thread_id: dict, user: str) -> dict:
+    def append_survey_questions(
+        self, card: dict, thread_id: dict, user: str, event: Optional[dict] = None
+    ) -> dict:
         """
         Appends survey directly to response card for RCT users
 
@@ -1264,11 +1266,11 @@ class GoogleChat:
             card (dict): response card
             thread_id (str): the thread_id of the query
             user (str): the user who provided the query
-
+            event (Optional[dict]): allows providing of an event for request continuation
         Returns:
             card (dict): returns the processed card with survey questions appended
         """
-        survey_card = self.get_survey_card(thread_id, user)
+        survey_card = self.get_survey_card(thread_id, user, event)
         card["cardsV2"][0]["card"]["sections"].append(
             survey_card["cardsV2"][0]["card"]["sections"]
         )
