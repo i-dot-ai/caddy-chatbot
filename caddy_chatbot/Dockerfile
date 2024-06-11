@@ -1,13 +1,13 @@
 FROM --platform=linux/amd64 python:3.12-slim
 
 RUN pip install poetry
-RUN poetry env use 3.12.3
 RUN poetry config virtualenvs.create false
 
 COPY pyproject.toml caddy_chatbot/src ./caddy_chatbot/
 
 WORKDIR /caddy_chatbot
 
+RUN poetry env use 3.12.3
 RUN poetry install
 
 RUN spacy download en_core_web_sm
