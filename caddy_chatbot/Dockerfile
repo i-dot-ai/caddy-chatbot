@@ -7,6 +7,7 @@ COPY pyproject.toml caddy_chatbot/src ./caddy_chatbot/
 
 WORKDIR /caddy_chatbot
 
+RUN poetry env use 3.12.3
 RUN poetry install
 
 RUN spacy download en_core_web_sm
