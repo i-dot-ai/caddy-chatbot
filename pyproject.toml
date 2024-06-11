@@ -7,7 +7,7 @@ license = "MIT"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "3.12.*"
+python = "3.12.3"
 pydantic-settings = "^2.2.1"
 google-auth = "^2.29.0"
 google-api-python-client = "^2.125.0"
