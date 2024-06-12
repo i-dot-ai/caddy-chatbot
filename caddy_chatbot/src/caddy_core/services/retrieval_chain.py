@@ -36,8 +36,8 @@ try:
     session = boto3.Session()
     credentials = session.get_credentials()
     auth = AWS4Auth(
-        region=alternate_region,
-        service="aoss",
+        region=os.environ.get("AWS_REGION"),
+        service="es",
         refreshable_credentials=credentials,
     )
 except NoCredentialsError:
