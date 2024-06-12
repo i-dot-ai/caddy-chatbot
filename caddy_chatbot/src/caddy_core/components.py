@@ -333,6 +333,7 @@ def check_existing_call(caddy_message) -> Tuple[Dict[str, Any], bool]:
 
 def send_to_llm(caddy_query: UserMessage, chat_client):
     query = caddy_query.message
+    
     domain = caddy_query.user_email.split("@")[1]
 
     chat_history = get_chat_history(caddy_query)
