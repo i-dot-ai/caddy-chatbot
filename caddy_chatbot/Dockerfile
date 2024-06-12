@@ -1,4 +1,4 @@
-FROM --platform=linux/amd64 python:3.12-slim
+FROM python:3.12.3
 
 RUN pip install poetry
 RUN poetry config virtualenvs.create false

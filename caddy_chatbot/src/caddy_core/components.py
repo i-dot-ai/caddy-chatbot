@@ -69,18 +69,14 @@ def handle_message(caddy_message, chat_client):
     store_message(message_query)
 
     if continue_conversation is False:
+        control_group_card = chat_client.responses.control_group_selection(
+            control_group_message, caddy_message
+        )
         chat_client.update_message_in_adviser_space(
             message_type="cardsV2",
             space_id=message_query.conversation_id,
             message_id=message_query.message_id,
-            message=chat_client.responses.control_group_selection(
-                control_group_message
-            ),
-        )
-        chat_client.call_complete_confirmation(
-            user=message_query.user_email,
-            user_space=message_query.conversation_id,
-            thread_id=message_query.thread_id,
+            message=control_group_card,
         )
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -337,6 +333,8 @@ def check_existing_call(caddy_message) -> Tuple[Dict[str, Any], bool]:
 
 def send_to_llm(caddy_query: UserMessage, chat_client):
     query = caddy_query.message
+    
+    domain = caddy_query.user_email.split("@")[1]
 
     chat_history = get_chat_history(caddy_query)
 
@@ -346,7 +344,8 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
         "%A %d %B %Y %H:%M"
     )
 
-    office_regions = enrolment.get_office_coverage(caddy_query.user_email.split("@")[1])
+    _, office = enrolment.check_domain_status(domain)
+    office_regions = enrolment.get_office_coverage(office)
 
     CADDY_PROMPT = PromptTemplate(
         template=CADDY_PROMPT_TEMPLATE,

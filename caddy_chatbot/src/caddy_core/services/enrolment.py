@@ -55,14 +55,13 @@ def check_user_role(user_record: dict):
     return False
 
 
-def get_office_coverage(domain: str):
+def get_office_coverage(office: dict):
     """
     Gets areas covered for the office
     """
-    office = offices_table.get_item(Key={"emailDomain": domain})
     coverage = ["England"]
-    if "officeCoverage" in office["Item"]:
-        coverage = office["Item"]["officeCoverage"]
+    if "officeCoverage" in office:
+        coverage = office["officeCoverage"]
     return coverage
 
 

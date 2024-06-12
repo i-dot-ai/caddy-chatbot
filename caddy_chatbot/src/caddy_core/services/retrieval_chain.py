@@ -1,5 +1,6 @@
 from langchain_community.chat_models import BedrockChat
 from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.embeddings import BedrockEmbeddings
 from langchain_community.vectorstores import OpenSearchVectorSearch
 from langchain_community.document_transformers import EmbeddingsClusteringFilter
 
@@ -22,7 +23,13 @@ import re
 import os
 from datetime import datetime
 
+alternate_region = "eu-west-3"
+
 opensearch_https = os.environ.get("OPENSEARCH_HTTPS")
+bedrock_embeddings = BedrockEmbeddings(
+    model_id="amazon.titan-embed-image-v1", region_name=alternate_region
+)
+
 embeddings = HuggingFaceEmbeddings(model_name="model")
 
 try:
@@ -60,14 +67,13 @@ def find_most_recent_caddy_vector_index():
     most_recent_index = opensearch_index
 
     # Pattern to match indexes of interest
-    pattern = re.compile(r"caddy_vector_index_(\d{8})$")
+    pattern = re.compile(opensearch_index + r"_(\d{8})$")
 
     # Fetch all indexes
-    index_list = client.cat.indices(format="json")
+    index_list = client.indices.get("*")
     most_recent_date = None
 
-    for index_info in index_list:
-        index_name = index_info["index"]
+    for index_name in index_list:
         match = pattern.match(index_name)
         if match:
             # Extract date from the index name
@@ -140,7 +146,7 @@ def build_chain(CADDY_PROMPT):
 
     llm = BedrockChat(
         model_id=os.environ.get("LLM"),
-        region_name="eu-west-3",
+        region_name=alternate_region,
         model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},
     )
 

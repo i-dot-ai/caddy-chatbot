@@ -363,7 +363,7 @@ def supervisor_rejection(approver: str, supervisor_message: str) -> dict:
     return card
 
 
-def control_group_selection(control_group_message) -> dict:
+def control_group_selection(control_group_message, caddy_message) -> dict:
     """
     Formats a control group message into a control group selection response card
 
@@ -389,6 +389,40 @@ def control_group_selection(control_group_message) -> dict:
                                     }
                                 },
                                 {"textParagraph": {"text": control_group_message}},
+                                {
+                                    "buttonList": {
+                                        "buttons": [
+                                            {
+                                                "text": "Forward query to supervisor",
+                                                "onClick": {
+                                                    "action": {
+                                                        "function": "handle_control_group_forward",
+                                                        "parameters": [
+                                                            {
+                                                                "key": "message_event",
+                                                                "value": caddy_message.model_dump_json(),
+                                                            },
+                                                        ],
+                                                    }
+                                                },
+                                            },
+                                            {
+                                                "text": "Complete control survey",
+                                                "onClick": {
+                                                    "action": {
+                                                        "function": "control_group_survey",
+                                                        "parameters": [
+                                                            {
+                                                                "key": "message_event",
+                                                                "value": caddy_message.model_dump_json(),
+                                                            },
+                                                        ],
+                                                    }
+                                                },
+                                            },
+                                        ]
+                                    }
+                                },
                             ]
                         }
                     ]
@@ -468,6 +502,51 @@ def supervisor_request_rejected(user: str, initial_query: str) -> dict:
                                 {
                                     "textParagraph": {
                                         "text": initial_query,
+                                    }
+                                },
+                                {
+                                    "decoratedText": {
+                                        "bottomLabel": user,
+                                    }
+                                },
+                            ]
+                        }
+                    ],
+                },
+            },
+        ],
+    }
+    return card
+
+
+def message_control_forward(user: str, query: str) -> dict:
+    """
+    Creates a supervisor request forward card
+
+    Args:
+        user (str): user who submitted the query
+        initial_query: query of the user
+
+    Returns:
+        card (dict)
+    """
+    card = {
+        "cardsV2": [
+            {
+                "cardId": "requestForward",
+                "card": {
+                    "sections": [
+                        {
+                            "widgets": [
+                                {
+                                    "decoratedText": {
+                                        "icon": {"materialIcon": {"name": "help"}},
+                                        "text": '<b><font color="#006278">Supervisor support required</font></b>',
+                                    }
+                                },
+                                {
+                                    "textParagraph": {
+                                        "text": query,
                                     }
                                 },
                                 {
