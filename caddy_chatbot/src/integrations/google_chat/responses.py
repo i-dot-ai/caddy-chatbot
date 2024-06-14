@@ -393,7 +393,7 @@ def control_group_selection(control_group_message, caddy_message) -> dict:
                                     "buttonList": {
                                         "buttons": [
                                             {
-                                                "text": "Forward query to supervisor, then complete survey",
+                                                "text": "I still need help, forward query to supervisor, then complete survey",
                                                 "onClick": {
                                                     "action": {
                                                         "function": "handle_control_group_forward",
@@ -407,7 +407,7 @@ def control_group_selection(control_group_message, caddy_message) -> dict:
                                                 },
                                             },
                                             {
-                                                "text": "I no longer need help. Complete control survey",
+                                                "text": "I no longer need help. Complete survey",
                                                 "onClick": {
                                                     "action": {
                                                         "function": "control_group_survey",
