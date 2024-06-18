@@ -560,6 +560,23 @@ class GoogleChat:
 
         button_section["buttonList"]["buttons"].append(submit_button)
 
+
+
+        copy_button = {
+            "text": "Copy caddy message",
+            "onClick": {
+                "action": {
+                    "function": "copy_caddy_response",
+                    "parameters": [
+                        {"key": "threadId", "value": thread_id},
+                        {"key": "event", "value": event},
+                    ],
+                }
+            },
+        }
+
+        button_section["buttonList"]["buttons"].append(copy_button)
+
         section["widgets"].append(button_section)
 
         card["cardsV2"][0]["card"]["sections"].append(section)

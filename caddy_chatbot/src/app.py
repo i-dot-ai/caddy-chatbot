@@ -10,6 +10,7 @@ from integrations.google_chat.verification import (
     verify_google_chat_supervision_request,
 )
 
+import pyperclip
 
 from threading import Thread
 
@@ -155,6 +156,8 @@ def google_chat_endpoint(event=Depends(verify_google_chat_request)) -> dict:
                 case "end_existing_interaction":
                     google_chat.end_existing_interaction(event)
                     return google_chat.responses.NO_CONTENT
+                case "copy_caddy_response":
+                    pyperclip.copy(event["common"]["parameters"]["aiResponse"])
                 case "survey_response":
                     message_event = google_chat.handle_survey_response(event)
                     if message_event:
