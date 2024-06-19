@@ -523,6 +523,21 @@ class GoogleChat:
         section = {"widgets": []}
         button_section = {"buttonList": {"buttons": []}}
 
+        copy_button = {
+            "text": "Copy caddy message",
+            "onClick": {
+                "action": {
+                    "function": "copy_caddy_response",
+                    "parameters": [
+                        {"key": "threadId", "value": thread_id},
+                        {"key": "event", "value": event},
+                    ],
+                }
+            },
+        }
+
+        button_section["buttonList"]["buttons"].append(copy_button)
+
         i = 0
         for question_dict in post_call_survey_questions:
             i += 1
@@ -559,23 +574,6 @@ class GoogleChat:
         }
 
         button_section["buttonList"]["buttons"].append(submit_button)
-
-
-
-        copy_button = {
-            "text": "Copy caddy message",
-            "onClick": {
-                "action": {
-                    "function": "copy_caddy_response",
-                    "parameters": [
-                        {"key": "threadId", "value": thread_id},
-                        {"key": "event", "value": event},
-                    ],
-                }
-            },
-        }
-
-        button_section["buttonList"]["buttons"].append(copy_button)
 
         section["widgets"].append(button_section)
 
