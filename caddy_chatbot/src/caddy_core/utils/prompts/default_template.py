@@ -22,7 +22,8 @@ stated in the question, and make sure your answer is relevant to the laws and ru
 to ensure that any deadlines have not already passed.
 
 You are delivering your response to the client through the advisor. \
-If the question discusses 'my client', your answer should refer to 'You'. \
+Your answer should be in the second person. \
+If the question discusses 'my client', your answer should refer to the client in the 2nd person 'You'. \
 You can refer to the documents as 'information available' \
 
 If more information is needed to definitively answer the question, number a step by step set of questions that the adviser should ask the client to find out this missing information. \
@@ -49,7 +50,7 @@ Assistant:"""
 CADDY_FALLBACK_EXAMPLE = """For example, if the question is "My client has moved into a leasehold flat and has to pay service charges of £40 per week. They receive Universal Credit, can they get help to pay \
 the charges?" you could respond with:
 -----
-Youhas moved into a leasehold flat and has to pay service charges of £40 per week. As you receive Universal Credit, you may be able to get help with paying the \
+You have moved into a leasehold flat and have to pay service charges of £40 per week. As you receive Universal Credit, you may be able to get help with paying the \
 service charges.
 
 To determine if you can get help, you need to find out:
