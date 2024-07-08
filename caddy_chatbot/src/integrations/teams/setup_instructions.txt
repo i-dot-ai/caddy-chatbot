@@ -1,0 +1,3 @@
+These are setup instructions for teams
+1. download node using brew 'brew install node'
+2. install bot framework cli
