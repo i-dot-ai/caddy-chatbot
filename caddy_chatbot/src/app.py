@@ -10,6 +10,12 @@ from integrations.google_chat.verification import (
     verify_google_chat_supervision_request,
 )
 
+from integrations.microsoft_teams.verification import teams_adapter
+from botbuilder.core import (
+    TurnContext,
+)
+from botbuilder.schema import Activity
+
 import pyperclip
 
 from threading import Thread
@@ -250,10 +256,22 @@ def google_chat_supervision_endpoint(
 
 
 @app.post("/microsoft-teams/chat")
-def microsoft_teams_endpoint(request: Request):
-    return JSONResponse(
-        status_code=status.HTTP_200_OK, content={"text": "Request received"}
-    )
+async def microsoft_teams_endpoint(request: Request):
+    async def on_turn(turn_context: TurnContext):
+        if turn_context.activity.type == "message":
+            await turn_context.send_activity(f"You said: {turn_context.activity.text}")
+
+    body = await request.body()
+    activity = Activity().deserialize(await request.json())
+    auth_header = request.headers.get("Authorization", "")
+
+    response = Response()
+
+    async def aux_func(turn_context):
+        await on_turn(turn_context)
+
+    await teams_adapter.process_activity(activity, auth_header, aux_func)
+    return response
 
 
 @app.post("/microsoft-teams/supervision")
