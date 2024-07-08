@@ -10,11 +10,10 @@ from integrations.google_chat.verification import (
     verify_google_chat_supervision_request,
 )
 
-from integrations.microsoft_teams.verification import teams_adapter
-from botbuilder.core import (
-    TurnContext,
-)
+from integrations.microsoft_teams.verification import teams_adapter, on_turn
+
 from botbuilder.schema import Activity
+import asyncio
 
 import pyperclip
 
@@ -256,21 +255,20 @@ def google_chat_supervision_endpoint(
 
 
 @app.post("/microsoft-teams/chat")
-async def microsoft_teams_endpoint(request: Request):
-    async def on_turn(turn_context: TurnContext):
-        if turn_context.activity.type == "message":
-            await turn_context.send_activity(f"You said: {turn_context.activity.text}")
-
-    body = await request.body()
-    activity = Activity().deserialize(await request.json())
+def microsoft_teams_endpoint(request: Request):
+    # Synchronous wrapper for asynchronous body reading
+    # body = asyncio.run(request.body())
+    # Synchronous wrapper for asynchronous JSON parsing
+    activity = Activity().deserialize(asyncio.run(request.json()))
     auth_header = request.headers.get("Authorization", "")
 
     response = Response()
 
-    async def aux_func(turn_context):
-        await on_turn(turn_context)
+    def aux_func(turn_context):
+        on_turn(turn_context)
 
-    await teams_adapter.process_activity(activity, auth_header, aux_func)
+    # Use run_sync to run the asynchronous process_activity method
+    asyncio.run(teams_adapter.process_activity(activity, auth_header, aux_func))
     return response
 
 
