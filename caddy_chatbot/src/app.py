@@ -10,9 +10,26 @@ from integrations.google_chat.verification import (
     verify_google_chat_supervision_request,
 )
 
+from botbuilder.core import (
+    BotFrameworkAdapter,
+    BotFrameworkAdapterSettings,
+    TurnContext,
+)
+from botbuilder.schema import Activity
+
 import pyperclip
 
 from threading import Thread
+
+import os
+
+# Configure Bot
+APP_ID = os.getenv("MicrosoftAppId", "")
+APP_PASSWORD = os.getenv("MicrosoftAppPassword", "")
+
+# Create adapter
+SETTINGS = BotFrameworkAdapterSettings(APP_ID, APP_PASSWORD)
+ADAPTER = BotFrameworkAdapter(SETTINGS)
 
 app = FastAPI(docs_url=None)
 
@@ -250,10 +267,22 @@ def google_chat_supervision_endpoint(
 
 
 @app.post("/microsoft-teams/chat")
-def microsoft_teams_endpoint(request: Request):
-    return JSONResponse(
-        status_code=status.HTTP_200_OK, content={"text": "Request received"}
-    )
+async def microsoft_teams_endpoint(request: Request):
+    async def on_turn(turn_context: TurnContext):
+        if turn_context.activity.type == "message":
+            await turn_context.send_activity(f"You said: {turn_context.activity.text}")
+
+    body = await request.body()
+    activity = Activity().deserialize(await request.json())
+    auth_header = request.headers.get("Authorization", "")
+
+    response = Response()
+
+    async def aux_func(turn_context):
+        await on_turn(turn_context)
+
+    await ADAPTER.process_activity(activity, auth_header, aux_func)
+    return response
 
 
 @app.post("/microsoft-teams/supervision")
