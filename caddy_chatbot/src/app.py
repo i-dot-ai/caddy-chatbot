@@ -10,9 +10,8 @@ from integrations.google_chat.verification import (
     verify_google_chat_supervision_request,
 )
 
+from integrations.microsoft_teams.verification import teams_adapter
 from botbuilder.core import (
-    BotFrameworkAdapter,
-    BotFrameworkAdapterSettings,
     TurnContext,
 )
 from botbuilder.schema import Activity
@@ -20,16 +19,6 @@ from botbuilder.schema import Activity
 import pyperclip
 
 from threading import Thread
-
-import os
-
-# Configure Bot
-APP_ID = os.getenv("MicrosoftAppId", "")
-APP_PASSWORD = os.getenv("MicrosoftAppPassword", "")
-
-# Create adapter
-SETTINGS = BotFrameworkAdapterSettings(APP_ID, APP_PASSWORD)
-ADAPTER = BotFrameworkAdapter(SETTINGS)
 
 app = FastAPI(docs_url=None)
 
@@ -281,7 +270,7 @@ async def microsoft_teams_endpoint(request: Request):
     async def aux_func(turn_context):
         await on_turn(turn_context)
 
-    await ADAPTER.process_activity(activity, auth_header, aux_func)
+    await teams_adapter.process_activity(activity, auth_header, aux_func)
     return response
 
 
