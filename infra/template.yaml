@@ -51,6 +51,12 @@ Parameters:
   OpensearchIndex:
     Type: String
     Description: Index for Opensearch
+  MicrosoftAppIdSecretArn:
+    Type: String
+    Description: Secret Arn for App Id for Teams integration
+  MicrosoftAppPasswordSecretArn:
+    Type: String
+    Description: Secret Arn for App password for Teams integration
 
 Resources:
   CaddyVPC:
@@ -228,6 +234,10 @@ Resources:
               ValueFrom: !Ref CaddyServiceAccountSecretArn
             - Name: CADDY_SUPERVISOR_SERVICE_ACCOUNT
               ValueFrom: !Ref CaddySupervisorServiceAccountSecretArn
+            - Name: MicrosoftAppId
+              ValueFrom: !Ref MicrosoftAppIdSecretArn
+            - Name: MicrosoftAppPassword
+              ValueFrom: !Ref MicrosoftAppPasswordSecretArn
           Environment:
             - Name: MESSAGES_TABLE_NAME
               Value: !Ref MessageTableName
