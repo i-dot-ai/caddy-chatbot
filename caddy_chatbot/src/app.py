@@ -10,7 +10,11 @@ from integrations.google_chat.verification import (
     verify_google_chat_supervision_request,
 )
 
-from integrations.microsoft_teams.verification import teams_adapter, on_turn
+from integrations.microsoft_teams.verification import (
+    teams_adapter,
+    on_turn,
+    TeamsEndpointMiddleware,
+)
 
 from botbuilder.schema import Activity
 import asyncio
@@ -20,6 +24,8 @@ import pyperclip
 from threading import Thread
 
 app = FastAPI(docs_url=None)
+
+app.add_middleware(TeamsEndpointMiddleware)
 
 
 @app.get("/health")
@@ -254,10 +260,14 @@ def google_chat_supervision_endpoint(
             return Response(status_code=status.HTTP_404_NOT_FOUND)
 
 
+@app.options("/microsoft-teams/chat")
+@app.options("/microsoft-teams/supervision")
+async def teams_options(request: Request):
+    return Response(status_code=200)
+
+
 @app.post("/microsoft-teams/chat")
 def microsoft_teams_endpoint(request: Request):
-    # Synchronous wrapper for asynchronous body reading
-    # body = asyncio.run(request.body())
     # Synchronous wrapper for asynchronous JSON parsing
     activity = Activity().deserialize(asyncio.run(request.json()))
     auth_header = request.headers.get("Authorization", "")
