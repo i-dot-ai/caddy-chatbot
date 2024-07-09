@@ -12,8 +12,8 @@ from integrations.google_chat.verification import (
 
 from integrations.microsoft_teams.verification import (
     teams_adapter,
-    on_turn,
     TeamsEndpointMiddleware,
+    TEAMS_BOT
 )
 
 from botbuilder.schema import Activity
@@ -267,20 +267,13 @@ async def teams_options(request: Request):
 
 @app.post("/microsoft-teams/chat")
 async def microsoft_teams_endpoint(request: Request):
-    print("GET request received")
+    print("POST request received")
     print(request)
     json_body = await request.json()
     print('converted to json')
     print(json_body)
-    activity = Activity().deserialize(json_body)
-    auth_header = request.headers.get("Authorization", "")
+    return await teams_adapter.process(request, TEAMS_BOT)
 
-    response = Response()
-    print('response created')
-    print(response)
-
-    await teams_adapter.process_activity(activity, auth_header, on_turn)
-    return response
 
 
 @app.post("/microsoft-teams/supervision")

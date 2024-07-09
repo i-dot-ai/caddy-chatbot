@@ -1,21 +1,27 @@
 from botbuilder.core import (
     BotFrameworkAdapter,
-    BotFrameworkAdapterSettings,
+    ActivityHandler,
     TurnContext,
+    MessageFactory
 )
-from botbuilder.schema import Activity, ActivityTypes
+from botbuilder.schema import ChannelAccount
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 import os
 
-# Configure Bot
-APP_ID = os.getenv("MicrosoftAppId", "")
-APP_PASSWORD = os.getenv("MicrosoftAppPassword", "")
 
-# Create adapter
-SETTINGS = BotFrameworkAdapterSettings(APP_ID, APP_PASSWORD)
-teams_adapter = BotFrameworkAdapter(SETTINGS)
+class DefaultConfig:
+    """ Bot Configuration """
+
+    PORT = 3978
+    APP_ID = os.environ.get("MicrosoftAppId", "")
+    APP_PASSWORD = os.environ.get("MicrosoftAppPassword", "")
+    APP_TYPE = os.environ.get("MicrosoftAppType", "MultiTenant")
+    APP_TENANTID = os.environ.get("MicrosoftAppTenantId", "")
+
+
+teams_adapter = BotFrameworkAdapter(DefaultConfig)
 
 
 class TeamsEndpointMiddleware(BaseHTTPMiddleware):
@@ -30,28 +36,17 @@ class TeamsEndpointMiddleware(BaseHTTPMiddleware):
         return response
 
 
-async def on_turn(turn_context: TurnContext):
-    if turn_context.activity.type == "message":
-        try:
-            # Log incoming activity for debugging
-            print(f"Received activity: {turn_context.activity.as_dict()}")
-            
-            if not turn_context.activity.service_url:
-                print("service_url is missing from the activity")
-                return
+class TeamsBot(ActivityHandler):
+    async def on_members_added_activity(
+        self, members_added: [ChannelAccount], turn_context: TurnContext
+    ):
+        for member in members_added:
+            if member.id != turn_context.activity.recipient.id:
+                await turn_context.send_activity("Hello and welcome!")
 
-            # Create a response activity
-            response = Activity(
-                type=ActivityTypes.message,
-                text=f"You said: {turn_context.activity.text}",
-                service_url=turn_context.activity.service_url,
-                channel_id=turn_context.activity.channel_id,
-                conversation=turn_context.activity.conversation,
-                recipient=turn_context.activity.from_property,
-                from_property=turn_context.activity.recipient
-            )
-
-            # Send the response
-            await turn_context.send_activity(response)
-        except Exception as e:
-            print(f"Error in on_turn: {str(e)}")
+    async def on_message_activity(self, turn_context: TurnContext):
+        return await turn_context.send_activity(
+            MessageFactory.text(f"Echo: {turn_context.activity.text}")
+        )
+    
+TEAMS_BOT = TeamsBot()
