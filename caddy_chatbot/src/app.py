@@ -267,12 +267,17 @@ async def teams_options(request: Request):
 
 @app.get("/microsoft-teams/chat")
 async def microsoft_teams_endpoint(request: Request):
-    body = await request.body()
+    print("GET request received")
+    print(request)
     json_body = await request.json()
+    print('converted to json')
+    print(json_body)
     activity = Activity().deserialize(json_body)
     auth_header = request.headers.get("Authorization", "")
 
     response = Response()
+    print('response created')
+    print(response)
 
     await teams_adapter.process_activity(activity, auth_header, on_turn)
     return response
