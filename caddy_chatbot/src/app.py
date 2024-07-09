@@ -265,7 +265,7 @@ async def teams_options(request: Request):
     return Response(status_code=200)
 
 
-@app.post("/microsoft-teams/chat")
+@app.get("/microsoft-teams/chat")
 async def microsoft_teams_endpoint(request: Request):
     body = await request.body()
     json_body = await request.json()
@@ -278,7 +278,7 @@ async def microsoft_teams_endpoint(request: Request):
     return response
 
 
-@app.post("/microsoft-teams/supervision")
+@app.get("/microsoft-teams/supervision")
 async def microsoft_teams_supervision_endpoint(request: Request):
     return JSONResponse(
         status_code=status.HTTP_200_OK, content={"text": "Request received"}
