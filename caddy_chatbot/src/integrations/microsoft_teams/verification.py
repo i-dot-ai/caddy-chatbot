@@ -5,9 +5,6 @@ from botbuilder.core import (
 )
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
-import asyncio
-
-
 import os
 
 # Configure Bot
@@ -31,9 +28,6 @@ class TeamsEndpointMiddleware(BaseHTTPMiddleware):
         return response
 
 
-def on_turn(turn_context: TurnContext):
+async def on_turn(turn_context: TurnContext):
     if turn_context.activity.type == "message":
-        # Use run_sync to run the asynchronous send_activity method
-        asyncio.run_sync(
-            turn_context.send_activity(f"You said: {turn_context.activity.text}")
-        )
+        await turn_context.send_activity(f"You said: {turn_context.activity.text}")

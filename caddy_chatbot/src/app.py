@@ -17,7 +17,6 @@ from integrations.microsoft_teams.verification import (
 )
 
 from botbuilder.schema import Activity
-import asyncio
 
 import pyperclip
 
@@ -267,23 +266,20 @@ async def teams_options(request: Request):
 
 
 @app.post("/microsoft-teams/chat")
-def microsoft_teams_endpoint(request: Request):
-    # Synchronous wrapper for asynchronous JSON parsing
-    activity = Activity().deserialize(asyncio.run(request.json()))
+async def microsoft_teams_endpoint(request: Request):
+    body = await request.body()
+    json_body = await request.json()
+    activity = Activity().deserialize(json_body)
     auth_header = request.headers.get("Authorization", "")
 
     response = Response()
 
-    def aux_func(turn_context):
-        on_turn(turn_context)
-
-    # Use run_sync to run the asynchronous process_activity method
-    asyncio.run(teams_adapter.process_activity(activity, auth_header, aux_func))
+    await teams_adapter.process_activity(activity, auth_header, on_turn)
     return response
 
 
 @app.post("/microsoft-teams/supervision")
-def microsoft_teams_supervision_endpoint(request: Request):
+async def microsoft_teams_supervision_endpoint(request: Request):
     return JSONResponse(
         status_code=status.HTTP_200_OK, content={"text": "Request received"}
     )
