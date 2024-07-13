@@ -559,3 +559,36 @@ def store_approver_event(approval_event: ApprovalEvent):
         },
         ReturnValues="UPDATED_NEW",
     )
+
+def temporary_teams_invoke(chat_client, query, event):
+    """
+    Temporary solution for Teams integration
+    """
+    route_specific_augmentation = retrieve_route_specific_augmentation(query)
+
+    day_date_time = datetime.now(timezone("Europe/London")).strftime(
+        "%A %d %B %Y %H:%M"
+    )
+
+    office_regions = ["England"]
+
+    CADDY_PROMPT = PromptTemplate(
+        template=CADDY_PROMPT_TEMPLATE,
+        input_variables=["context", "question"],
+        partial_variables={
+            "route_specific_augmentation": route_specific_augmentation,
+            "day_date_time": day_date_time,
+            "office_regions": office_regions,
+        },
+    )
+
+    chain, ai_prompt_timestamp = build_chain(CADDY_PROMPT)
+
+    caddy_response = chain.invoke({
+        "input": query,
+        "chat_history": [],
+    })
+
+    _, caddy_response["answer"] = remove_role_played_responses(caddy_response["answer"])
+
+    chat_client.send_adviser_card(event, card=chat_client.messages.generate_response_card(caddy_response["answer"]))

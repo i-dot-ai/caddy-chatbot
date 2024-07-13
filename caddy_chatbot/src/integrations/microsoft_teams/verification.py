@@ -1,52 +1,35 @@
-from botbuilder.core import (
-    BotFrameworkAdapter,
-    ActivityHandler,
-    TurnContext,
-    MessageFactory
-)
-from botbuilder.schema import ChannelAccount
+import os 
+import requests
 
-from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
-import os
+APP_ID = os.environ.get("MicrosoftAppId", "")
+APP_PASSWORD = os.environ.get("MicrosoftAppPassword", "")
 
+url = "https://login.microsoftonline.com/botframework.com/oauth2/v2.0/token"
+headers = {
+    "Host": "login.microsoftonline.com",
+    "Content-Type": "application/x-www-form-urlencoded"
+}
 
-class DefaultConfig:
-    """ Bot Configuration """
+authentication_data = {
+    "grant_type": "client_credentials",
+    "client_id": APP_ID,
+    "client_secret": APP_PASSWORD,
+    "scope": "https://api.botframework.com/.default"
+}
 
-    PORT = 3978
-    APP_ID = os.environ.get("MicrosoftAppId", "")
-    APP_PASSWORD = os.environ.get("MicrosoftAppPassword", "")
-    APP_TYPE = os.environ.get("MicrosoftAppType", "MultiTenant")
-    APP_TENANTID = os.environ.get("MicrosoftAppTenantId", "")
-
-
-teams_adapter = BotFrameworkAdapter(DefaultConfig)
-
-
-class TeamsEndpointMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        if request.url.path.startswith("/microsoft-teams"):
-            response = await call_next(request)
-            response.headers["Access-Control-Allow-Origin"] = "*"
-            response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS, GET"
-            response.headers["Access-Control-Allow-Headers"] = "*"
-        else:
-            response = await call_next(request)
-        return response
-
-
-class TeamsBot(ActivityHandler):
-    async def on_members_added_activity(
-        self, members_added: [ChannelAccount], turn_context: TurnContext
-    ):
-        for member in members_added:
-            if member.id != turn_context.activity.recipient.id:
-                await turn_context.send_activity("Hello and welcome!")
-
-    async def on_message_activity(self, turn_context: TurnContext):
-        return await turn_context.send_activity(
-            MessageFactory.text(f"Echo: {turn_context.activity.text}")
+def get_access_token():
+    """
+    Fetches an access token using the Bot credentials
+    """
+    response = requests.post(
+        url, 
+        headers=headers, 
+        data=authentication_data
         )
     
-TEAMS_BOT = TeamsBot()
+    if response.status_code == 200:
+        response_data = response.json()
+        access_token = response_data.get("access_token")
+        return access_token
+    else:
+        print("Failed to retrieve token:", response.text)

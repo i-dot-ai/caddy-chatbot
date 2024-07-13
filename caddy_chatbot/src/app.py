@@ -10,22 +10,11 @@ from integrations.google_chat.verification import (
     verify_google_chat_supervision_request,
 )
 
-from integrations.microsoft_teams.verification import (
-    teams_adapter,
-    TeamsEndpointMiddleware,
-    TEAMS_BOT
-)
-
-from botbuilder.schema import Activity
-
-import pyperclip
+from integrations.microsoft_teams.structures import MicrosoftTeams
 
 from threading import Thread
 
 app = FastAPI(docs_url=None)
-
-app.add_middleware(TeamsEndpointMiddleware)
-
 
 @app.get("/health")
 def health():
@@ -166,8 +155,6 @@ def google_chat_endpoint(event=Depends(verify_google_chat_request)) -> dict:
                 case "end_existing_interaction":
                     google_chat.end_existing_interaction(event)
                     return google_chat.responses.NO_CONTENT
-                case "copy_caddy_response":
-                    pyperclip.copy(event["common"]["parameters"])
                 case "survey_response":
                     message_event = google_chat.handle_survey_response(event)
                     if message_event:
@@ -259,21 +246,30 @@ def google_chat_supervision_endpoint(
             return Response(status_code=status.HTTP_404_NOT_FOUND)
 
 
-@app.options("/microsoft-teams/chat")
-@app.options("/microsoft-teams/supervision")
-async def teams_options(request: Request):
-    return Response(status_code=200)
-
-
 @app.post("/microsoft-teams/chat")
 async def microsoft_teams_endpoint(request: Request):
-    print("POST request received")
-    print(request)
-    json_body = await request.json()
-    print('converted to json')
-    print(json_body)
-    return await teams_adapter.process(request, TEAMS_BOT)
+    event = await request.json()
+    print("POST request received", event)
 
+    microsoft_teams = MicrosoftTeams()
+
+    match event["type"]:
+        case "message":
+            query = microsoft_teams.format_message(event)
+            caddy.temporary_teams_invoke(microsoft_teams, query, event)
+        case "invoke":
+           match event["value"]["action"]["verb"]:
+               case "proceed": 
+                    # TODO Handle Proceed Route
+                    print("Adviser choice was to proceed")
+                    microsoft_teams.update_card(event)
+                    return microsoft_teams.responses.OK
+               case "redacted_query":
+                    # TODO Handle edit original query
+                    print("Adviser choice was to edit original query")
+                    redacted_card = microsoft_teams.messages.create_redacted_card(event) 
+                    microsoft_teams.update_card(event, card=redacted_card)
+                    return microsoft_teams.responses.OK
 
 
 @app.post("/microsoft-teams/supervision")
