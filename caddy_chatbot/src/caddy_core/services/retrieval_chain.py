@@ -1,5 +1,4 @@
 from langchain_community.chat_models import BedrockChat
-from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.embeddings import BedrockEmbeddings
 from langchain_community.vectorstores import OpenSearchVectorSearch
 from langchain_community.document_transformers import EmbeddingsClusteringFilter
@@ -29,8 +28,6 @@ opensearch_https = os.environ.get("BEDROCK_OPENSEARCH_HTTPS")
 embeddings = BedrockEmbeddings(
     model_id="amazon.titan-embed-image-v1", region_name=alternate_region
 )
-
-# hf_embeddings = HuggingFaceEmbeddings(model_name="model")
 
 try:
     session = boto3.Session()
