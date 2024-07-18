@@ -95,3 +95,19 @@ For ease of deletion, you can remove all the created resources with
 ```bash
 $ aws cloudformation delete-stack --stack-name "INSERT_CUSTOM_STACK_NAME"
 ```
+
+# Local Teams Deployment   
+
+```bash
+$ docker compose up
+```
+
+```bash
+$ ngrok http insert-static-url
+```
+
+Add app_id, app_password to the example.env from configuration space to generate new tokens. 
+
+In azure bot  - > configuration 
+Add static-url into the messaging endpoint
+Then in channels use the open in teams button to test locally

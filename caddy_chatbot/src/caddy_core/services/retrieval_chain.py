@@ -23,14 +23,17 @@ import re
 import os
 from datetime import datetime
 
+OPENSEARCH_HTTPS="https://mll38hfhhgihe88ldxgj.eu-west-3.aoss.amazonaws.com"
+OPENSEARCH_INDEX="caddy_vector_date"
+
 alternate_region = "eu-west-3"
 
 opensearch_https = os.environ.get("OPENSEARCH_HTTPS")
-bedrock_embeddings = BedrockEmbeddings(
+embeddings = BedrockEmbeddings(
     model_id="amazon.titan-embed-image-v1", region_name=alternate_region
 )
 
-embeddings = HuggingFaceEmbeddings(model_name="model")
+# hf_embeddings = HuggingFaceEmbeddings(model_name="model")
 
 try:
     session = boto3.Session()
