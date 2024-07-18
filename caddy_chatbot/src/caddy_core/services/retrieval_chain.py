@@ -23,12 +23,9 @@ import re
 import os
 from datetime import datetime
 
-OPENSEARCH_HTTPS="https://mll38hfhhgihe88ldxgj.eu-west-3.aoss.amazonaws.com"
-OPENSEARCH_INDEX="caddy_vector_date"
-
 alternate_region = "eu-west-3"
 
-opensearch_https = os.environ.get("OPENSEARCH_HTTPS")
+opensearch_https = os.environ.get("BEDROCK_OPENSEARCH_HTTPS")
 embeddings = BedrockEmbeddings(
     model_id="amazon.titan-embed-image-v1", region_name=alternate_region
 )
@@ -52,7 +49,7 @@ def find_most_recent_caddy_vector_index():
     If no such index is found, the original index name is returned."""
 
     # Retrieve the original index name from the environment variable
-    opensearch_index = os.environ.get("OPENSEARCH_INDEX")
+    opensearch_index = os.environ.get("BEDROCK_OPENSEARCH_INDEX")
 
     vectorstore = OpenSearchVectorSearch(
         index_name=opensearch_index,
