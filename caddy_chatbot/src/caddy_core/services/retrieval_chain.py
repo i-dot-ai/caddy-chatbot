@@ -24,7 +24,7 @@ from datetime import datetime
 
 alternate_region = "eu-west-3"
 
-opensearch_https = os.environ.get("BEDROCK_OPENSEARCH_HTTPS")
+opensearch_https = os.environ.get("OPENSEARCH_HTTPS")
 embeddings = BedrockEmbeddings(
     model_id="amazon.titan-embed-image-v1", region_name=alternate_region
 )
@@ -33,8 +33,8 @@ try:
     session = boto3.Session()
     credentials = session.get_credentials()
     auth = AWS4Auth(
-        region=os.environ.get("AWS_REGION"),
-        service="es",
+        region=alternate_region,
+        service="aoss",
         refreshable_credentials=credentials,
     )
 except NoCredentialsError:
@@ -46,7 +46,7 @@ def find_most_recent_caddy_vector_index():
     If no such index is found, the original index name is returned."""
 
     # Retrieve the original index name from the environment variable
-    opensearch_index = os.environ.get("BEDROCK_OPENSEARCH_INDEX")
+    opensearch_index = os.environ.get("OPENSEARCH_INDEX")
 
     vectorstore = OpenSearchVectorSearch(
         index_name=opensearch_index,
