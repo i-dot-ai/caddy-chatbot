@@ -1,5 +1,4 @@
 from langchain_community.chat_models import BedrockChat
-from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.embeddings import BedrockEmbeddings
 from langchain_community.vectorstores import OpenSearchVectorSearch
 from langchain_community.document_transformers import EmbeddingsClusteringFilter
@@ -26,18 +25,16 @@ from datetime import datetime
 alternate_region = "eu-west-3"
 
 opensearch_https = os.environ.get("OPENSEARCH_HTTPS")
-bedrock_embeddings = BedrockEmbeddings(
+embeddings = BedrockEmbeddings(
     model_id="amazon.titan-embed-image-v1", region_name=alternate_region
 )
-
-embeddings = HuggingFaceEmbeddings(model_name="model")
 
 try:
     session = boto3.Session()
     credentials = session.get_credentials()
     auth = AWS4Auth(
-        region=os.environ.get("AWS_REGION"),
-        service="es",
+        region=alternate_region,
+        service="aoss",
         refreshable_credentials=credentials,
     )
 except NoCredentialsError:
