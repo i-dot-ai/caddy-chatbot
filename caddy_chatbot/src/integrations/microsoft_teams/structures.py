@@ -1,9 +1,9 @@
 from .verification import get_access_token
-
 from integrations.microsoft_teams import content, responses
+from caddy_core.services.anonymise import analyse
+
 import requests
 
-from caddy_core.services.anonymise import analyse
 
 class MicrosoftTeams:
     def __init__(self):
@@ -11,6 +11,10 @@ class MicrosoftTeams:
         self.access_token = get_access_token()
         self.messages = content
         self.responses = responses
+        self.reaction_actions = {
+            "like": self.handle_thumbs_up,
+            "dislike": self.handle_thumbs_down,
+        } # TODO check works in teams with the emojis
 
     def send_adviser_card(self, event, card = None):
         """
@@ -125,3 +129,83 @@ class MicrosoftTeams:
 
         # TODO Format Message into Caddy event
         return message_string
+
+    def handle_reaction_added(self, event):
+        """
+        Handles reactions added to a message, specifically for the sueprvisor space but currently applied to all
+        """
+        reaction_type = event['reactionsAdded'][0]['type']
+        reply_to_id = event['replyToId']
+
+        # Fetch original message or log activity based on reply_to_id if needed
+        response_text = f"Reaction '{reaction_type}' added to message with ID {reply_to_id}"
+        self.send_advisor_message_from_supervisor(event, response_text)
+
+        # TODO define a send_advisor_message_from_supervisor methods 
+        # TODO return caddy message from supervisor channel to advisor
+
+
+    def handle_reaction_removed(self, event):
+        """
+        Handles reactions removed from a message, currently unsure if we need this
+        """
+        reaction_type = event['reactionsRemoved'][0]['type']
+        reply_to_id = event['replyToId']
+
+        # Fetch original message or log activity based on reply_to_id if needed
+
+        response_text = f"Reaction '{reaction_type}' removed from message with ID {reply_to_id}"
+        self.send_advisor_message_from_supervisor(event, response_text)
+
+
+    def handle_thumbs_up(self, event, removed=False):
+        """
+        Handle thumbs up reaction = an approval from supervisor
+        """
+        action = "removed" if removed else "added"
+        self.send_advisor_message_from_supervisor(event, f"Message approved {action} for message with ID {event['replyToId']}", 'share')
+
+
+    def handle_thumbs_down(self, event, removed=False):
+        """
+        Handle thumbs down reaction = no approval from supervisor, caddy message not sent
+        """
+        action = "removed" if removed else "added"
+        self.send_advisor_message_from_supervisor(event, f"Answer not approved {action} for message with ID {event['replyToId']}", 'donotshare')
+
+
+    def send_advisor_message_from_supervisor(self, event, text, type):
+        """
+        Sends a simple text message in response to an event.
+        """
+
+        if type == 'donotshare':
+            print('No approval from supervisor')
+
+        conversation_id = event['conversation']['id']
+        service_url = event['serviceUrl']
+        
+        response_url = f"{service_url}/v3/conversations/{conversation_id}/activities"
+        
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json"
+        }
+        
+        response_activity = {
+            "type": "message",
+            "from": event['recipient'],
+            "conversation": event['conversation'],
+            "recipient": event['from'],
+            "text": text
+        }
+        
+        response = requests.post(
+            response_url, 
+            json=response_activity, 
+            headers=headers
+        )
+
+        print(response.json())
+
+    # TODO make this have the details from caddy and the supervisor comments
