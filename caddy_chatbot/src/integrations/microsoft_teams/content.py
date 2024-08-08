@@ -142,6 +142,28 @@ def generate_response_card(llm_response):
             "id": "referenceLinks",
             "actions": [
             ]
+        },
+        {
+            "type": "ActionSet",
+            "id": "approvalButtons",
+            "actions": [
+                {
+                    "type": "Action.Execute",
+                    "title": "👍",
+                    "verb": "approved",
+                    "data": {
+                        "action": "approved"
+                    }
+                },
+                {
+                    "type": "Action.Execute",
+                    "title": "👎",
+                    "verb": "rejected",
+                    "data": {
+                        "action": "rejected"
+                    }
+                },
+            ]
         }
     ]
 

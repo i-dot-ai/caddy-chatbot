@@ -270,6 +270,12 @@ async def microsoft_teams_endpoint(request: Request):
                     redacted_card = microsoft_teams.messages.create_redacted_card(event) 
                     microsoft_teams.update_card(event, card=redacted_card)
                     return microsoft_teams.responses.OK
+               case "approved":
+                   microsoft_teams.handle_thumbs_up(event)
+                   return microsoft_teams.responses.OK
+               case "rejected":
+                   microsoft_teams.handle_thumbs_down(event)
+                   return microsoft_teams.responses.OK
 
 
 @app.post("/microsoft-teams/supervision")
