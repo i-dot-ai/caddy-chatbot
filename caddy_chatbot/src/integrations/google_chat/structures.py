@@ -870,7 +870,7 @@ class GoogleChat:
         Returns:
             Supervisor approved card
         """
-        card["cardsV2"][0]["card"]["sections"].append(
+        card["cardsV2"][0]["card"]["sections"].insert(0,
             self.responses.approval_json_widget(approver, supervisor_notes)
         )
 
