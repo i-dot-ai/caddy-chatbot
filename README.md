@@ -104,11 +104,15 @@ $ aws cloudformation delete-stack --stack-name "INSERT_CUSTOM_STACK_NAME"
 
 ## Local Teams Deployment   
 
+In azure (https://portal.azure.com/#home), creat an azure bot, and add app_id, app_password to the .env from configuration space.
+
+Then you need to build the container and provide a tunnel.
+
 ```bash
 $ docker compose up
 ```
 
-Go to ngrok and create a domain then expose the domain endpoint for local forwarding on the desired port i.e. 80
+Go to ngrok dashboard (https://dashboard.ngrok.com/) and create a domain then expose the domain endpoint for local forwarding on the desired port i.e. 80
 
 ```bash
 $ ngrok http --domain=insert-static-url 80
@@ -116,9 +120,5 @@ $ ngrok http --domain=insert-static-url 80
 
 If you recieve a ngrok 381 errror, this is because ngrok has created an automatic edge. Delete the edge in ngrok dashboard and retry command
 
-Then create an azure bot in azure, add app_id, app_password to the .env from configuration space to generate new tokens. 
-
-In azure bot  - > configuration 
-Add static-url into the messaging endpoint
+In azure bot  got to setting > configuration and add static-url with /microsoft-teams/chat into the messaging endpoint
 Then in channels use the open in teams button to test locally
-
