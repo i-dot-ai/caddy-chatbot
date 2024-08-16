@@ -1,3 +1,5 @@
+import os
+import boto3
 from caddy_core.services.router import get_route
 from caddy_core.utils.prompts import issues_map
 
@@ -7,6 +9,7 @@ from caddy_core.utils.prompts.default_template import (
 
 
 def retrieve_route_specific_augmentation(query):
+    refresh_session_token()
     route = get_route(query).name
 
     match route:
@@ -48,3 +51,8 @@ def retrieve_route_specific_augmentation(query):
             route_specific_augmentation = CADDY_FALLBACK_EXAMPLE
 
     return route_specific_augmentation
+
+def refresh_session_token():
+    session = boto3.Session()
+    credentials = session.get_credentials()
+    os.environ["AWS_SESSION_TOKEN"] = credentials.token
