@@ -3,7 +3,7 @@ from fastapi.responses import Response
 from fastapi import status
 
 from langchain.prompts import PromptTemplate
-from caddy_core.utils.prompts.prompt import retrieve_route_specific_augmentation, get_prompt
+from caddy_core.utils.prompt import retrieve_route_specific_augmentation, get_prompt
 
 from time import sleep
 
