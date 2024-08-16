@@ -3,8 +3,7 @@ from fastapi.responses import Response
 from fastapi import status
 
 from langchain.prompts import PromptTemplate
-from caddy_core.utils.prompts.default_template import CADDY_PROMPT_TEMPLATE
-from caddy_core.utils.prompts.prompt import retrieve_route_specific_augmentation
+from caddy_core.utils.prompts.prompt import retrieve_route_specific_augmentation, get_prompt
 
 from time import sleep
 
@@ -356,7 +355,7 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
     office_regions = enrolment.get_office_coverage(office)
 
     CADDY_PROMPT = PromptTemplate(
-        template=CADDY_PROMPT_TEMPLATE,
+        template=get_prompt("CORE_PROMPT"),
         input_variables=["context", "question"],
         partial_variables={
             "route_specific_augmentation": route_specific_augmentation,
@@ -581,7 +580,7 @@ def temporary_teams_invoke(chat_client, query, event):
     office_regions = ["England"]
 
     CADDY_PROMPT = PromptTemplate(
-        template=CADDY_PROMPT_TEMPLATE,
+        template=get_prompt("CORE_PROMPT"),
         input_variables=["context", "question"],
         partial_variables={
             "route_specific_augmentation": route_specific_augmentation,

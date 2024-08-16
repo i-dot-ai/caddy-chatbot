@@ -15,6 +15,9 @@ Parameters:
   RoutesTableName:
     Type: String
     Description: Name of the DynamoDB table for routes
+  PromptsTableName:
+    Type: String
+    Description: Name of the DynamoDB table for prompts
   MessageTableName:
     Type: String
     Description: Name of the DynamoDB table for messages
@@ -250,6 +253,8 @@ Resources:
               Value: !Ref UserTableName
             - Name: ROUTES_TABLE_NAME
               Value: !Ref RoutesTableName
+            - Name: PROMPTS_TABLE_NAME
+              Value: !Ref PromptsTableName
             - Name: OFFICES_TABLE_NAME
               Value: !Ref OfficesTableName
             - Name: EVALUATION_TABLE_NAME
@@ -388,6 +393,14 @@ Resources:
                 Action:
                   - dynamodb:Scan
                 Resource: !GetAtt RoutesTable.Arn
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Scan
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt PromptsTable.Arn
         - PolicyName: !Sub BedrockInvokerPolicy-${StageName}
           PolicyDocument:
             Version: '2012-10-17'
@@ -437,6 +450,20 @@ Resources:
           AttributeType: S
       KeySchema:
         - AttributeName: name
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+
+  PromptsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref PromptsTableName
+      AttributeDefinitions:
+        - AttributeName: PromptName
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PromptName
           KeyType: HASH
       ProvisionedThroughput:
         ReadCapacityUnits: 1
