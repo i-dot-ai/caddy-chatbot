@@ -18,7 +18,6 @@ from caddy_core.models import (
 
 from caddy_core.utils.tables import (
     evaluation_table,
-    message_table,
     responses_table,
     users_table,
 )
@@ -128,9 +127,14 @@ def format_chat_history(user_messages: List) -> List:
     """
     history_langchain_format = []
     for message in user_messages:
-        human = message["llmPrompt"]
-        ai = message["llmAnswer"]
-        history_langchain_format.append((human, ai))
+        human = message.get("llmPrompt")
+        ai = message.get("llmAnswer")
+        
+        if human and ai:
+            history_langchain_format.append((human, ai))
+        elif human:
+            history_langchain_format.append((human, ""))
+    
     return history_langchain_format
 
 
@@ -147,7 +151,10 @@ def get_chat_history(message: UserMessage) -> List:
     response = responses_table.query(
         KeyConditionExpression=Key("threadId").eq(message.thread_id),
     )
-    history = format_chat_history(response["Items"])
+    
+    sorted_items = sorted(response["Items"], key=lambda x: x.get("messageReceivedTimestamp", x.get("llmPromptTimestamp", "")))
+    
+    history = format_chat_history(sorted_items)
     return history
 
 
@@ -198,14 +205,14 @@ def format_chat_message(event: ProcessChatMessageEvent) -> UserMessage:
 
 
 def store_message(message: UserMessage):
-    message_table.put_item(
+    responses_table.put_item(
         Item={
+            "threadId": str(message.thread_id),
             "messageId": str(message.message_id),
             "conversationId": str(message.conversation_id),
-            "threadId": str(message.thread_id),
             "client": message.client,
             "userEmail": str(message.user_email),
-            "message": message.message,
+            "llmPrompt": message.message,
             "messageSentTimestamp": message.message_sent_timestamp,
             "messageReceivedTimestamp": str(message.message_received_timestamp),
         }
@@ -213,22 +220,23 @@ def store_message(message: UserMessage):
 
 
 def store_response(response: LlmResponse):
-    responses_table.put_item(
-        Item={
-            "responseId": str(response.response_id),
-            "messageId": str(response.message_id),
-            "threadId": str(response.thread_id),
-            "llmPrompt": response.llm_prompt,
-            "llmAnswer": response.llm_answer,
-            "llmResponseJSon": response.llm_response_json,
-            "llmPromptTimestamp": str(response.llm_prompt_timestamp),
-            "llmResponseTimestamp": str(response.llm_response_timestamp),
-        }
+    responses_table.update_item(
+        Key={
+            "threadId": str(response.thread_id)
+        },
+        UpdateExpression="set responseId = :rId, llmAnswer = :la, llmResponseJSon = :lrj, llmPromptTimestamp = :lpt, llmResponseTimestamp = :lrt, route = :route",
+        ExpressionAttributeValues={
+            ":rId": response.response_id,
+            ":la": response.llm_answer,
+            ":lrj": response.llm_response_json,
+            ":lpt": str(response.llm_prompt_timestamp),
+            ":lrt": str(response.llm_response_timestamp),
+            ":route": response.route,
+        },
     )
 
 
 def store_user_thanked_timestamp(ai_answer: LlmResponse):
-    # Updating response in DynamoDB
     responses_table.update_item(
         Key={"threadId": ai_answer.thread_id},
         UpdateExpression="set userThankedTimestamp=:t",
@@ -338,7 +346,7 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
 
     chat_history = get_chat_history(caddy_query)
 
-    route_specific_augmentation = retrieve_route_specific_augmentation(query)
+    route_specific_augmentation, route = retrieve_route_specific_augmentation(query)
 
     day_date_time = datetime.now(timezone("Europe/London")).strftime(
         "%A %d %B %Y %H:%M"
@@ -486,6 +494,7 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
         llm_prompt_timestamp=ai_prompt_timestamp,
         llm_response_json=json.dumps(response_card),
         llm_response_timestamp=ai_response_timestamp,
+        route=route or "no_route"
     )
 
     store_response(llm_response)
@@ -536,7 +545,6 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
 
 
 def store_approver_received_timestamp(event: SupervisionEvent):
-    # Updating response in DynamoDB
     responses_table.update_item(
         Key={"threadId": event.thread_id},
         UpdateExpression="set approverReceivedTimestamp=:t",
@@ -545,12 +553,12 @@ def store_approver_received_timestamp(event: SupervisionEvent):
     )
 
 
-def store_approver_event(approval_event: ApprovalEvent):
-    # Updating response in DynamoDB
+def store_approver_event(thread_id: str, approval_event: ApprovalEvent):
     responses_table.update_item(
-        Key={"threadId": str(approval_event.thread_id)},
-        UpdateExpression="set approverEmail=:email, approved=:approved, approvalTimestamp=:atime, userResponseTimestamp=:utime, supervisorMessage=:sMessage",
+        Key={"threadId": thread_id},
+        UpdateExpression="set responseId=:rId, approverEmail=:email, approved=:approved, approvalTimestamp=:atime, userResponseTimestamp=:utime, supervisorMessage=:sMessage",
         ExpressionAttributeValues={
+            ":rId": approval_event.response_id,
             ":email": approval_event.approver_email,
             ":approved": approval_event.approved,
             ":atime": str(approval_event.approval_timestamp),
@@ -564,7 +572,7 @@ def temporary_teams_invoke(chat_client, query, event):
     """
     Temporary solution for Teams integration
     """
-    route_specific_augmentation = retrieve_route_specific_augmentation(query)
+    route_specific_augmentation, _ = retrieve_route_specific_augmentation(query)
 
     day_date_time = datetime.now(timezone("Europe/London")).strftime(
         "%A %d %B %Y %H:%M"

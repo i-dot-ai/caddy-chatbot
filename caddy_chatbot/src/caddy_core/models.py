@@ -35,6 +35,7 @@ class LlmResponse(pydantic.BaseModel):
     llm_response_json: Union[pydantic.Json, None] = None
     llm_prompt_timestamp: datetime
     llm_response_timestamp: datetime
+    route: str
 
 
 class SupervisionEvent(pydantic.BaseModel):

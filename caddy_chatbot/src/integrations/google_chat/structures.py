@@ -604,7 +604,7 @@ class GoogleChat:
 
         reference_links_section = {"header": "Reference links", "widgets": []}
 
-        urls = re.findall(r"<ref>(http[s]?://[^>]+)</ref>", llm_response)
+        urls = re.findall(r"<ref>(?:SOURCE_URL:)?(http[s]?://[^>]+)</ref>", llm_response)
 
         processed_urls = []
         ref = 0
@@ -621,8 +621,12 @@ class GoogleChat:
                 resource = "Citizens Advice"
 
             ref = ref + 1
+
             llm_response = llm_response.replace(
                 f"<ref>{url}</ref>", f'<a href="{url}">[{ref} - {resource}]</a>'
+            )
+            llm_response = llm_response.replace(
+                f"<ref>SOURCE_URL:{url}</ref>", f'<a href="{url}">[{ref} - {resource}]</a>'
             )
 
             reference_link = {
@@ -935,7 +939,7 @@ class GoogleChat:
             approved=True,
             approval_timestamp=event["eventTime"],
             user_response_timestamp=datetime.now(),
-            supervisor_message=None,
+            supervisor_message=supervisor_notes,
         )
 
         return user_email, user_space, thread_id, approval_event
@@ -1012,7 +1016,7 @@ class GoogleChat:
             supervisor_message=supervisor_message,
         )
 
-        caddy.store_approver_event(rejection_event)
+        caddy.store_approver_event(thread_id, rejection_event)
 
     def create_updated_supervision_card(
         self, supervision_card, approver, approved, supervisor_message
@@ -1229,7 +1233,7 @@ class GoogleChat:
             thread_id,
             approval_event,
         ) = self.received_approval(event)
-        caddy.store_approver_event(approval_event)
+        caddy.store_approver_event(thread_id, approval_event)
 
     def continue_existing_interaction(self, event):
         """

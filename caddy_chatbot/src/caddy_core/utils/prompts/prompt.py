@@ -50,9 +50,10 @@ def retrieve_route_specific_augmentation(query):
         case _:
             route_specific_augmentation = CADDY_FALLBACK_EXAMPLE
 
-    return route_specific_augmentation
+    return route_specific_augmentation, route
 
 def refresh_session_token():
     session = boto3.Session()
     credentials = session.get_credentials()
-    os.environ["AWS_SESSION_TOKEN"] = credentials.token
+    if credentials.token is not None:
+        os.environ["AWS_SESSION_TOKEN"] = credentials.token
