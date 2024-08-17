@@ -604,7 +604,9 @@ class GoogleChat:
 
         reference_links_section = {"header": "Reference links", "widgets": []}
 
-        urls = re.findall(r"<ref>(?:SOURCE_URL:)?(http[s]?://[^>]+)</ref>", llm_response)
+        urls = re.findall(
+            r"<ref>(?:SOURCE_URL:)?(http[s]?://[^>]+)</ref>", llm_response
+        )
 
         processed_urls = []
         ref = 0
@@ -626,7 +628,8 @@ class GoogleChat:
                 f"<ref>{url}</ref>", f'<a href="{url}">[{ref} - {resource}]</a>'
             )
             llm_response = llm_response.replace(
-                f"<ref>SOURCE_URL:{url}</ref>", f'<a href="{url}">[{ref} - {resource}]</a>'
+                f"<ref>SOURCE_URL:{url}</ref>",
+                f'<a href="{url}">[{ref} - {resource}]</a>',
             )
 
             reference_link = {
@@ -874,8 +877,8 @@ class GoogleChat:
         Returns:
             Supervisor approved card
         """
-        card["cardsV2"][0]["card"]["sections"].insert(0,
-            self.responses.approval_json_widget(approver, supervisor_notes)
+        card["cardsV2"][0]["card"]["sections"].insert(
+            0, self.responses.approval_json_widget(approver, supervisor_notes)
         )
 
         return card

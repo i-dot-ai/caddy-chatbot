@@ -2,7 +2,7 @@ import boto3
 
 TABLE_NAME = "caddyRoutes"
 
-dynamodb = boto3.resource('dynamodb')
+dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(TABLE_NAME)
 
 routes_data = [
@@ -17,7 +17,7 @@ routes_data = [
             "What documents do I need to provide for benefits and tax credits?",
             "Can you help me with a benefits and tax credits claim issue?",
             "Where can I find more information about benefits and tax credits?",
-        ]
+        ],
     },
     {
         "name": "benefits_and_universal_credit",
@@ -30,7 +30,7 @@ routes_data = [
             "How can I calculate my entitlement to Universal Credit?",
             "Can you help me with a Universal Credit claim issue?",
             "Where can I find more information about Universal Credit?",
-        ]
+        ],
     },
     {
         "name": "charitable_support_and_food_banks",
@@ -43,7 +43,7 @@ routes_data = [
             "How can someone find local food banks?",
             "What other resources or services are available for individuals in need?",
             "Are there any restrictions or limitations on the frequency of accessing food banks?",
-        ]
+        ],
     },
     {
         "name": "consumer_goods_and_services",
@@ -56,7 +56,7 @@ routes_data = [
             "What are the regulations for online shopping?",
             "How can I avoid scams and fraudulent sellers?",
             "Can you provide guidance on product warranties and guarantees?",
-        ]
+        ],
     },
     {
         "name": "debt",
@@ -69,7 +69,7 @@ routes_data = [
             "How can someone deal with overwhelming debt?",
             "What are the rights and protections for individuals in debt?",
             "Can you provide guidance on bankruptcy and insolvency?",
-        ]
+        ],
     },
     {
         "name": "education",
@@ -84,7 +84,7 @@ routes_data = [
             "What resources are available for adult education and vocational training?",
             "How can my client address issues related to bullying or discrimination in educational settings?",
             "Where can I find more information about educational rights and regulations?",
-        ]
+        ],
     },
     {
         "name": "employment",
@@ -99,7 +99,7 @@ routes_data = [
             "What are the rights and protections for individuals facing unfair dismissal?",
             "How can someone access support for workplace health and safety issues?",
             "Where can I find more information about employment rights and regulations?",
-        ]
+        ],
     },
     {
         "name": "financial_services_and_capability",
@@ -113,7 +113,7 @@ routes_data = [
             "What resources are available for financial planning and retirement?",
             "How can someone protect themselves from financial scams and fraud?",
             "Where can I find more information about financial services and capability?",
-        ]
+        ],
     },
     {
         "name": "gva_and_hate_crime",
@@ -126,7 +126,7 @@ routes_data = [
             "How can someone access emergency accommodation or safe houses?",
             "Can you provide guidance on safety planning for victims of gender-based violence and hate crimes?",
             "Where can I find more information about gender-based violence and hate crimes?",
-        ]
+        ],
     },
     {
         "name": "health_and_community_care",
@@ -147,7 +147,7 @@ routes_data = [
             "How can someone navigate the process of obtaining medical equipment or assistive devices?",
             "What are the rights and protections for individuals receiving healthcare and community care services?",
             "Where can I find more information about healthcare rights and regulations?",
-        ]
+        ],
     },
     {
         "name": "housing",
@@ -160,7 +160,7 @@ routes_data = [
             "What are the options for dealing with eviction?",
             "Can you provide guidance on housing benefits and assistance programs?",
             "Where can I find more information about housing rights and regulations?",
-        ]
+        ],
     },
     {
         "name": "immigration_and_asylum",
@@ -175,7 +175,7 @@ routes_data = [
             "What are the requirements for obtaining citizenship or permanent residency?",
             "How can someone address issues with their immigration status?",
             "Where can I find more information about immigration and asylum rights and regulations?",
-        ]
+        ],
     },
     {
         "name": "legal",
@@ -189,7 +189,7 @@ routes_data = [
             "What are the rights and protections for individuals in the justice system?",
             "How can someone navigate the process of obtaining legal documents or records?",
             "Where can I find more information about the legal system, courts, and justice system?",
-        ]
+        ],
     },
     {
         "name": "relationships_and_family",
@@ -204,7 +204,7 @@ routes_data = [
             "What resources are available for couples or families going through relationship breakdown?",
             "How can someone access counseling or mediation services for family disputes?",
             "Where can I find more information about relationship and family rights and regulations?",
-        ]
+        ],
     },
     {
         "name": "tax",
@@ -219,7 +219,7 @@ routes_data = [
             "What are the tax implications of owning a business?",
             "How can someone navigate the process of paying taxes as an employee (PAYE)?",
             "Where can I find more information about tax laws and regulations?",
-        ]
+        ],
     },
     {
         "name": "travel_and_transport",
@@ -234,7 +234,7 @@ routes_data = [
             "What are the rights and protections for passengers using public transportation?",
             "How can someone address issues with delays or cancellations of trains or buses?",
             "Where can I find more information about travel and transportation services?",
-        ]
+        ],
     },
     {
         "name": "utilities_and_communications",
@@ -249,14 +249,16 @@ routes_data = [
             "What are the rights and protections for consumers in the energy and communications sectors?",
             "How can someone navigate the process of installing and using prepayment meters?",
             "Where can I find more information about energy crisis management and resources?",
-        ]
-    }
+        ],
+    },
 ]
+
 
 def load_routes_to_dynamodb():
     for route in routes_data:
         table.put_item(Item=route)
     print("All routes have been loaded into the DynamoDB table.")
+
 
 if __name__ == "__main__":
     load_routes_to_dynamodb()

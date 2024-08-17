@@ -1,16 +1,20 @@
 from typing import List, Dict
 import re
 
-CADDY_PROCESSING = [ { 
-        "type": "Container", 
-        "items": [ { 
-            "type": "TextBlock", 
-            "text": f"🦉 Processing request...", 
-            "weight": "bolder", 
-            "size": "medium" },
-        ] 
-    }, 
+CADDY_PROCESSING = [
+    {
+        "type": "Container",
+        "items": [
+            {
+                "type": "TextBlock",
+                "text": f"🦉 Processing request...",
+                "weight": "bolder",
+                "size": "medium",
+            },
+        ],
+    },
 ]
+
 
 def create_pii_detected_card(query: str) -> List[Dict]:
     """
@@ -24,24 +28,24 @@ def create_pii_detected_card(query: str) -> List[Dict]:
                     "type": "TextRun",
                     "text": "PII Detected",
                     "color": "attention",
-                    "weight": "bolder"
+                    "weight": "bolder",
                 },
                 {
                     "type": "TextRun",
                     "text": " Please ensure all queries to Caddy are anonymised.",
-                    "italic": True
-                }
-            ]
+                    "italic": True,
+                },
+            ],
         },
         {
             "type": "RichTextBlock",
             "id": "buttonText",
             "inlines": [
                 {
-                    "type": "TextRun", 
-                    "text": "Choose whether to proceed anyway or edit your original query"
+                    "type": "TextRun",
+                    "text": "Choose whether to proceed anyway or edit your original query",
                 }
-            ]
+            ],
         },
         {
             "type": "ActionSet",
@@ -51,39 +55,21 @@ def create_pii_detected_card(query: str) -> List[Dict]:
                     "type": "Action.Execute",
                     "title": "Proceed without redaction",
                     "verb": "proceed",
-                    "data": {
-                        "action": "proceed"
-                    }
+                    "data": {"action": "proceed"},
                 },
                 {
                     "type": "Action.ToggleVisibility",
                     "title": "Edit original query",
                     "targetElements": [
-                        {
-                        "elementId": "queryText",
-                        "isVisible": True
-                        },
-                        {
-                        "elementId": "redactedQuerySubmission",
-                        "isVisible": True
-                        },
-                        {
-                        "elementId": "redactionButtons",
-                        "isVisible": False
-                        },
-                        {
-                        "elementId": "buttonText",
-                        "isVisible": False
-                        }
+                        {"elementId": "queryText", "isVisible": True},
+                        {"elementId": "redactedQuerySubmission", "isVisible": True},
+                        {"elementId": "redactionButtons", "isVisible": False},
+                        {"elementId": "buttonText", "isVisible": False},
                     ],
-                }
-            ]
-        },{
-        "type": "Input.Text",
-        "id": "queryText",
-        "isVisible": False,
-        "value": query
+                },
+            ],
         },
+        {"type": "Input.Text", "id": "queryText", "isVisible": False, "value": query},
         {
             "type": "ActionSet",
             "id": "redactedQuerySubmission",
@@ -93,14 +79,13 @@ def create_pii_detected_card(query: str) -> List[Dict]:
                     "type": "Action.Execute",
                     "title": "Submit Redaction",
                     "verb": "redacted_query",
-                    "data": {
-                        "action": "redacted_query"
-                    }
+                    "data": {"action": "redacted_query"},
                 },
-            ]
-        }
+            ],
+        },
     ]
     return PII_DETECTED
+
 
 def create_redacted_card(event) -> List[Dict]:
     """
@@ -115,34 +100,22 @@ def create_redacted_card(event) -> List[Dict]:
                     "type": "TextRun",
                     "text": "Query redacted: ",
                     "color": "good",
-                    "weight": "bolder"
+                    "weight": "bolder",
                 },
-                {
-                    "type": "TextRun",
-                    "text": redacted_query,
-                    "italic": True
-                }
-            ]
+                {"type": "TextRun", "text": redacted_query, "italic": True},
+            ],
         }
     ]
     return REDACTED
+
 
 def generate_response_card(llm_response):
     """
     Creates a Teams Adaptive card given a Caddy response
     """
     caddy_response = [
-        {
-            "type": "TextBlock",
-            "text": llm_response,
-            "wrap": True
-        },
-        {
-            "type": "ActionSet",
-            "id": "referenceLinks",
-            "actions": [
-            ]
-        },
+        {"type": "TextBlock", "text": llm_response, "wrap": True},
+        {"type": "ActionSet", "id": "referenceLinks", "actions": []},
         {
             "type": "ActionSet",
             "id": "approvalButtons",
@@ -151,20 +124,16 @@ def generate_response_card(llm_response):
                     "type": "Action.Execute",
                     "title": "👍",
                     "verb": "approved",
-                    "data": {
-                        "action": "approved"
-                    }
+                    "data": {"action": "approved"},
                 },
                 {
                     "type": "Action.Execute",
                     "title": "👎",
                     "verb": "rejected",
-                    "data": {
-                        "action": "rejected"
-                    }
+                    "data": {"action": "rejected"},
                 },
-            ]
-        }
+            ],
+        },
     ]
 
     pattern = r"<ref>(?:SOURCE_URL:)?(http[s]?://[^>]+)</ref>"
@@ -187,24 +156,25 @@ def generate_response_card(llm_response):
 
         ref = ref + 1
         llm_response = llm_response.replace(
-            f"<ref>{url}</ref>", f'[{ref} - {resource}]({url})'
+            f"<ref>{url}</ref>", f"[{ref} - {resource}]({url})"
         )
         llm_response = llm_response.replace(
-            f"<ref>SOURCE_URL:{url}</ref>", f'[{ref} - {resource}]({url})'
+            f"<ref>SOURCE_URL:{url}</ref>", f"[{ref} - {resource}]({url})"
         )
 
         reference_link = {
             "type": "Action.OpenUrl",
-            "title": f'{ref} - {url}',
-            "url": url
+            "title": f"{ref} - {url}",
+            "url": url,
         }
         caddy_response[1]["actions"].append(reference_link)
 
         processed_urls.append(url)
 
-
     llm_response = llm_response.replace("<b>", "**").replace("</b>", "**")
-    llm_response = llm_response.replace('<font color="#004f88">', "_").replace("</font>", "_")
+    llm_response = llm_response.replace('<font color="#004f88">', "_").replace(
+        "</font>", "_"
+    )
     caddy_response[0]["text"] = llm_response
 
     return caddy_response

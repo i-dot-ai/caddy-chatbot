@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, List, Any
 from datetime import datetime
 import uuid
 import pydantic
@@ -36,6 +36,7 @@ class LlmResponse(pydantic.BaseModel):
     llm_prompt_timestamp: datetime
     llm_response_timestamp: datetime
     route: str
+    context: Union[List[Any], None]
 
 
 class SupervisionEvent(pydantic.BaseModel):

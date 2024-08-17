@@ -20,6 +20,7 @@ from caddy_core.utils.tables import (
     responses_table,
     users_table,
 )
+from caddy_core.utils.monitoring import logger
 from caddy_core.services.retrieval_chain import build_chain
 from caddy_core.services import enrolment
 from caddy_core.services.evaluation import execute_optional_modules
@@ -47,6 +48,7 @@ def rct_survey_reminder(event, user_record, chat_client):
 
 
 def handle_message(caddy_message, chat_client):
+    logger.info("Running message handler")
     module_values, survey_complete = check_existing_call(caddy_message)
 
     if survey_complete is True:
@@ -105,10 +107,12 @@ def remove_role_played_responses(response: str) -> str:
     """
     adviser_index = response.find("Adviser: ")
     if adviser_index != -1:
+        logger.info("Removing role played response")
         return True, response[:adviser_index].strip()
 
     adviser_index = response.find("Advisor: ")
     if adviser_index != -1:
+        logger.info("Removing role played response")
         return True, response[:adviser_index].strip()
 
     return False, response.strip()
@@ -128,12 +132,12 @@ def format_chat_history(user_messages: List) -> List:
     for message in user_messages:
         human = message.get("llmPrompt")
         ai = message.get("llmAnswer")
-        
+
         if human and ai:
             history_langchain_format.append((human, ai))
         elif human:
             history_langchain_format.append((human, ""))
-    
+
     return history_langchain_format
 
 
@@ -150,9 +154,14 @@ def get_chat_history(message: UserMessage) -> List:
     response = responses_table.query(
         KeyConditionExpression=Key("threadId").eq(message.thread_id),
     )
-    
-    sorted_items = sorted(response["Items"], key=lambda x: x.get("messageReceivedTimestamp", x.get("llmPromptTimestamp", "")))
-    
+
+    sorted_items = sorted(
+        response["Items"],
+        key=lambda x: x.get(
+            "messageReceivedTimestamp", x.get("llmPromptTimestamp", "")
+        ),
+    )
+
     history = format_chat_history(sorted_items)
     return history
 
@@ -220,10 +229,8 @@ def store_message(message: UserMessage):
 
 def store_response(response: LlmResponse):
     responses_table.update_item(
-        Key={
-            "threadId": str(response.thread_id)
-        },
-        UpdateExpression="set responseId = :rId, llmAnswer = :la, llmResponseJSon = :lrj, llmPromptTimestamp = :lpt, llmResponseTimestamp = :lrt, route = :route",
+        Key={"threadId": str(response.thread_id)},
+        UpdateExpression="set responseId = :rId, llmAnswer = :la, llmResponseJSon = :lrj, llmPromptTimestamp = :lpt, llmResponseTimestamp = :lrt, route = :route, context = :context",
         ExpressionAttributeValues={
             ":rId": response.response_id,
             ":la": response.llm_answer,
@@ -231,6 +238,7 @@ def store_response(response: LlmResponse):
             ":lpt": str(response.llm_prompt_timestamp),
             ":lrt": str(response.llm_response_timestamp),
             ":route": response.route,
+            ":context": response.context,
         },
     )
 
@@ -340,7 +348,7 @@ def check_existing_call(caddy_message) -> Tuple[Dict[str, Any], bool]:
 
 def send_to_llm(caddy_query: UserMessage, chat_client):
     query = caddy_query.message
-    
+
     domain = caddy_query.user_email.split("@")[1]
 
     chat_history = get_chat_history(caddy_query)
@@ -493,7 +501,8 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
         llm_prompt_timestamp=ai_prompt_timestamp,
         llm_response_json=json.dumps(response_card),
         llm_response_timestamp=ai_response_timestamp,
-        route=route or "no_route"
+        route=route or "no_route",
+        context=[doc_without_embeddings(doc) for doc in caddy_response["context"]],
     )
 
     store_response(llm_response)
@@ -543,6 +552,12 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
     store_approver_received_timestamp(supervision_event)
 
 
+def doc_without_embeddings(doc):
+    doc_dict = doc.dict()
+    doc_dict.pop("state", None)
+    return doc_dict
+
+
 def store_approver_received_timestamp(event: SupervisionEvent):
     responses_table.update_item(
         Key={"threadId": event.thread_id},
@@ -566,6 +581,7 @@ def store_approver_event(thread_id: str, approval_event: ApprovalEvent):
         },
         ReturnValues="UPDATED_NEW",
     )
+
 
 def temporary_teams_invoke(chat_client, query, event):
     """
@@ -591,11 +607,16 @@ def temporary_teams_invoke(chat_client, query, event):
 
     chain, ai_prompt_timestamp = build_chain(CADDY_PROMPT)
 
-    caddy_response = chain.invoke({
-        "input": query,
-        "chat_history": [],
-    })
+    caddy_response = chain.invoke(
+        {
+            "input": query,
+            "chat_history": [],
+        }
+    )
 
     _, caddy_response["answer"] = remove_role_played_responses(caddy_response["answer"])
 
-    chat_client.send_adviser_card(event, card=chat_client.messages.generate_response_card(caddy_response["answer"]))
+    chat_client.send_adviser_card(
+        event,
+        card=chat_client.messages.generate_response_card(caddy_response["answer"]),
+    )

@@ -337,6 +337,7 @@ Resources:
                   - ecr:GetAuthorizationToken
                   - ecr:GetDownloadUrlForLayer
                   - ecr:BatchGetImage
+                  - sts:GetSessionToken
                 Resource: '*'
         - PolicyName: !Sub CaddyLoggingPolicy-${StageName}
           PolicyDocument:
