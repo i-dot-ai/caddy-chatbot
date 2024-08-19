@@ -12,6 +12,12 @@ Parameters:
   UserTableName:
     Type: String
     Description: Name of the DynamoDB table for users
+  RoutesTableName:
+    Type: String
+    Description: Name of the DynamoDB table for routes
+  PromptsTableName:
+    Type: String
+    Description: Name of the DynamoDB table for prompts
   MessageTableName:
     Type: String
     Description: Name of the DynamoDB table for messages
@@ -245,6 +251,10 @@ Resources:
               Value: !Ref ResponsesTableName
             - Name: USERS_TABLE_NAME
               Value: !Ref UserTableName
+            - Name: ROUTES_TABLE_NAME
+              Value: !Ref RoutesTableName
+            - Name: PROMPTS_TABLE_NAME
+              Value: !Ref PromptsTableName
             - Name: OFFICES_TABLE_NAME
               Value: !Ref OfficesTableName
             - Name: EVALUATION_TABLE_NAME
@@ -265,6 +275,8 @@ Resources:
               Value: !Ref CaddyGoogleCloudProject
             - Name: CADDY_SUPERVISOR_GOOGLE_CLOUD_PROJECT
               Value: !Ref CaddySupervisorGoogleCloudProject
+            - Name: TASK_ROLE_ARN
+              Value: !GetAtt CaddyRole.Arn
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -315,6 +327,10 @@ Resources:
             Principal:
               Service: ecs-tasks.amazonaws.com
             Action: sts:AssumeRole
+          - Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:role/CaddyRole-${StageName}
+            Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
       Policies:
@@ -327,6 +343,7 @@ Resources:
                   - ecr:GetAuthorizationToken
                   - ecr:GetDownloadUrlForLayer
                   - ecr:BatchGetImage
+                  - sts:GetSessionToken
                 Resource: '*'
         - PolicyName: !Sub CaddyLoggingPolicy-${StageName}
           PolicyDocument:
@@ -379,6 +396,18 @@ Resources:
                   - dynamodb:UpdateItem
                   - dynamodb:GetItem
                 Resource: !GetAtt EvaluationTable.Arn
+              - Effect: Allow
+                Action:
+                  - dynamodb:Scan
+                Resource: !GetAtt RoutesTable.Arn
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Scan
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt PromptsTable.Arn
         - PolicyName: !Sub BedrockInvokerPolicy-${StageName}
           PolicyDocument:
             Version: '2012-10-17'
@@ -414,6 +443,34 @@ Resources:
           AttributeType: S
       KeySchema:
         - AttributeName: userEmail
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+
+  RoutesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref RoutesTableName
+      AttributeDefinitions:
+        - AttributeName: name
+          AttributeType: S
+      KeySchema:
+        - AttributeName: name
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+
+  PromptsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref PromptsTableName
+      AttributeDefinitions:
+        - AttributeName: PromptName
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PromptName
           KeyType: HASH
       ProvisionedThroughput:
         ReadCapacityUnits: 1

@@ -1,7 +1,7 @@
 from datasets import Dataset
 from langchain_openai.chat_models import AzureChatOpenAI
 from langchain_openai.embeddings import AzureOpenAIEmbeddings
-from ragas import evaluate 
+from ragas import evaluate
 import dotenv
 
 from ragas.metrics import (
@@ -11,14 +11,14 @@ from ragas.metrics import (
     context_recall,
 )
 
-from model_answers import questions, ground_truths, contexts, answers 
+from model_answers import questions, ground_truths, contexts, answers
 
 questions_mini = questions
 ground_truths_mini = ground_truths
 contexts_mini = contexts
 answers_mini = answers
 
-from model_answers_bedrock import questions, ground_truths, context, answers 
+from model_answers_bedrock import questions, ground_truths, context, answers
 
 questions_bedrock = questions
 ground_truths_bedrock = ground_truths
@@ -28,17 +28,22 @@ answers_bedrock = answers
 
 def create_ragas_dataset(questions, ground_truths, contexts, answers):
     data_samples = {
-        'question': questions,
-        'answer': answers,
-        'contexts' : contexts,
-        'ground_truth': ground_truths
+        "question": questions,
+        "answer": answers,
+        "contexts": contexts,
+        "ground_truth": ground_truths,
     }
     dataset = Dataset.from_dict(data_samples)
 
     return dataset
 
-bedrock_ragas_dataset = create_ragas_dataset(questions_bedrock, answers_bedrock, contexts_bedrock, ground_truths_bedrock)
-mini_ragas_dataset = create_ragas_dataset(questions_mini, answers_mini, contexts_mini, ground_truths_mini)
+
+bedrock_ragas_dataset = create_ragas_dataset(
+    questions_bedrock, answers_bedrock, contexts_bedrock, ground_truths_bedrock
+)
+mini_ragas_dataset = create_ragas_dataset(
+    questions_mini, answers_mini, contexts_mini, ground_truths_mini
+)
 
 ENV = dotenv.dotenv_values()
 
@@ -78,16 +83,15 @@ TIME_PERIOD = 60  # seconds
 def ragas_evaluate(dataset, model, embeddings):
     result = evaluate(
         dataset,
-        metrics=[
-            answer_relevancy
-        ],
+        metrics=[answer_relevancy],
         llm=model,
         embeddings=embeddings,
         is_async=True,
-        #max_concurrent=1  # Add this line
+        # max_concurrent=1  # Add this line
     )
 
     return result
+
 
 print(ragas_evaluate(bedrock_ragas_dataset, azure_model, azure_embeddings))
 print(ragas_evaluate(mini_ragas_dataset, azure_model, azure_embeddings))
