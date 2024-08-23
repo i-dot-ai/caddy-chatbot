@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse, Response
 
 from caddy_core import components as caddy
 from caddy_core.services import enrolment
+from caddy_core.utils.monitoring import logger
 
 from integrations.google_chat.structures import GoogleChat
 from integrations.google_chat.verification import (
@@ -10,6 +11,7 @@ from integrations.google_chat.verification import (
     verify_google_chat_supervision_request,
 )
 
+from integrations.microsoft_teams.structures import MicrosoftTeams
 
 from threading import Thread
 
@@ -26,17 +28,22 @@ def google_chat_endpoint(event=Depends(verify_google_chat_request)) -> dict:
     """
     Handles inbound requests from Google Chat for Caddy
     """
+    logger.info("New Google Chat Request")
     google_chat = GoogleChat()
     user = event["user"]["email"]
     domain = user.split("@")[1]
 
     domain_enrolled, office = enrolment.check_domain_status(domain)
     if domain_enrolled is not True:
+        logger.info("Domain not enrolled")
         return google_chat.responses.DOMAIN_NOT_ENROLLED
+    logger.info("Domain is enrolled")
 
     user_enrolled, user_record = enrolment.check_user_status(user)
     if user_enrolled is not True:
+        logger.info("User is not enrolled")
         return google_chat.responses.USER_NOT_ENROLLED
+    logger.info("User is enrolled")
 
     included_in_rct = enrolment.check_rct_status(office)
     if included_in_rct is True:
@@ -247,14 +254,39 @@ def google_chat_supervision_endpoint(
 
 
 @app.post("/microsoft-teams/chat")
-def microsoft_teams_endpoint(request: Request):
-    return JSONResponse(
-        status_code=status.HTTP_200_OK, content={"text": "Request received"}
-    )
+async def microsoft_teams_endpoint(request: Request):
+    event = await request.json()
+    print("POST request received", event)
+
+    microsoft_teams = MicrosoftTeams()
+
+    match event["type"]:
+        case "message":
+            query = microsoft_teams.format_message(event)
+            caddy.temporary_teams_invoke(microsoft_teams, query, event)
+        case "invoke":
+            match event["value"]["action"]["verb"]:
+                case "proceed":
+                    # TODO Handle Proceed Route
+                    print("Adviser choice was to proceed")
+                    microsoft_teams.update_card(event)
+                    return microsoft_teams.responses.OK
+                case "redacted_query":
+                    # TODO Handle edit original query
+                    print("Adviser choice was to edit original query")
+                    redacted_card = microsoft_teams.messages.create_redacted_card(event)
+                    microsoft_teams.update_card(event, card=redacted_card)
+                    return microsoft_teams.responses.OK
+                case "approved":
+                    microsoft_teams.handle_thumbs_up(event)
+                    return microsoft_teams.responses.OK
+                case "rejected":
+                    microsoft_teams.handle_thumbs_down(event)
+                    return microsoft_teams.responses.OK
 
 
 @app.post("/microsoft-teams/supervision")
-def microsoft_teams_supervision_endpoint(request: Request):
+async def microsoft_teams_supervision_endpoint(request: Request):
     return JSONResponse(
         status_code=status.HTTP_200_OK, content={"text": "Request received"}
     )

@@ -49,6 +49,12 @@ To explore the connection to DynamoDB, I have attached the docker-compose file t
 $ docker compose up
 ```
 
+If you get an error with docker, note you may need to change credsStore your .docker/config.json file with:
+
+```json
+"credStore": "desktop",
+```
+
 ## Testing
 
 Running tests on platform agnostic Caddy components with pytest. Tests are stored in tests/caddy_components, and can be invoked by running the below:
@@ -95,3 +101,24 @@ For ease of deletion, you can remove all the created resources with
 ```bash
 $ aws cloudformation delete-stack --stack-name "INSERT_CUSTOM_STACK_NAME"
 ```
+
+## Local Teams Deployment   
+
+In azure (https://portal.azure.com/#home), creat an azure bot, and add app_id, app_password to the .env from configuration space.
+
+Then you need to build the container and provide a tunnel.
+
+```bash
+$ docker compose up
+```
+
+Go to ngrok dashboard (https://dashboard.ngrok.com/) and create a domain then expose the domain endpoint for local forwarding on the desired port i.e. 80
+
+```bash
+$ ngrok http --domain=insert-static-url 80
+```
+
+If you recieve a ngrok 381 errror, this is because ngrok has created an automatic edge. Delete the edge in ngrok dashboard and retry command
+
+In azure bot  got to setting > configuration and add static-url with /microsoft-teams/chat into the messaging endpoint
+Then in channels use the open in teams button to test locally

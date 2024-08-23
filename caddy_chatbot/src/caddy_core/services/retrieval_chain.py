@@ -1,5 +1,4 @@
 from langchain_community.chat_models import BedrockChat
-from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.embeddings import BedrockEmbeddings
 from langchain_community.vectorstores import OpenSearchVectorSearch
 from langchain_community.document_transformers import EmbeddingsClusteringFilter
@@ -19,6 +18,8 @@ from botocore.exceptions import NoCredentialsError
 from opensearchpy import RequestsHttpConnection
 from requests_aws4auth import AWS4Auth
 
+from caddy_core.utils.monitoring import logger
+
 import re
 import os
 from datetime import datetime
@@ -26,18 +27,16 @@ from datetime import datetime
 alternate_region = "eu-west-3"
 
 opensearch_https = os.environ.get("OPENSEARCH_HTTPS")
-bedrock_embeddings = BedrockEmbeddings(
+embeddings = BedrockEmbeddings(
     model_id="amazon.titan-embed-image-v1", region_name=alternate_region
 )
-
-embeddings = HuggingFaceEmbeddings(model_name="model")
 
 try:
     session = boto3.Session()
     credentials = session.get_credentials()
     auth = AWS4Auth(
-        region=os.environ.get("AWS_REGION"),
-        service="es",
+        region=alternate_region,
+        service="aoss",
         refreshable_credentials=credentials,
     )
 except NoCredentialsError:
@@ -65,6 +64,7 @@ def find_most_recent_caddy_vector_index():
 
     # Initialize most_recent_index with the original index name as a fallback
     most_recent_index = opensearch_index
+    logger.info(f"Index initalised with: {opensearch_index}")
 
     # Pattern to match indexes of interest
     pattern = re.compile(opensearch_index + r"_(\d{8})$")
@@ -73,6 +73,7 @@ def find_most_recent_caddy_vector_index():
     index_list = client.indices.get("*")
     most_recent_date = None
 
+    logger.info(f"Checking through {len(index_list)} indexes")
     for index_name in index_list:
         match = pattern.match(index_name)
         if match:
@@ -80,14 +81,17 @@ def find_most_recent_caddy_vector_index():
             extracted_date_str = match.group(1)
             try:
                 extracted_date = datetime.strptime(extracted_date_str, "%Y%m%d")
+                logger.info(f"Date extracted from index: {extracted_date}")
                 # Update most recent date and index name if this index is more recent
                 if most_recent_date is None or extracted_date > most_recent_date:
+                    logger.info(f"Setting as most recent date: {extracted_date}")
                     most_recent_date = extracted_date
                     most_recent_index = index_name
             except ValueError:
                 # If the date is not valid, ignore this index
                 continue
 
+    logger.info(f"Most recent index is: {most_recent_index}")
     return most_recent_index
 
 
@@ -145,7 +149,7 @@ def build_chain(CADDY_PROMPT):
     )
 
     llm = BedrockChat(
-        model_id=os.environ.get("LLM"),
+        model_id=os.getenv("LLM"),
         region_name=alternate_region,
         model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},
     )
