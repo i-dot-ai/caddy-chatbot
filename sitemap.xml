@@ -2,10 +2,18 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://i-dot-ai.github.io/caddy-chatbot/index.html</loc>
-    <lastmod>2024-06-12T13:48:31.970Z</lastmod>
+    <lastmod>2024-08-23T09:22:53.604Z</lastmod>
+  </url>
+  <url>
+    <loc>https://i-dot-ai.github.io/caddy-chatbot/tests/notebooks/topic_evaluation.html</loc>
+    <lastmod>2024-08-23T09:22:53.616Z</lastmod>
+  </url>
+  <url>
+    <loc>https://i-dot-ai.github.io/caddy-chatbot/tests/notebooks/copypaste.html</loc>
+    <lastmod>2024-08-23T09:22:53.608Z</lastmod>
   </url>
   <url>
     <loc>https://i-dot-ai.github.io/caddy-chatbot/docs/about_caddy.html</loc>
-    <lastmod>2024-06-12T13:48:31.966Z</lastmod>
+    <lastmod>2024-08-23T09:22:53.600Z</lastmod>
   </url>
 </urlset>
