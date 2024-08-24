@@ -72,8 +72,7 @@ def build_chain(CADDY_PROMPT):
         remove_duplicates=True,
     )
 
-    pipeline = DocumentCompressorPipeline(
-        transformers=[filter_ordered_by_retriever])
+    pipeline = DocumentCompressorPipeline(transformers=[filter_ordered_by_retriever])
     compression_retriever = ContextualCompressionRetriever(
         base_compressor=pipeline, base_retriever=lotr
     )
