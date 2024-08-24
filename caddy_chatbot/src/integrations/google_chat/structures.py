@@ -24,6 +24,8 @@ from googleapiclient.discovery import build
 from typing import List
 from collections import deque
 
+from urllib.parse import urlparse
+
 
 class GoogleChat:
     def __init__(self):
@@ -615,17 +617,20 @@ class GoogleChat:
             if url in processed_urls:
                 continue
 
-            if "gov.uk" in url:
-                resource = "GOV UK"
-            elif "citizensadvice.org.uk/advisernet" in url:
-                resource = "Advisernet"
-            elif "citizensadvice.org.uk" in url:
-                resource = "Citizens Advice"
+            parsed_url = urlparse(url)
+            domain = parsed_url.netloc
+
+            if domain.startswith("www."):
+                domain = domain[4:]
+
+            resource = domain
 
             ref = ref + 1
 
             llm_response = llm_response.replace(
-                f"<ref>{url}</ref>", f'<a href="{url}">[{ref} - {resource}]</a>'
+                f"<ref>{
+                    url}</ref>",
+                f'<a href="{url}">[{ref} - {resource}]</a>',
             )
             llm_response = llm_response.replace(
                 f"<ref>SOURCE_URL:{url}</ref>",
