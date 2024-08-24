@@ -444,9 +444,7 @@ Resources:
       KeySchema:
         - AttributeName: userEmail
           KeyType: HASH
-      ProvisionedThroughput:
-        ReadCapacityUnits: 1
-        WriteCapacityUnits: 1
+      BillingMode: PAY_PER_REQUEST
 
   RoutesTable:
     Type: AWS::DynamoDB::Table
@@ -458,9 +456,7 @@ Resources:
       KeySchema:
         - AttributeName: name
           KeyType: HASH
-      ProvisionedThroughput:
-        ReadCapacityUnits: 1
-        WriteCapacityUnits: 1
+      BillingMode: PAY_PER_REQUEST
 
   PromptsTable:
     Type: AWS::DynamoDB::Table
@@ -472,9 +468,7 @@ Resources:
       KeySchema:
         - AttributeName: PromptName
           KeyType: HASH
-      ProvisionedThroughput:
-        ReadCapacityUnits: 1
-        WriteCapacityUnits: 1
+      BillingMode: PAY_PER_REQUEST
 
   MessagesTable:
     Type: AWS::DynamoDB::Table
@@ -486,9 +480,7 @@ Resources:
       KeySchema:
         - AttributeName: threadId
           KeyType: HASH
-      ProvisionedThroughput:
-        ReadCapacityUnits: 1
-        WriteCapacityUnits: 1
+      BillingMode: PAY_PER_REQUEST
       StreamSpecification:
         StreamViewType: NEW_AND_OLD_IMAGES
 
@@ -502,9 +494,7 @@ Resources:
       KeySchema:
         - AttributeName: threadId
           KeyType: HASH
-      ProvisionedThroughput:
-        ReadCapacityUnits: 1
-        WriteCapacityUnits: 1
+      BillingMode: PAY_PER_REQUEST
       StreamSpecification:
         StreamViewType: NEW_AND_OLD_IMAGES
 
@@ -518,9 +508,7 @@ Resources:
       KeySchema:
         - AttributeName: emailDomain
           KeyType: HASH
-      ProvisionedThroughput:
-        ReadCapacityUnits: 1
-        WriteCapacityUnits: 1
+      BillingMode: PAY_PER_REQUEST
       StreamSpecification:
         StreamViewType: NEW_AND_OLD_IMAGES
 
@@ -534,8 +522,6 @@ Resources:
       KeySchema:
         - AttributeName: threadId
           KeyType: HASH
-      ProvisionedThroughput:
-        ReadCapacityUnits: 1
-        WriteCapacityUnits: 1
+      BillingMode: PAY_PER_REQUEST
       StreamSpecification:
         StreamViewType: NEW_AND_OLD_IMAGES
