@@ -43,97 +43,26 @@ except NoCredentialsError:
     print("No credentials could be found")
 
 
-def find_most_recent_caddy_vector_index():
-    """Attempts to find one of the rolling Caddy vector indexes, and returns the most recent one.
-    If no such index is found, the original index name is returned."""
-
-    # Retrieve the original index name from the environment variable
-    opensearch_index = os.environ.get("OPENSEARCH_INDEX")
-
-    vectorstore = OpenSearchVectorSearch(
-        index_name=opensearch_index,
-        opensearch_url=opensearch_https,
-        embedding_function=embeddings,
-        http_auth=auth,
-        use_ssl=True,
-        verify_certs=True,
-        connection_class=RequestsHttpConnection,
-    )
-
-    client = vectorstore.client
-
-    # Initialize most_recent_index with the original index name as a fallback
-    most_recent_index = opensearch_index
-    logger.info(f"Index initalised with: {opensearch_index}")
-
-    # Pattern to match indexes of interest
-    pattern = re.compile(opensearch_index + r"_(\d{8})$")
-
-    # Fetch all indexes
-    index_list = client.indices.get("*")
-    most_recent_date = None
-
-    logger.info(f"Checking through {len(index_list)} indexes")
-    for index_name in index_list:
-        match = pattern.match(index_name)
-        if match:
-            # Extract date from the index name
-            extracted_date_str = match.group(1)
-            try:
-                extracted_date = datetime.strptime(extracted_date_str, "%Y%m%d")
-                logger.info(f"Date extracted from index: {extracted_date}")
-                # Update most recent date and index name if this index is more recent
-                if most_recent_date is None or extracted_date > most_recent_date:
-                    logger.info(f"Setting as most recent date: {extracted_date}")
-                    most_recent_date = extracted_date
-                    most_recent_index = index_name
-            except ValueError:
-                # If the date is not valid, ignore this index
-                continue
-
-    logger.info(f"Most recent index is: {most_recent_index}")
-    return most_recent_index
-
-
 def build_chain(CADDY_PROMPT):
-    opensearch_index = find_most_recent_caddy_vector_index()
+    caddy_retrievers = []
 
-    vectorstore = OpenSearchVectorSearch(
-        index_name=opensearch_index,
-        opensearch_url=opensearch_https,
-        embedding_function=embeddings,
-        http_auth=auth,
-        use_ssl=True,
-        verify_certs=True,
-        connection_class=RequestsHttpConnection,
-        attributes=["source_url"],
-    )
+    for source in ["citizensadvice", "govuk", "advisernet"]:
+        vectorstore = OpenSearchVectorSearch(
+            index_name=f"{source}_scrape_db",
+            opensearch_url=opensearch_https,
+            embedding_function=embeddings,
+            http_auth=auth,
+            use_ssl=True,
+            verify_certs=True,
+            connection_class=RequestsHttpConnection,
+            attributes=["source", "text"],
+        )
+        retriever = vectorstore.as_retriever(
+            k="5", strategy=ElasticsearchStore.ApproxRetrievalStrategy(hybrid=True)
+        )
+        caddy_retrievers.append(retriever)
 
-    advisernet_retriever = vectorstore.as_retriever(
-        k="5",
-        strategy=ElasticsearchStore.ApproxRetrievalStrategy(hybrid=True),
-        search_kwargs={
-            "filter": {"match": {"metadata.domain_description": "AdvisorNet"}}
-        },
-    )
-
-    gov_retriever = vectorstore.as_retriever(
-        k="5",
-        strategy=ElasticsearchStore.ApproxRetrievalStrategy(hybrid=True),
-        search_kwargs={"filter": {"match": {"metadata.domain_description": "GOV.UK"}}},
-    )
-
-    ca_retriever = vectorstore.as_retriever(
-        k="5",
-        strategy=ElasticsearchStore.ApproxRetrievalStrategy(hybrid=True),
-        search_kwargs={
-            "filter": {"match": {"metadata.domain_description": "Citizens Advice"}}
-        },
-    )
-
-    lotr = MergerRetriever(
-        retrievers=[gov_retriever, advisernet_retriever, ca_retriever]
-    )
+    lotr = MergerRetriever(retrievers=caddy_retrievers)
 
     filter_ordered_by_retriever = EmbeddingsClusteringFilter(
         embeddings=embeddings,
@@ -143,7 +72,8 @@ def build_chain(CADDY_PROMPT):
         remove_duplicates=True,
     )
 
-    pipeline = DocumentCompressorPipeline(transformers=[filter_ordered_by_retriever])
+    pipeline = DocumentCompressorPipeline(
+        transformers=[filter_ordered_by_retriever])
     compression_retriever = ContextualCompressionRetriever(
         base_compressor=pipeline, base_retriever=lotr
     )
@@ -155,8 +85,8 @@ def build_chain(CADDY_PROMPT):
     )
 
     document_formatter = PromptTemplate(
-        input_variables=["page_content", "source_url"],
-        template="Content:{page_content}\nSOURCE_URL:{source_url}",
+        input_variables=["page_content", "source"],
+        template="Content:{page_content}\nSOURCE_URL:{source}",
     )
 
     document_chain = create_stuff_documents_chain(
