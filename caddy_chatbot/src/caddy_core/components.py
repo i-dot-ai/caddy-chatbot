@@ -261,7 +261,8 @@ def store_evaluation_module(user, thread_id, module_values):
     user_arguments["module_arguments"]["split"] = str(
         user_arguments["module_arguments"]["split"]
     )
-    call_start_time = datetime.now(timezone("Europe/London")).strftime("%d-%m-%Y %H:%M")
+    call_start_time = datetime.now(
+        timezone("Europe/London")).strftime("%d-%m-%Y %H:%M")
     evaluation_table.put_item(
         Item={
             "threadId": thread_id,
@@ -353,7 +354,8 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
 
     chat_history = get_chat_history(caddy_query)
 
-    route_specific_augmentation, route = retrieve_route_specific_augmentation(query)
+    route_specific_augmentation, route = retrieve_route_specific_augmentation(
+        query)
 
     day_date_time = datetime.now(timezone("Europe/London")).strftime(
         "%A %d %B %Y %H:%M"
@@ -441,7 +443,8 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
                     accumulated_answer += chunk["answer"]
                     if len(accumulated_answer) >= 75:
                         early_terminate, caddy_response["answer"] = (
-                            remove_role_played_responses(caddy_response["answer"])
+                            remove_role_played_responses(
+                                caddy_response["answer"])
                         )
                         response_card = chat_client.create_card(
                             caddy_response["answer"]
@@ -483,7 +486,8 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
             print(f"Retrying in {wait}...")
             sleep(wait)
 
-    _, caddy_response["answer"] = remove_role_played_responses(caddy_response["answer"])
+    _, caddy_response["answer"] = remove_role_played_responses(
+        caddy_response["answer"])
     response_card = chat_client.create_card(caddy_response["answer"])
     chat_client.update_message_in_supervisor_space(
         space_id=supervisor_space,
@@ -502,7 +506,7 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
         llm_response_json=json.dumps(response_card),
         llm_response_timestamp=ai_response_timestamp,
         route=route or "no_route",
-        context=[doc_without_embeddings(doc) for doc in caddy_response["context"]],
+        context=[],
     )
 
     store_response(llm_response)
@@ -552,12 +556,6 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
     store_approver_received_timestamp(supervision_event)
 
 
-def doc_without_embeddings(doc):
-    doc_dict = doc.dict()
-    doc_dict.pop("state", None)
-    return doc_dict
-
-
 def store_approver_received_timestamp(event: SupervisionEvent):
     responses_table.update_item(
         Key={"threadId": event.thread_id},
@@ -587,7 +585,8 @@ def temporary_teams_invoke(chat_client, query, event):
     """
     Temporary solution for Teams integration
     """
-    route_specific_augmentation, _ = retrieve_route_specific_augmentation(query)
+    route_specific_augmentation, _ = retrieve_route_specific_augmentation(
+        query)
 
     day_date_time = datetime.now(timezone("Europe/London")).strftime(
         "%A %d %B %Y %H:%M"
@@ -614,9 +613,11 @@ def temporary_teams_invoke(chat_client, query, event):
         }
     )
 
-    _, caddy_response["answer"] = remove_role_played_responses(caddy_response["answer"])
+    _, caddy_response["answer"] = remove_role_played_responses(
+        caddy_response["answer"])
 
     chat_client.send_adviser_card(
         event,
-        card=chat_client.messages.generate_response_card(caddy_response["answer"]),
+        card=chat_client.messages.generate_response_card(
+            caddy_response["answer"]),
     )
