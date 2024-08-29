@@ -20,10 +20,11 @@ def retrieve_route_specific_augmentation(query):
     route = get_route(query).name
     logger.info(f"Route returned: {route}")
 
-    prompt_name = f"{route.upper()}_PROMPT"
-    route_specific_augmentation = get_prompt(prompt_name)
+    if route:
+        prompt_name = f"{route.upper()}_PROMPT"
+        route_specific_augmentation = get_prompt(prompt_name)
 
-    if route_specific_augmentation is None:
+    if route is None:
         logger.info("Route not found, using fallback prompt")
         route_specific_augmentation = get_prompt("FALLBACK_PROMPT")
 
