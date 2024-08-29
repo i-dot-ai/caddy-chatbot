@@ -419,9 +419,10 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
 
                 if "answer" in chunk:
                     if first_chunk:
+                        context_sources = [document.metadata.get("source", "")
+                                           for document in caddy_response.get("context", [])]
                         response_card = chat_client.create_card(
-                            caddy_response["answer"]
-                        )
+                            caddy_response["answer"], context_sources)
                         response_card["cardsV2"][0]["card"]["sections"][0][
                             "widgets"
                         ].append(chat_client.messages.RESPONSE_STREAMING)
@@ -446,9 +447,10 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
                             remove_role_played_responses(
                                 caddy_response["answer"])
                         )
+                        context_sources = [document.metadata.get("source", "")
+                                           for document in caddy_response.get("context", [])]
                         response_card = chat_client.create_card(
-                            caddy_response["answer"]
-                        )
+                            caddy_response["answer"], context_sources)
                         response_card["cardsV2"][0]["card"]["sections"][0][
                             "widgets"
                         ].append(chat_client.messages.RESPONSE_STREAMING)
@@ -488,7 +490,10 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
 
     _, caddy_response["answer"] = remove_role_played_responses(
         caddy_response["answer"])
-    response_card = chat_client.create_card(caddy_response["answer"])
+    context_sources = [document.metadata.get("source", "")
+                       for document in caddy_response.get("context", [])]
+    response_card = chat_client.create_card(
+        caddy_response["answer"], context_sources)
     chat_client.update_message_in_supervisor_space(
         space_id=supervisor_space,
         message_id=supervision_caddy_message_id,
@@ -496,6 +501,8 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
     )
 
     ai_response_timestamp = datetime.now()
+
+    logger.info(context_sources)
 
     llm_response = LlmResponse(
         message_id=caddy_query.message_id,
@@ -506,7 +513,7 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
         llm_response_json=json.dumps(response_card),
         llm_response_timestamp=ai_response_timestamp,
         route=route or "no_route",
-        context=[],
+        context=context_sources,
     )
 
     store_response(llm_response)

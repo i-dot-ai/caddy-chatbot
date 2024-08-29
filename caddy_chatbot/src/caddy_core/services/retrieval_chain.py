@@ -23,12 +23,13 @@ from caddy_core.utils.monitoring import logger
 import re
 import os
 from datetime import datetime
+from typing import List, Tuple, Dict, Any
 
 alternate_region = "eu-west-3"
 
 opensearch_https = os.environ.get("OPENSEARCH_HTTPS")
 embeddings = BedrockEmbeddings(
-    model_id="amazon.titan-embed-image-v1", region_name=alternate_region
+    model_id="cohere.embed-english-v3", region_name=alternate_region
 )
 
 try:
@@ -43,11 +44,38 @@ except NoCredentialsError:
     print("No credentials could be found")
 
 
+class CaddyOpenSearchVectorSearch(OpenSearchVectorSearch):
+    def similarity_search_with_relevance_scores(
+        self,
+        query: str,
+        k: int = 5,
+        **kwargs: Any,
+    ) -> List[Tuple[Any, float]]:
+        """
+        Return docs and relevance scores
+        """
+        results = self.similarity_search_with_score(query, k=k, **kwargs)
+
+        if not results:
+            return []
+
+        min_score = min(score for _, score in results)
+        max_score = max(score for _, score in results)
+
+        if max_score == min_score:
+            return [(doc, 1.0) for doc, _ in results]
+
+        return [
+            (doc, (score - min_score) / (max_score - min_score))
+            for doc, score in results
+        ]
+
+
 def build_chain(CADDY_PROMPT):
     caddy_retrievers = []
 
     for source in ["citizensadvice", "govuk", "advisernet"]:
-        vectorstore = OpenSearchVectorSearch(
+        vectorstore = CaddyOpenSearchVectorSearch(
             index_name=f"{source}_scrape_db",
             opensearch_url=opensearch_https,
             embedding_function=embeddings,
@@ -58,7 +86,7 @@ def build_chain(CADDY_PROMPT):
             attributes=["source", "text"],
         )
         retriever = vectorstore.as_retriever(
-            k="5", strategy=ElasticsearchStore.ApproxRetrievalStrategy(hybrid=True)
+            search_type="mmr", search_kwargs={"k": 6, "fetch_k": 18, "lambda_mult": 0.3}
         )
         caddy_retrievers.append(retriever)
 
@@ -69,10 +97,10 @@ def build_chain(CADDY_PROMPT):
         num_clusters=3,
         num_closest=2,
         sorted=True,
-        remove_duplicates=True,
     )
 
-    pipeline = DocumentCompressorPipeline(transformers=[filter_ordered_by_retriever])
+    pipeline = DocumentCompressorPipeline(
+        transformers=[filter_ordered_by_retriever])
     compression_retriever = ContextualCompressionRetriever(
         base_compressor=pipeline, base_retriever=lotr
     )

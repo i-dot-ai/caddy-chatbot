@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import requests
 from typing import Optional, Tuple, Dict
 
 
@@ -11,6 +12,7 @@ from caddy_core.models import CaddyMessageEvent, ApprovalEvent
 from caddy_core.services.anonymise import analyse
 from caddy_core.services.survey import get_survey, check_if_survey_required
 from caddy_core.services import enrolment
+from caddy_core.utils.monitoring import logger
 from caddy_core.utils.tables import evaluation_table
 from caddy_core import components as caddy
 from integrations.google_chat import content, responses
@@ -26,6 +28,8 @@ from collections import deque
 
 from urllib.parse import urlparse
 
+from thefuzz import fuzz
+
 
 class GoogleChat:
     def __init__(self):
@@ -40,7 +44,8 @@ class GoogleChat:
         self.supervisor = build(
             "chat",
             "v1",
-            credentials=get_google_creds(os.getenv("CADDY_SUPERVISOR_SERVICE_ACCOUNT")),
+            credentials=get_google_creds(
+                os.getenv("CADDY_SUPERVISOR_SERVICE_ACCOUNT")),
         )
 
     def format_message(self, event):
@@ -290,7 +295,8 @@ class GoogleChat:
         card[0]["card"]["sections"].pop()
         if message_event:
             card[0]["card"]["sections"].pop()
-        card[0]["card"]["sections"].append(self.messages.SURVEY_COMPLETE_WIDGET)
+        card[0]["card"]["sections"].append(
+            self.messages.SURVEY_COMPLETE_WIDGET)
 
         evaluation_table.update_item(
             Key={"threadId": str(threadId)},
@@ -583,12 +589,14 @@ class GoogleChat:
 
         return card
 
-    def create_card(self, llm_response) -> Dict:
+    def create_card(self, llm_response: str, context_sources: List[str]) -> Dict:
         """
-        Takes in the LLM response, extracts out any citations to the documents and adds them as reference links in the Google Chat card
+        Takes in the LLM response and context sources, extracts citations, fuzzy matches them
+        with actual context sources, and adds them as reference links in the Google Chat card
 
         Args:
             llm_response: Response from LLM
+            context_sources: List of actual source URLs from the context
 
         Returns:
             Google Chat Card
@@ -617,35 +625,86 @@ class GoogleChat:
             if url in processed_urls:
                 continue
 
-            parsed_url = urlparse(url)
-            domain = parsed_url.netloc
+            best_match = max(context_sources, key=lambda x: fuzz.ratio(url, x))
+            match_score = fuzz.ratio(url, best_match)
 
-            if domain.startswith("www."):
-                domain = domain[4:]
+            logger.debug(f"Cited: {url}")
+            logger.debug(f"Best match: {best_match}")
+            logger.debug(f"Match score: {match_score}")
 
-            resource = domain
+            if match_score > 80:
+                url = best_match
+                ref = ref + 1
 
-            ref = ref + 1
+                parsed_url = urlparse(url)
+                domain = parsed_url.netloc
 
-            llm_response = llm_response.replace(
-                f"<ref>{
-                    url}</ref>",
-                f'<a href="{url}">[{ref} - {resource}]</a>',
-            )
-            llm_response = llm_response.replace(
-                f"<ref>SOURCE_URL:{url}</ref>",
-                f'<a href="{url}">[{ref} - {resource}]</a>',
-            )
+                if domain.startswith("www."):
+                    domain = domain[4:]
 
-            reference_link = {
-                "textParagraph": {
-                    "text": f'<a href="{url}">[{ref}- {resource}] {url}</a>'
+                if "advisernet" in url:
+                    domain = "advisernet"
+
+                resource = domain
+
+                llm_response = llm_response.replace(
+                    f"<ref>{url}</ref>",
+                    f'<a href="{url}">[{ref} - {resource}]</a>',
+                )
+                llm_response = llm_response.replace(
+                    f"<ref>SOURCE_URL:{url}</ref>",
+                    f'<a href="{url}">[{ref} - {resource}]</a>',
+                )
+
+                reference_link = {
+                    "textParagraph": {
+                        "text": f'<a href="{url}">[{ref}- {resource}] {url}</a>'
+                    }
                 }
-            }
-            if reference_link not in reference_links_section["widgets"]:
                 reference_links_section["widgets"].append(reference_link)
 
-            processed_urls.append(url)
+                processed_urls.append(url)
+            else:
+                try:
+                    response = requests.head(url, timeout=5)
+                    if response.status_code == 200:
+                        ref = ref + 1
+                        parsed_url = urlparse(url)
+                        domain = parsed_url.netloc
+
+                        if domain.startswith("www."):
+                            domain = domain[4:]
+
+                        resource = domain
+
+                        llm_response = llm_response.replace(
+                            f"<ref>{url}</ref>",
+                            f'<a href="{url}">[{ref} - {resource}]</a>',
+                        )
+                        llm_response = llm_response.replace(
+                            f"<ref>SOURCE_URL:{url}</ref>",
+                            f'<a href="{url}">[{ref} - {resource}]</a>',
+                        )
+
+                        reference_link = {
+                            "textParagraph": {
+                                "text": f'<a href="{url}">[{ref}- {resource}] {url}</a>'
+                            }
+                        }
+                        reference_links_section["widgets"].append(
+                            reference_link)
+
+                        processed_urls.append(url)
+                    else:
+                        llm_response = llm_response.replace(
+                            f"<ref>{url}</ref>", "")
+                        llm_response = llm_response.replace(
+                            f"<ref>SOURCE_URL:{url}</ref>", "")
+                except requests.RequestException:
+                    llm_response = llm_response.replace(
+                        f"<ref>{url}</ref>", "")
+                    llm_response = llm_response.replace(
+                        f"<ref>SOURCE_URL:{url}</ref>", "")
 
         llm_response_section = {
             "widgets": [
@@ -654,7 +713,10 @@ class GoogleChat:
         }
 
         card["cardsV2"][0]["card"]["sections"].append(llm_response_section)
-        card["cardsV2"][0]["card"]["sections"].append(reference_links_section)
+
+        if reference_links_section["widgets"]:
+            card["cardsV2"][0]["card"]["sections"].append(
+                reference_links_section)
 
         return card
 
@@ -741,7 +803,8 @@ class GoogleChat:
         Returns:
             List[dict]: a list of the status cards
         """
-        request_failed = self.responses.supervisor_request_failed(user, initial_query)
+        request_failed = self.responses.supervisor_request_failed(
+            user, initial_query)
 
         request_processing = self.responses.supervisor_request_processing(
             user, initial_query
@@ -808,8 +871,10 @@ class GoogleChat:
                                                 "key": "conversationId",
                                                 "value": conversation_id,
                                             },
-                                            {"key": "responseId", "value": response_id},
-                                            {"key": "messageId", "value": message_id},
+                                            {"key": "responseId",
+                                                "value": response_id},
+                                            {"key": "messageId",
+                                                "value": message_id},
                                             {"key": "threadId", "value": thread_id},
                                             {
                                                 "key": "newRequestId",
@@ -819,7 +884,8 @@ class GoogleChat:
                                                 "key": "requestApproved",
                                                 "value": json.dumps(request_approved),
                                             },
-                                            {"key": "userEmail", "value": user_email},
+                                            {"key": "userEmail",
+                                                "value": user_email},
                                         ],
                                     }
                                 },
@@ -834,8 +900,10 @@ class GoogleChat:
                                                 "key": "conversationId",
                                                 "value": conversation_id,
                                             },
-                                            {"key": "responseId", "value": response_id},
-                                            {"key": "messageId", "value": message_id},
+                                            {"key": "responseId",
+                                                "value": response_id},
+                                            {"key": "messageId",
+                                                "value": message_id},
                                             {"key": "threadId", "value": thread_id},
                                             {
                                                 "key": "newRequestId",
@@ -845,7 +913,8 @@ class GoogleChat:
                                                 "key": "requestRejected",
                                                 "value": json.dumps(request_rejected),
                                             },
-                                            {"key": "userEmail", "value": user_email},
+                                            {"key": "userEmail",
+                                                "value": user_email},
                                         ],
                                     }
                                 },
@@ -899,13 +968,15 @@ class GoogleChat:
         supervisor_card = {"cardsV2": event["message"]["cardsV2"]}
         user_message_id = event["common"]["parameters"]["messageId"]
         request_message_id = event["common"]["parameters"]["newRequestId"]
-        request_card = json.loads(event["common"]["parameters"]["requestApproved"])
+        request_card = json.loads(
+            event["common"]["parameters"]["requestApproved"])
         user_email = event["common"]["parameters"]["userEmail"]
         supervisor_notes = event["common"]["formInputs"]["supervisor_notes"][
             "stringInputs"
         ]["value"][0]
 
-        approved_card = self.create_approved_card(card, approver, supervisor_notes)
+        approved_card = self.create_approved_card(
+            card, approver, supervisor_notes)
 
         domain = user_email.split("@")[1]
         _, office = enrolment.check_domain_status(domain)
@@ -974,7 +1045,8 @@ class GoogleChat:
         ]["value"][0]
         thread_id = event["common"]["parameters"]["threadId"]
         request_message_id = event["common"]["parameters"]["newRequestId"]
-        request_card = json.loads(event["common"]["parameters"]["requestRejected"])
+        request_card = json.loads(
+            event["common"]["parameters"]["requestRejected"])
         user_email = event["common"]["parameters"]["userEmail"]
 
         rejection_card = self.responses.supervisor_rejection(
@@ -1273,10 +1345,12 @@ class GoogleChat:
         user_space = event["space"]["name"].split("/")[1]
         message_id = event["message"]["name"].split("/")[3]
         survey_thread_id = event["common"]["parameters"]["thread_id"]
-        message_event = json.loads(event["common"]["parameters"]["message_event"])
+        message_event = json.loads(
+            event["common"]["parameters"]["message_event"])
         message_event = message_event["message"]["text"]
         card = self.messages.END_EXISTING_INTERACTION
-        card = self.append_survey_questions(card, survey_thread_id, user, message_event)
+        card = self.append_survey_questions(
+            card, survey_thread_id, user, message_event)
         self.update_survey_card_in_adviser_space(
             space_id=user_space,
             message_id=message_id,
