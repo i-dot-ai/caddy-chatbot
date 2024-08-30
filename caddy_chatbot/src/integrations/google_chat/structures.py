@@ -632,10 +632,9 @@ class GoogleChat:
             logger.debug(f"Best match: {best_match}")
             logger.debug(f"Match score: {match_score}")
 
-            if match_score > 80:
+            if match_score > 95:
                 url = best_match
-                ref = ref + 1
-
+                ref += 1
                 parsed_url = urlparse(url)
                 domain = parsed_url.netloc
 
@@ -668,7 +667,7 @@ class GoogleChat:
                 try:
                     response = requests.head(url, timeout=5)
                     if response.status_code == 200:
-                        ref = ref + 1
+                        ref += 1
                         parsed_url = urlparse(url)
                         domain = parsed_url.netloc
 
