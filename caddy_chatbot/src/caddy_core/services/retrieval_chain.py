@@ -83,10 +83,10 @@ def build_chain(CADDY_PROMPT):
             use_ssl=True,
             verify_certs=True,
             connection_class=RequestsHttpConnection,
-            attributes=["source", "text"],
+            attributes=["source", "raw_markdown"],
         )
         retriever = vectorstore.as_retriever(
-            search_type="mmr", search_kwargs={"k": 6, "fetch_k": 18, "lambda_mult": 0.3}
+            search_type="mmr", search_kwargs={"k": 12, "fetch_k": 24, "lambda_mult": 0.2}
         )
         caddy_retrievers.append(retriever)
 
@@ -95,7 +95,7 @@ def build_chain(CADDY_PROMPT):
     filter_ordered_by_retriever = EmbeddingsClusteringFilter(
         embeddings=embeddings,
         num_clusters=3,
-        num_closest=2,
+        num_closest=4,
         sorted=True,
     )
 
@@ -112,8 +112,8 @@ def build_chain(CADDY_PROMPT):
     )
 
     document_formatter = PromptTemplate(
-        input_variables=["page_content", "source"],
-        template="Content:{page_content}\nSOURCE_URL:{source}",
+        input_variables=["raw_markdown", "source"],
+        template="Content:{raw_markdown}\nSOURCE_URL:{source}",
     )
 
     document_chain = create_stuff_documents_chain(
