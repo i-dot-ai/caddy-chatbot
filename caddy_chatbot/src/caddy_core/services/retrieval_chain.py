@@ -86,7 +86,7 @@ def build_chain(CADDY_PROMPT):
             attributes=["source", "raw_markdown"],
         )
         retriever = vectorstore.as_retriever(
-            search_type="mmr", search_kwargs={"k": 6, "fetch_k": 18, "lambda_mult": 0.3}
+            search_type="mmr", search_kwargs={"k": 12, "fetch_k": 24, "lambda_mult": 0.2}
         )
         caddy_retrievers.append(retriever)
 
@@ -95,7 +95,7 @@ def build_chain(CADDY_PROMPT):
     filter_ordered_by_retriever = EmbeddingsClusteringFilter(
         embeddings=embeddings,
         num_clusters=3,
-        num_closest=2,
+        num_closest=4,
         sorted=True,
     )
 
