@@ -588,12 +588,13 @@ def store_approver_event(thread_id: str, approval_event: ApprovalEvent):
     )
 
 
-def temporary_teams_invoke(chat_client, query, event):
+def temporary_teams_invoke(chat_client, caddy_message: CaddyMessageEvent):
     """
     Temporary solution for Teams integration
     """
     route_specific_augmentation, _ = retrieve_route_specific_augmentation(
-        query)
+        caddy_message.message_string
+    )
 
     day_date_time = datetime.now(timezone("Europe/London")).strftime(
         "%A %d %B %Y %H:%M"
@@ -615,16 +616,14 @@ def temporary_teams_invoke(chat_client, query, event):
 
     caddy_response = chain.invoke(
         {
-            "input": query,
+            "input": caddy_message.message_string,
             "chat_history": [],
         }
     )
 
-    _, caddy_response["answer"] = remove_role_played_responses(
-        caddy_response["answer"])
+    _, caddy_response["answer"] = remove_role_played_responses(caddy_response["answer"])
 
     chat_client.send_adviser_card(
-        event,
-        card=chat_client.messages.generate_response_card(
-            caddy_response["answer"]),
+        caddy_message,
+        card=chat_client.messages.generate_response_card(caddy_response["answer"]),
     )

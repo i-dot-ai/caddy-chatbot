@@ -1,6 +1,7 @@
-from typing import Union, List, Any
-from datetime import datetime
 import uuid
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Union
+
 import pydantic
 from pydantic.types import StrictBool
 
@@ -68,11 +69,15 @@ class CaddyMessageEvent(pydantic.BaseModel):
     user: str
     name: str
     space_id: str
-    thread_id: str
+    thread_id: Optional[str] = None
     message_id: str
     message_string: str
     source_client: str
     timestamp: datetime
+    teams_conversation: Optional[Dict[str, str]] = None
+    teams_from: Optional[Dict[str, str]] = None
+    teams_recipient: Optional[Dict[str, str]] = None
+    teams_service_url: Optional[str] = None
 
 
 class ProcessChatMessageEvent(pydantic.BaseModel):
