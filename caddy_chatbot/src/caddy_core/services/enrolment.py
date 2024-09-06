@@ -1,4 +1,5 @@
 from caddy_core.utils.tables import offices_table, users_table
+from caddy_core.utils.monitoring import logger
 from caddy_core.models import User
 
 from datetime import datetime
@@ -138,3 +139,20 @@ def list_users(supervision_space_id):
     supervision_users = "".join(supervision_users)
 
     return supervision_users
+
+
+def check_user_sources(user: str = None):
+    """
+    Checks for user specific sources otherwise returns default
+    """
+    if user:
+        user_record = users_table.get_item(Key={"userEmail": user})
+        if "Item" in user_record:
+            if "sources" in user_record["Item"]:
+                user_specific_sources = user_record["Item"]["sources"]
+                logger.debug(f"USER SOURCES: {user_specific_sources}")
+                return user_specific_sources
+
+    default_sources = ["citizensadvice", "govuk", "advisernet"]
+
+    return default_sources

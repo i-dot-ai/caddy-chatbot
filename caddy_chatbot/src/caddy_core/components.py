@@ -261,8 +261,7 @@ def store_evaluation_module(user, thread_id, module_values):
     user_arguments["module_arguments"]["split"] = str(
         user_arguments["module_arguments"]["split"]
     )
-    call_start_time = datetime.now(
-        timezone("Europe/London")).strftime("%d-%m-%Y %H:%M")
+    call_start_time = datetime.now(timezone("Europe/London")).strftime("%d-%m-%Y %H:%M")
     evaluation_table.put_item(
         Item={
             "threadId": thread_id,
@@ -354,8 +353,7 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
 
     chat_history = get_chat_history(caddy_query)
 
-    route_specific_augmentation, route = retrieve_route_specific_augmentation(
-        query)
+    route_specific_augmentation, route = retrieve_route_specific_augmentation(query)
 
     day_date_time = datetime.now(timezone("Europe/London")).strftime(
         "%A %d %B %Y %H:%M"
@@ -374,7 +372,7 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
         },
     )
 
-    chain, ai_prompt_timestamp = build_chain(CADDY_PROMPT)
+    chain, ai_prompt_timestamp = build_chain(CADDY_PROMPT, user=caddy_query.user_email)
 
     user = caddy_query.user_email
 
@@ -419,10 +417,13 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
 
                 if "answer" in chunk:
                     if first_chunk:
-                        context_sources = [document.metadata.get("source", "")
-                                           for document in caddy_response.get("context", [])]
+                        context_sources = [
+                            document.metadata.get("source", "")
+                            for document in caddy_response.get("context", [])
+                        ]
                         response_card = chat_client.create_card(
-                            caddy_response["answer"], context_sources)
+                            caddy_response["answer"], context_sources
+                        )
                         response_card["cardsV2"][0]["card"]["sections"][0][
                             "widgets"
                         ].append(chat_client.messages.RESPONSE_STREAMING)
@@ -444,13 +445,15 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
                     accumulated_answer += chunk["answer"]
                     if len(accumulated_answer) >= 75:
                         early_terminate, caddy_response["answer"] = (
-                            remove_role_played_responses(
-                                caddy_response["answer"])
+                            remove_role_played_responses(caddy_response["answer"])
                         )
-                        context_sources = [document.metadata.get("source", "")
-                                           for document in caddy_response.get("context", [])]
+                        context_sources = [
+                            document.metadata.get("source", "")
+                            for document in caddy_response.get("context", [])
+                        ]
                         response_card = chat_client.create_card(
-                            caddy_response["answer"], context_sources)
+                            caddy_response["answer"], context_sources
+                        )
                         response_card["cardsV2"][0]["card"]["sections"][0][
                             "widgets"
                         ].append(chat_client.messages.RESPONSE_STREAMING)
@@ -488,12 +491,12 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
             print(f"Retrying in {wait}...")
             sleep(wait)
 
-    _, caddy_response["answer"] = remove_role_played_responses(
-        caddy_response["answer"])
-    context_sources = [document.metadata.get("source", "")
-                       for document in caddy_response.get("context", [])]
-    response_card = chat_client.create_card(
-        caddy_response["answer"], context_sources)
+    _, caddy_response["answer"] = remove_role_played_responses(caddy_response["answer"])
+    context_sources = [
+        document.metadata.get("source", "")
+        for document in caddy_response.get("context", [])
+    ]
+    response_card = chat_client.create_card(caddy_response["answer"], context_sources)
     chat_client.update_message_in_supervisor_space(
         space_id=supervisor_space,
         message_id=supervision_caddy_message_id,
@@ -592,8 +595,7 @@ def temporary_teams_invoke(chat_client, query, event):
     """
     Temporary solution for Teams integration
     """
-    route_specific_augmentation, _ = retrieve_route_specific_augmentation(
-        query)
+    route_specific_augmentation, _ = retrieve_route_specific_augmentation(query)
 
     day_date_time = datetime.now(timezone("Europe/London")).strftime(
         "%A %d %B %Y %H:%M"
@@ -620,11 +622,9 @@ def temporary_teams_invoke(chat_client, query, event):
         }
     )
 
-    _, caddy_response["answer"] = remove_role_played_responses(
-        caddy_response["answer"])
+    _, caddy_response["answer"] = remove_role_played_responses(caddy_response["answer"])
 
     chat_client.send_adviser_card(
         event,
-        card=chat_client.messages.generate_response_card(
-            caddy_response["answer"]),
+        card=chat_client.messages.generate_response_card(caddy_response["answer"]),
     )

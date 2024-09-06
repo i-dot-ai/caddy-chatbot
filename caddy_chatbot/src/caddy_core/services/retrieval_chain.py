@@ -19,6 +19,7 @@ from opensearchpy import RequestsHttpConnection
 from requests_aws4auth import AWS4Auth
 
 from caddy_core.utils.monitoring import logger
+from caddy_core.services.enrolment import check_user_sources
 
 import re
 import os
@@ -71,10 +72,12 @@ class CaddyOpenSearchVectorSearch(OpenSearchVectorSearch):
         ]
 
 
-def build_chain(CADDY_PROMPT):
+def build_chain(CADDY_PROMPT, user: str = None):
     caddy_retrievers = []
 
-    for source in ["citizensadvice", "govuk", "advisernet"]:
+    source_list = check_user_sources(user)
+
+    for source in source_list:
         vectorstore = CaddyOpenSearchVectorSearch(
             index_name=f"{source}_scrape_db",
             opensearch_url=opensearch_https,
@@ -86,7 +89,8 @@ def build_chain(CADDY_PROMPT):
             attributes=["source", "raw_markdown"],
         )
         retriever = vectorstore.as_retriever(
-            search_type="mmr", search_kwargs={"k": 12, "fetch_k": 24, "lambda_mult": 0.2}
+            search_type="mmr",
+            search_kwargs={"k": 12, "fetch_k": 24, "lambda_mult": 0.2},
         )
         caddy_retrievers.append(retriever)
 
@@ -99,8 +103,7 @@ def build_chain(CADDY_PROMPT):
         sorted=True,
     )
 
-    pipeline = DocumentCompressorPipeline(
-        transformers=[filter_ordered_by_retriever])
+    pipeline = DocumentCompressorPipeline(transformers=[filter_ordered_by_retriever])
     compression_retriever = ContextualCompressionRetriever(
         base_compressor=pipeline, base_retriever=lotr
     )
