@@ -21,7 +21,7 @@ class UserMessage(pydantic.BaseModel):
     conversation_id: Union[str, None] = None
     thread_id: Union[str, None] = None
     client: str
-    user_email: str
+    user_email: Union[str, None] = None
     message: str
     message_sent_timestamp: str
     message_received_timestamp: datetime

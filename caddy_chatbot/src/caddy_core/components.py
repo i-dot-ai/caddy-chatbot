@@ -212,6 +212,29 @@ def format_chat_message(event: ProcessChatMessageEvent) -> UserMessage:
     return message_query
 
 
+def format_teams_message(event: CaddyMessageEvent) -> UserMessage:
+    """
+    Formats the teams message into a UserMessage object
+
+    Args:
+        event (ProcessChatMessageEvent): The event containing the chat message
+
+    Returns:
+        UserMessage: The formatted chat message
+    """
+    message_query = UserMessage(
+        thread_id="11111",
+        conversation_id=event.teams_conversation["id"],
+        message_id=event.message_id,
+        client=event.source_client,
+        user_email=event.user,
+        message=event.message_string,
+        message_sent_timestamp=str(event.timestamp),
+        message_received_timestamp=datetime.now(),
+    )
+    return message_query
+
+
 def store_message(message: UserMessage):
     responses_table.put_item(
         Item={
@@ -592,6 +615,7 @@ def temporary_teams_invoke(chat_client, caddy_message: CaddyMessageEvent):
     """
     Temporary solution for Teams integration
     """
+    store_message(format_teams_message(caddy_message))
     route_specific_augmentation, _ = retrieve_route_specific_augmentation(
         caddy_message.message_string
     )
