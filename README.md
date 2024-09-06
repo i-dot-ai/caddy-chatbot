@@ -41,6 +41,14 @@ To develop in codespaces, ensure you define your environment variables through G
 
 If you are using windows or do not want to install vscode on your machine, you can click on the badge above to spin up a codespace environment.
 
+## Developing Caddy API
+
+To work on developing the core Caddy API, run the below command which will start up the FastAPI with the reload flag enabled for convenience
+
+```bash
+$ make run-dev
+```
+
 ## Developing with Local DynamoDB
 
 To explore the connection to DynamoDB, I have attached the docker-compose file to spin up a local DynamoDB.  This will have to be span up before using the relevant notebook.
@@ -102,7 +110,7 @@ For ease of deletion, you can remove all the created resources with
 $ aws cloudformation delete-stack --stack-name "INSERT_CUSTOM_STACK_NAME"
 ```
 
-## Local Teams Deployment   
+## Local Teams Deployment
 
 In azure (https://portal.azure.com/#home), creat an azure bot, and add app_id, app_password to the .env from configuration space.
 

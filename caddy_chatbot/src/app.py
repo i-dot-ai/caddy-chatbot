@@ -15,6 +15,10 @@ from integrations.microsoft_teams.structures import MicrosoftTeams
 
 from threading import Thread
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 app = FastAPI(docs_url=None)
 
 
