@@ -1,8 +1,9 @@
-from .verification import get_access_token
-from integrations.microsoft_teams import content, responses
-from caddy_core.services.anonymise import analyse
-
 import requests
+from caddy_core.models import CaddyMessageEvent
+from caddy_core.services.anonymise import analyse
+from integrations.microsoft_teams import content, responses
+
+from .verification import get_access_token
 
 
 class MicrosoftTeams:
@@ -16,16 +17,16 @@ class MicrosoftTeams:
             "dislike": self.handle_thumbs_down,
         }  # TODO check works in teams with the emojis
 
-    def send_adviser_card(self, event, card=None):
+    def send_adviser_card(self, event: CaddyMessageEvent, card=None):
         """
         Takes an incoming request from Teams Chat and returns a given response card
         """
         if card is None:
             card = self.messages.CADDY_PROCESSING
 
-        conversation_id = event["conversation"]["id"]
-        activity_id = event["id"]
-        service_url = event["serviceUrl"]
+        conversation_id = event.teams_conversation["id"]
+        activity_id = event.message_id
+        service_url = event.teams_service_url
 
         response_url = (
             f"{service_url}/v3/conversations/{conversation_id}/activities/{activity_id}"
@@ -38,9 +39,9 @@ class MicrosoftTeams:
 
         response_activity = {
             "type": "message",
-            "from": event["recipient"],
-            "conversation": event["conversation"],
-            "recipient": event["from"],
+            "from": event.teams_recipient,
+            "conversation": event.teams_conversation,
+            "recipient": event.teams_from,
             "replyToId": activity_id,
             "attachments": [
                 {
@@ -123,10 +124,23 @@ class MicrosoftTeams:
 
                 return "PII Detected"
 
-        self.send_adviser_card(event)
+            caddy_message = CaddyMessageEvent(
+                type="PROCESS_CHAT_MESSAGE",
+                user=event["from"]["id"],
+                name=event["from"]["name"],
+                space_id=event["channelId"],
+                message_id=event["id"],
+                message_string=message_string,
+                source_client=self.client,
+                timestamp=event["timestamp"],
+                teams_conversation=event["conversation"],
+                teams_from=event["from"],
+                teams_recipient=event["recipient"],
+                teams_service_url=event["serviceUrl"],
+            )
+        self.send_adviser_card(caddy_message)
 
-        # TODO Format Message into Caddy event
-        return message_string
+        return caddy_message
 
     def handle_reaction_added(self, event):
         """
