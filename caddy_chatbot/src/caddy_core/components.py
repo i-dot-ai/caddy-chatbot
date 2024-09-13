@@ -213,7 +213,7 @@ def format_chat_message(event: ProcessChatMessageEvent) -> UserMessage:
     return message_query
 
 
-def format_teams_message(event: CaddyMessageEvent) -> UserMessage:
+def format_teams_user_message(event: CaddyMessageEvent) -> UserMessage:
     """
     Formats the teams message into a UserMessage object
 
@@ -224,7 +224,7 @@ def format_teams_message(event: CaddyMessageEvent) -> UserMessage:
         UserMessage: The formatted chat message
     """
     message_query = UserMessage(
-        thread_id="11111",
+        thread_id=None,
         conversation_id=event.teams_conversation["id"],
         message_id=event.message_id,
         client=event.source_client,
@@ -612,13 +612,14 @@ def store_approver_event(thread_id: str, approval_event: ApprovalEvent):
     )
 
 
-def temporary_teams_invoke(chat_client, caddy_message: CaddyMessageEvent):
+def temporary_teams_invoke(chat_client, caddy_event: CaddyMessageEvent):
     """
     Temporary solution for Teams integration
     """
-    store_message(format_teams_message(caddy_message))
-    route_specific_augmentation, _ = retrieve_route_specific_augmentation(
-        caddy_message.message_string
+    caddy_user_message = format_teams_user_message(caddy_event)
+    store_message(caddy_user_message)
+    route_specific_augmentation, route = retrieve_route_specific_augmentation(
+        caddy_event.message_string
     )
 
     day_date_time = datetime.now(timezone("Europe/London")).strftime(
@@ -641,7 +642,7 @@ def temporary_teams_invoke(chat_client, caddy_message: CaddyMessageEvent):
 
     caddy_response = chain.invoke(
         {
-            "input": caddy_message.message_string,
+            "input": caddy_event.message_string,
             "chat_history": [],
         }
     )
@@ -649,6 +650,6 @@ def temporary_teams_invoke(chat_client, caddy_message: CaddyMessageEvent):
     _, caddy_response["answer"] = remove_role_played_responses(caddy_response["answer"])
 
     chat_client.send_adviser_card(
-        caddy_message,
-        card=chat_client.messages.generate_response_card(caddy_response["answer"]),
+        caddy_event,
+        card=response_card,
     )
