@@ -512,12 +512,12 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
             print(f"Retrying in {wait}...")
             sleep(wait)
 
-    _, caddy_response["answer"] = remove_role_played_responses(
-        caddy_response["answer"])
-    context_sources = [document.metadata.get("source", "")
-                       for document in caddy_response.get("context", [])]
-    response_card = chat_client.create_card(
-        caddy_response["answer"], context_sources)
+    _, caddy_response["answer"] = remove_role_played_responses(caddy_response["answer"])
+    context_sources = [
+        document.metadata.get("source", "")
+        for document in caddy_response.get("context", [])
+    ]
+    response_card = chat_client.create_card(caddy_response["answer"], context_sources)
     chat_client.update_message_in_supervisor_space(
         space_id=supervisor_space,
         message_id=supervision_caddy_message_id,
@@ -648,6 +648,27 @@ def temporary_teams_invoke(chat_client, caddy_event: CaddyMessageEvent):
     )
 
     _, caddy_response["answer"] = remove_role_played_responses(caddy_response["answer"])
+
+    context_sources = [
+        document.metadata.get("source", "")
+        for document in caddy_response.get("context", [])
+    ]
+    ai_response_timestamp = datetime.now()
+    response_card = chat_client.messages.generate_response_card(
+        caddy_response["answer"]
+    )
+    llm_response = LlmResponse(
+        message_id=caddy_event.message_id,
+        llm_prompt=caddy_user_message.message,
+        llm_answer=caddy_response["answer"],
+        thread_id=caddy_user_message.thread_id,
+        llm_prompt_timestamp=ai_prompt_timestamp,
+        llm_response_json=json.dumps(response_card),
+        llm_response_timestamp=ai_response_timestamp,
+        route=route or "no_route",
+        context=context_sources,
+    )
+    store_response(llm_response)
 
     chat_client.send_adviser_card(
         caddy_event,
