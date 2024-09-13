@@ -9,6 +9,7 @@ from time import sleep
 
 from caddy_core.models import (
     ProcessChatMessageEvent,
+    CaddyMessageEvent,
     UserMessage,
     LlmResponse,
     SupervisionEvent,
