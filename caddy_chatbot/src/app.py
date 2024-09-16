@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, Request, status
 from fastapi.responses import JSONResponse, Response
+from fastapi.middleware.cors import CORSMiddleware
 
 from caddy_core import components as caddy
 from caddy_core.services import enrolment
@@ -251,6 +252,15 @@ def google_chat_supervision_endpoint(
                             )
         case _:
             return Response(status_code=status.HTTP_404_NOT_FOUND)
+
+@app.options("/microsoft-teams/chat")
+async def options_chat():
+    # Handle preflight request
+    response = JSONResponse(content={"status": "OK"})
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return response
 
 
 @app.post("/microsoft-teams/chat")
