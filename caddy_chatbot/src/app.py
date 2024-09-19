@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, Request, status
 from fastapi.responses import JSONResponse, Response
+from threading import Thread
 
 from caddy_core import components as caddy
 from caddy_core.services import enrolment
@@ -12,8 +13,6 @@ from integrations.google_chat.verification import (
 )
 
 from integrations.microsoft_teams.structures import MicrosoftTeams
-
-from threading import Thread
 
 app = FastAPI(docs_url=None)
 

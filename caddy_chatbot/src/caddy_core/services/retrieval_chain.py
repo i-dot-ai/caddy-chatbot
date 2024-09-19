@@ -1,4 +1,4 @@
-from langchain_community.chat_models import BedrockChat
+from langchain_aws import ChatBedrock
 from langchain_community.embeddings import BedrockEmbeddings
 from langchain_community.vectorstores import OpenSearchVectorSearch
 from langchain_community.document_transformers import EmbeddingsClusteringFilter
@@ -10,7 +10,6 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 
 from langchain.retrievers import ContextualCompressionRetriever
 from langchain.retrievers.merger_retriever import MergerRetriever
-from langchain.vectorstores.elasticsearch import ElasticsearchStore
 from langchain.retrievers.document_compressors import DocumentCompressorPipeline
 
 import boto3
@@ -18,12 +17,11 @@ from botocore.exceptions import NoCredentialsError
 from opensearchpy import RequestsHttpConnection
 from requests_aws4auth import AWS4Auth
 
-from caddy_core.utils.monitoring import logger
+from caddy_core.services.enrolment import check_user_sources
 
-import re
 import os
 from datetime import datetime
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Any
 
 alternate_region = "eu-west-3"
 
@@ -71,10 +69,12 @@ class CaddyOpenSearchVectorSearch(OpenSearchVectorSearch):
         ]
 
 
-def build_chain(CADDY_PROMPT):
+def build_chain(CADDY_PROMPT, user: str = None):
     caddy_retrievers = []
 
-    for source in ["citizensadvice", "govuk", "advisernet"]:
+    source_list = check_user_sources(user)
+
+    for source in source_list:
         vectorstore = CaddyOpenSearchVectorSearch(
             index_name=f"{source}_scrape_db",
             opensearch_url=opensearch_https,
@@ -86,7 +86,8 @@ def build_chain(CADDY_PROMPT):
             attributes=["source", "raw_markdown"],
         )
         retriever = vectorstore.as_retriever(
-            search_type="mmr", search_kwargs={"k": 12, "fetch_k": 24, "lambda_mult": 0.2}
+            search_type="mmr",
+            search_kwargs={"k": 12, "fetch_k": 24, "lambda_mult": 0.2},
         )
         caddy_retrievers.append(retriever)
 
@@ -99,13 +100,12 @@ def build_chain(CADDY_PROMPT):
         sorted=True,
     )
 
-    pipeline = DocumentCompressorPipeline(
-        transformers=[filter_ordered_by_retriever])
+    pipeline = DocumentCompressorPipeline(transformers=[filter_ordered_by_retriever])
     compression_retriever = ContextualCompressionRetriever(
         base_compressor=pipeline, base_retriever=lotr
     )
 
-    llm = BedrockChat(
+    llm = ChatBedrock(
         model_id=os.getenv("LLM"),
         region_name=alternate_region,
         model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},

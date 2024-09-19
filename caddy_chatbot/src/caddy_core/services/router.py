@@ -7,6 +7,10 @@ from semantic_router import Route, RouteLayer
 from semantic_router.encoders import BedrockEncoder
 from caddy_core.utils.monitoring import logger
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 class AutoRefreshBedrockEncoder:
     def __init__(self, region="eu-west-3", score_threshold=0.5):
@@ -35,10 +39,7 @@ class AutoRefreshBedrockEncoder:
             )
 
             self.expiration = credentials["Expiration"]
-            logger.info(
-                f"Refreshed credentials, new expiry time: {
-                        self.expiration}"
-            )
+            logger.info(f"Refreshed credentials, new expiry time: {self.expiration}")
         except ClientError as e:
             logger.error(f"Failed to refresh credentials: {e}")
             raise
