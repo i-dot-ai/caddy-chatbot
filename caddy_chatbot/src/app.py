@@ -256,13 +256,12 @@ def google_chat_supervision_endpoint(
 async def microsoft_teams_endpoint(request: Request):
     event = await request.json()
     print("POST request received", event)
-
     microsoft_teams = MicrosoftTeams()
 
     match event["type"]:
         case "message":
-            query = microsoft_teams.format_message(event)
-            caddy.temporary_teams_invoke(microsoft_teams, query, event)
+            caddy_message = microsoft_teams.format_message(event)
+            caddy.temporary_teams_invoke(microsoft_teams, caddy_message)
         case "invoke":
             match event["value"]["action"]["verb"]:
                 case "proceed":
