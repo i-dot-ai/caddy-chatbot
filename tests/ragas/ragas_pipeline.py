@@ -4,6 +4,7 @@ from langchain_openai.embeddings import AzureOpenAIEmbeddings
 from ragas import evaluate
 import dotenv
 
+
 from ragas.metrics import (
     context_precision,
     answer_relevancy,
@@ -13,12 +14,12 @@ from ragas.metrics import (
 
 from model_answers import questions, ground_truths, contexts, answers
 
+
 questions_mini = questions
 ground_truths_mini = ground_truths
 contexts_mini = contexts
 answers_mini = answers
 
-from model_answers_bedrock import questions, ground_truths, context, answers
 
 questions_bedrock = questions
 ground_truths_bedrock = ground_truths
@@ -69,11 +70,6 @@ metrics = [
     context_recall,
     context_precision,
 ]
-
-import time
-import requests
-from ratelimit import limits, sleep_and_retry
-from requests.exceptions import HTTPError
 
 # Define your rate limit (e.g., 5 requests per minute)
 RATE_LIMIT = 5

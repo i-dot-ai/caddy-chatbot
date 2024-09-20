@@ -10,7 +10,6 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 
 from langchain.retrievers import ContextualCompressionRetriever
 from langchain.retrievers.merger_retriever import MergerRetriever
-from langchain.vectorstores.elasticsearch import ElasticsearchStore
 from langchain.retrievers.document_compressors import DocumentCompressorPipeline
 
 import boto3
@@ -18,12 +17,9 @@ from botocore.exceptions import NoCredentialsError
 from opensearchpy import RequestsHttpConnection
 from requests_aws4auth import AWS4Auth
 
-from caddy_core.utils.monitoring import logger
-
-import re
 import os
 from datetime import datetime
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Any
 
 alternate_region = "eu-west-3"
 

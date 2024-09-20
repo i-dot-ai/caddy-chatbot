@@ -23,6 +23,7 @@ from caddy_core.utils.tables import (
     responses_table,
     users_table,
 )
+from caddy_core.utils.prompts.rewording_query import query_length_prompts
 from fastapi import status
 from fastapi.responses import Response
 from langchain.prompts import PromptTemplate
@@ -90,7 +91,7 @@ def handle_message(caddy_message, chat_client):
         message=chat_client.messages.COMPOSING_MESSAGE,
     )
 
-    send_to_llm(caddy_query=message_query, chat_client=chat_client)
+    send_to_llm(caddy_query=message_query, chat_client=chat_client, query_length_prompts=query_length_prompts)
 
 
 def remove_role_played_responses(response: str) -> str:
@@ -368,6 +369,38 @@ def check_existing_call(caddy_message) -> Tuple[Dict[str, Any], bool]:
     return module_values, survey_complete
 
 
+def reword_advisor_query(query: str, query_length_prompts: dict) -> str:
+    """A rewording agent to reword the initial incoming query.
+    It does this via two prompts for the different tail length, leaving queries in middle alone
+    
+    Args:
+        query (str): incoming query from advisor
+        query_length_prompts (dict): a dict for the two prompts for either tail length
+        
+    Returns:
+        str: Rewritten query for RAG processing.
+    """
+
+    llm = BedrockChat(
+        model_id=os.getenv("LLM"),
+        region_name="eu-west-3",
+        model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},
+    )
+
+    if len(query) < 50:
+        prompt = query_length_prompts['0 to 50']
+    elif len(query) > 400:
+        prompt = query_length_prompts['400+']
+    else:
+        return query  # Return original if length is in range 50 to 400
+
+    prompt += f"\n\n Incoming query is: {query}"
+    response = llm.invoke(prompt)
+    return response.content
+
+
+
+
 def reword_advisor_message(message: str) -> str:
     llm = BedrockChat(
         model_id=os.getenv("LLM"),
@@ -397,8 +430,10 @@ def reword_advisor_message(message: str) -> str:
     return response.content
 
 
-def send_to_llm(caddy_query: UserMessage, chat_client):
+def send_to_llm(caddy_query: UserMessage, chat_client, query_length_prompts):
     query = caddy_query.message
+
+    query = reword_advisor_query(query, query_length_prompts)
 
     domain = caddy_query.user_email.split("@")[1]
 
