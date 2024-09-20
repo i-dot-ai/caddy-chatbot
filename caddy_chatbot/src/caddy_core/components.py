@@ -373,26 +373,8 @@ def reword_advisor_message(message: str) -> str:
         region_name="eu-west-3",
         model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},
     )
-    prompt = f"""You are an information extraction assistant called Caddy. 
-    Your task is to analyze the given message and extract key information that would be relevant 
-    for a legal assistance chatbot to perform a RAG (Retrieval-Augmented Generation) search. 
-    Follow these guidelines: 
-        1. Identify the main legal topic or issue being discussed. 
-        2. Extract any specific questions being asked. 
-        3. Note any relevant personal details of the individual involved (e.g., age, nationality, employment status). 
-        4. Identify key facts or circumstances related to the legal situation. 
-        5. Extract any mentioned dates, locations, or monetary amounts.
-        6. Identify any legal terms or concepts mentioned. 
-    Provide your response in a structured format with clear headings for each category of extracted information. 
-    If any category is not applicable or no relevant information is found skip it. 
-    Remember to focus only on extracting factual information without adding any interpretation or advice. 
-    
-    Input:
-    {message}
-    
-    Extracted Information:
-    """
-    response = llm.invoke(prompt)
+    prompt = PromptTemplate.from_template(get_prompt("REWORDING_PROMPT"))
+    response = llm.invoke(prompt.format(message=message))
     return response.content
 
 
