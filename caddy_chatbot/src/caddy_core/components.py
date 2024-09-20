@@ -369,8 +369,8 @@ def check_existing_call(caddy_message) -> Tuple[Dict[str, Any], bool]:
     return module_values, survey_complete
 
 
-def reword_advisor_query(query: str, query_length_prompts: dict) -> str:
-    """A rewording agent to reword the initial incoming query.
+def reword_advisor_orchestration(query: str, query_length_prompts: dict) -> str:
+    """An agent to reason whether the reworded query is sufficient.
     It does this via two prompts for the different tail length, leaving queries in middle alone
     
     Args:
@@ -380,6 +380,11 @@ def reword_advisor_query(query: str, query_length_prompts: dict) -> str:
     Returns:
         str: Rewritten query for RAG processing.
     """
+    
+    reworded_query = reword_advisor_message(query)
+    
+    if 50 <= len(reworded_query) <= 200:
+        return reworded_query # no flag
 
     llm = BedrockChat(
         model_id=os.getenv("LLM"),
@@ -387,18 +392,10 @@ def reword_advisor_query(query: str, query_length_prompts: dict) -> str:
         model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},
     )
 
-    if len(query) < 50:
-        prompt = query_length_prompts['0 to 50']
-    elif len(query) > 400:
-        prompt = query_length_prompts['400+']
-    else:
-        return query  # Return original if length is in range 50 to 400
+    prompt = query_length_prompts['0 to 50'] if len(reworded_query) < 50 else query_length_prompts['400+']
+    prompt += f"\n\nIncoming rewritten query: {reworded_query}"
 
-    prompt += f"\n\n Incoming query is: {query}"
-    response = llm.invoke(prompt)
-    return response.content
-
-
+    return llm.invoke(prompt).content
 
 
 def reword_advisor_message(message: str) -> str:
@@ -427,13 +424,11 @@ def reword_advisor_message(message: str) -> str:
     Extracted Information:
     """
     response = llm.invoke(prompt)
-    return response.content
+    return response.content    
 
 
 def send_to_llm(caddy_query: UserMessage, chat_client, query_length_prompts):
     query = caddy_query.message
-
-    query = reword_advisor_query(query, query_length_prompts)
 
     domain = caddy_query.user_email.split("@")[1]
 
@@ -487,7 +482,7 @@ def send_to_llm(caddy_query: UserMessage, chat_client, query_length_prompts):
             accumulated_answer = ""
             for chunk in chain.stream(
                 {
-                    "input": reword_advisor_message(query),
+                    "input": reword_advisor_orchestration(query, query_length_prompts),
                     "chat_history": chat_history,
                 }
             ):
@@ -701,7 +696,7 @@ def temporary_teams_invoke(chat_client, caddy_message: CaddyMessageEvent):
 
     caddy_response = chain.invoke(
         {
-            "input": reword_advisor_message(caddy_message.message_string),
+            "input": reword_advisor_orchestration(caddy_message.message_string, query_length_prompts),
             "chat_history": [],
         }
     )
