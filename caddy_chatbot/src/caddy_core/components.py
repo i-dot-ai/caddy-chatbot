@@ -26,7 +26,7 @@ from caddy_core.utils.tables import (
 from fastapi import status
 from fastapi.responses import Response
 from langchain.prompts import PromptTemplate
-from langchain_community.chat_models import BedrockChat
+from langchain_aws import ChatBedrock
 from pytz import timezone
 
 
@@ -368,7 +368,7 @@ def check_existing_call(caddy_message) -> Tuple[Dict[str, Any], bool]:
 
 
 def reword_advisor_message(message: str) -> str:
-    llm = BedrockChat(
+    llm = ChatBedrock(
         model_id=os.getenv("LLM"),
         region_name="eu-west-3",
         model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},
