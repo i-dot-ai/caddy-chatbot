@@ -1,36 +1,33 @@
+import json
+import os
 from datetime import datetime
-from fastapi.responses import Response
-from fastapi import status
-
-from langchain.prompts import PromptTemplate
-from caddy_core.utils.prompt import retrieve_route_specific_augmentation, get_prompt
-
 from time import sleep
+from typing import Any, Dict, List, Tuple
 
+from boto3.dynamodb.conditions import Key
 from caddy_core.models import (
-    ProcessChatMessageEvent,
-    CaddyMessageEvent,
-    UserMessage,
-    LlmResponse,
-    SupervisionEvent,
     ApprovalEvent,
+    CaddyMessageEvent,
+    LlmResponse,
+    ProcessChatMessageEvent,
+    SupervisionEvent,
+    UserMessage,
 )
-
+from caddy_core.services import enrolment
+from caddy_core.services.evaluation import execute_optional_modules
+from caddy_core.services.retrieval_chain import build_chain
+from caddy_core.utils.monitoring import logger
+from caddy_core.utils.prompt import get_prompt, retrieve_route_specific_augmentation
 from caddy_core.utils.tables import (
     evaluation_table,
     responses_table,
     users_table,
 )
-from caddy_core.utils.monitoring import logger
-from caddy_core.services.retrieval_chain import build_chain
-from caddy_core.services import enrolment
-from caddy_core.services.evaluation import execute_optional_modules
-from boto3.dynamodb.conditions import Key
-
-import json
+from fastapi import status
+from fastapi.responses import Response
+from langchain.prompts import PromptTemplate
+from langchain_aws import ChatBedrock
 from pytz import timezone
-
-from typing import List, Any, Dict, Tuple
 
 
 def rct_survey_reminder(event, user_record, chat_client):
@@ -370,6 +367,17 @@ def check_existing_call(caddy_message) -> Tuple[Dict[str, Any], bool]:
     return module_values, survey_complete
 
 
+def reword_advisor_message(message: str) -> str:
+    llm = ChatBedrock(
+        model_id=os.getenv("LLM"),
+        region_name="eu-west-3",
+        model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},
+    )
+    prompt = PromptTemplate.from_template(get_prompt("REWORDING_PROMPT"))
+    response = llm.invoke(prompt.format(message=message))
+    return response.content
+
+
 def send_to_llm(caddy_query: UserMessage, chat_client):
     query = caddy_query.message
 
@@ -377,6 +385,7 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
 
     chat_history = get_chat_history(caddy_query)
 
+    route_specific_augmentation, route = retrieve_route_specific_augmentation(query)
     route_specific_augmentation, route = retrieve_route_specific_augmentation(query)
 
     day_date_time = datetime.now(timezone("Europe/London")).strftime(
@@ -425,7 +434,7 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
             accumulated_answer = ""
             for chunk in chain.stream(
                 {
-                    "input": query,
+                    "input": reword_advisor_message(query),
                     "chat_history": chat_history,
                 }
             ):
@@ -645,7 +654,7 @@ def temporary_teams_invoke(chat_client, caddy_event: CaddyMessageEvent):
 
     caddy_response = chain.invoke(
         {
-            "input": caddy_event.message_string,
+            "input": reword_advisor_message(caddy_user_message.message_string),
             "chat_history": [],
         }
     )
