@@ -30,7 +30,7 @@ class UserMessage(pydantic.BaseModel):
 class LlmResponse(pydantic.BaseModel):
     response_id: str = str(uuid.uuid4())
     message_id: str
-    thread_id: str
+    thread_id: str | None = None
     llm_prompt: str
     llm_answer: str
     llm_response_json: Union[pydantic.Json, None] = None
