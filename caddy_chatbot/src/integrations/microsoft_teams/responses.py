@@ -1,5 +1,5 @@
 from fastapi import status
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import Response
 
 # --- Status Responses --- #
 NO_CONTENT = Response(status_code=status.HTTP_204_NO_CONTENT)

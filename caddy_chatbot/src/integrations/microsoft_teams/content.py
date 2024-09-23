@@ -7,7 +7,7 @@ CADDY_PROCESSING = [
         "items": [
             {
                 "type": "TextBlock",
-                "text": f"🦉 Processing request...",
+                "text": "🦉 Processing request...",
                 "weight": "bolder",
                 "size": "medium",
             },

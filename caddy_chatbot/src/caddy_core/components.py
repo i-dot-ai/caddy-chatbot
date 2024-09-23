@@ -23,6 +23,8 @@ from caddy_core.utils.tables import (
     responses_table,
     users_table,
 )
+
+from caddy_core.utils.prompts.rewording_query import query_length_prompts
 from fastapi import status
 from fastapi.responses import Response
 from langchain.prompts import PromptTemplate
@@ -90,7 +92,7 @@ def handle_message(caddy_message, chat_client):
         message=chat_client.messages.COMPOSING_MESSAGE,
     )
 
-    send_to_llm(caddy_query=message_query, chat_client=chat_client)
+    send_to_llm(caddy_query=message_query, chat_client=chat_client, query_length_prompts=query_length_prompts)
 
 
 def remove_role_played_responses(response: str) -> str:
@@ -367,25 +369,72 @@ def check_existing_call(caddy_message) -> Tuple[Dict[str, Any], bool]:
     return module_values, survey_complete
 
 
+def reword_advisor_orchestration(query: str, query_length_prompts: dict) -> str:
+    """An agent to reason whether the reworded query is sufficient.
+    It does this via two prompts for the different tail length, leaving queries in middle alone
+    
+    Args:
+        query (str): incoming query from advisor
+        query_length_prompts (dict): a dict for the two prompts for either tail length
+        
+    Returns:
+        str: Rewritten query for RAG processing.
+    """
+    
+    reworded_query = reword_advisor_message(query)
+    
+    if 50 <= len(reworded_query) <= 200:
+        return reworded_query # no flag
+
+    llm = BedrockChat(
+        model_id=os.getenv("LLM"),
+        region_name="eu-west-3",
+        model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},
+    )
+
+    prompt = query_length_prompts['0 to 50'] if len(reworded_query) < 50 else query_length_prompts['400+']
+    prompt += f"\n\nIncoming rewritten query: {reworded_query}"
+
+    return llm.invoke(prompt).content
+
+
 def reword_advisor_message(message: str) -> str:
     llm = ChatBedrock(
         model_id=os.getenv("LLM"),
         region_name="eu-west-3",
         model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},
     )
-    prompt = PromptTemplate.from_template(get_prompt("REWORDING_PROMPT"))
-    response = llm.invoke(prompt.format(message=message))
-    return response.content
+    prompt = f"""You are an information extraction assistant called Caddy. 
+    Your task is to analyze the given message and extract key information that would be relevant 
+    for a legal assistance chatbot to perform a RAG (Retrieval-Augmented Generation) search. 
+    Follow these guidelines: 
+        1. Identify the main legal topic or issue being discussed. 
+        2. Extract any specific questions being asked. 
+        3. Note any relevant personal details of the individual involved (e.g., age, nationality, employment status). 
+        4. Identify key facts or circumstances related to the legal situation. 
+        5. Extract any mentioned dates, locations, or monetary amounts.
+        6. Identify any legal terms or concepts mentioned. 
+    Provide your response in a structured format with clear headings for each category of extracted information. 
+    If any category is not applicable or no relevant information is found skip it. 
+    Remember to focus only on extracting factual information without adding any interpretation or advice. 
+    
+    Input:
+    {message}
+    
+    Extracted Information:
+    """
+    response = llm.invoke(prompt)
+    return response.content    
 
 
-def send_to_llm(caddy_query: UserMessage, chat_client):
+def send_to_llm(caddy_query: UserMessage, chat_client, query_length_prompts):
+
     query = caddy_query.message
 
     domain = caddy_query.user_email.split("@")[1]
 
     chat_history = get_chat_history(caddy_query)
 
-    route_specific_augmentation, route = retrieve_route_specific_augmentation(query)
     route_specific_augmentation, route = retrieve_route_specific_augmentation(query)
 
     day_date_time = datetime.now(timezone("Europe/London")).strftime(
@@ -434,7 +483,7 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
             accumulated_answer = ""
             for chunk in chain.stream(
                 {
-                    "input": reword_advisor_message(query),
+                    "input": reword_advisor_orchestration(query, query_length_prompts),
                     "chat_history": chat_history,
                 }
             ):
@@ -654,7 +703,7 @@ def temporary_teams_invoke(chat_client, caddy_event: CaddyMessageEvent):
 
     caddy_response = chain.invoke(
         {
-            "input": reword_advisor_message(caddy_user_message.message_string),
+            "input": reword_advisor_orchestration(caddy_message.message_string, query_length_prompts),
             "chat_history": [],
         }
     )
