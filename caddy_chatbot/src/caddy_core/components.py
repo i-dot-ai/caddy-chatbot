@@ -386,7 +386,7 @@ def reword_advisor_orchestration(query: str, query_length_prompts: dict) -> str:
     if 50 <= len(reworded_query) <= 200:
         return reworded_query # no flag
 
-    llm = BedrockChat(
+    llm = ChatBedrock(
         model_id=os.getenv("LLM"),
         region_name="eu-west-3",
         model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},
@@ -703,7 +703,7 @@ def temporary_teams_invoke(chat_client, caddy_event: CaddyMessageEvent):
 
     caddy_response = chain.invoke(
         {
-            "input": reword_advisor_orchestration(caddy_message.message_string, query_length_prompts),
+            "input": reword_advisor_orchestration(caddy_event.message_string, query_length_prompts),
             "chat_history": [],
         }
     )
