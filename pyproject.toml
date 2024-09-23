@@ -34,6 +34,7 @@ semantic-router = {version = "^0.0.46", extras = ["bedrock"]}
 thefuzz = "^0.22.1"
 python-dotenv = "^1.0.1"
 langchain-aws = "^0.1.17"
+cohere = "5.9.2"
 
 [tool.poetry.group.dev.dependencies]
 aws-sam-cli = "^1.114.0"
