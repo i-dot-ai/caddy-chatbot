@@ -1,6 +1,10 @@
 import boto3
 import os
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 # === Database Connections ===
 dynamodb = boto3.resource("dynamodb", region_name="eu-west-2")
 

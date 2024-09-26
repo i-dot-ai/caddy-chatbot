@@ -1,4 +1,4 @@
-from langchain_community.chat_models import BedrockChat
+from langchain_aws import ChatBedrock
 from langchain_community.embeddings import BedrockEmbeddings
 from langchain_community.vectorstores import OpenSearchVectorSearch
 from langchain_community.document_transformers import EmbeddingsClusteringFilter
@@ -10,7 +10,6 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 
 from langchain.retrievers import ContextualCompressionRetriever
 from langchain.retrievers.merger_retriever import MergerRetriever
-from langchain.vectorstores.elasticsearch import ElasticsearchStore
 from langchain.retrievers.document_compressors import DocumentCompressorPipeline
 
 import boto3
@@ -19,11 +18,11 @@ from opensearchpy import RequestsHttpConnection
 from requests_aws4auth import AWS4Auth
 
 from caddy_core.utils.monitoring import logger
+from caddy_core.services.enrolment import check_user_sources
 
-import re
 import os
 from datetime import datetime
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Any
 
 alternate_region = "eu-west-3"
 
@@ -71,22 +70,41 @@ class CaddyOpenSearchVectorSearch(OpenSearchVectorSearch):
         ]
 
 
-def build_chain(CADDY_PROMPT):
+def build_chain(CADDY_PROMPT, user: str = None):
     caddy_retrievers = []
 
-    for source in ["citizensadvice", "govuk", "advisernet"]:
+    source_list = check_user_sources(user)
+
+    sources = len(source_list)
+    total_source_docs = 6
+    input_docs_per_source = total_source_docs * 2
+    fetched_docs_per_source = total_source_docs * 3
+    filtered_docs_per_source = round(total_source_docs / sources)
+    logger.debug(f"Sources: {sources}")
+    logger.debug(f"Total source docs: {total_source_docs}")
+    logger.debug(f"Total input docs: {input_docs_per_source * sources}")
+    logger.debug(f"Total fetched docs: {fetched_docs_per_source * sources}")
+    logger.debug(f"Total filtered docs: {filtered_docs_per_source * sources}")
+
+    for source in source_list:
         vectorstore = CaddyOpenSearchVectorSearch(
             index_name=f"{source}_scrape_db",
             opensearch_url=opensearch_https,
             embedding_function=embeddings,
             http_auth=auth,
+            timeout=3000,
             use_ssl=True,
             verify_certs=True,
             connection_class=RequestsHttpConnection,
             attributes=["source", "raw_markdown"],
         )
         retriever = vectorstore.as_retriever(
-            search_type="mmr", search_kwargs={"k": 12, "fetch_k": 24, "lambda_mult": 0.2}
+            search_type="mmr",
+            search_kwargs={
+                "k": input_docs_per_source,
+                "fetch_k": fetched_docs_per_source,
+                "lambda_mult": 0.2,
+            },
         )
         caddy_retrievers.append(retriever)
 
@@ -94,18 +112,17 @@ def build_chain(CADDY_PROMPT):
 
     filter_ordered_by_retriever = EmbeddingsClusteringFilter(
         embeddings=embeddings,
-        num_clusters=3,
-        num_closest=4,
+        num_clusters=sources,
+        num_closest=filtered_docs_per_source,
         sorted=True,
     )
 
-    pipeline = DocumentCompressorPipeline(
-        transformers=[filter_ordered_by_retriever])
+    pipeline = DocumentCompressorPipeline(transformers=[filter_ordered_by_retriever])
     compression_retriever = ContextualCompressionRetriever(
         base_compressor=pipeline, base_retriever=lotr
     )
 
-    llm = BedrockChat(
+    llm = ChatBedrock(
         model_id=os.getenv("LLM"),
         region_name=alternate_region,
         model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},

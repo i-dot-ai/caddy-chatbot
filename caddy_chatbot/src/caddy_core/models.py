@@ -1,6 +1,7 @@
-from typing import Union, List, Any
-from datetime import datetime
 import uuid
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Union
+
 import pydantic
 from pydantic.types import StrictBool
 
@@ -20,7 +21,7 @@ class UserMessage(pydantic.BaseModel):
     conversation_id: Union[str, None] = None
     thread_id: Union[str, None] = None
     client: str
-    user_email: str
+    user_email: Union[str, None] = None
     message: str
     message_sent_timestamp: str
     message_received_timestamp: datetime
@@ -29,7 +30,7 @@ class UserMessage(pydantic.BaseModel):
 class LlmResponse(pydantic.BaseModel):
     response_id: str = str(uuid.uuid4())
     message_id: str
-    thread_id: str
+    thread_id: str | None = None
     llm_prompt: str
     llm_answer: str
     llm_response_json: Union[pydantic.Json, None] = None
@@ -68,11 +69,15 @@ class CaddyMessageEvent(pydantic.BaseModel):
     user: str
     name: str
     space_id: str
-    thread_id: str
+    thread_id: Optional[str] = None
     message_id: str
     message_string: str
     source_client: str
     timestamp: datetime
+    teams_conversation: Optional[Dict[str, str]] = None
+    teams_from: Optional[Dict[str, str]] = None
+    teams_recipient: Optional[Dict[str, str]] = None
+    teams_service_url: Optional[str] = None
 
 
 class ProcessChatMessageEvent(pydantic.BaseModel):

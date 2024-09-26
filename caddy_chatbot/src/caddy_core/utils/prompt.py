@@ -1,7 +1,5 @@
 import os
 import boto3
-from botocore.exceptions import ClientError
-from datetime import datetime, timezone, timedelta
 
 from caddy_core.utils.monitoring import logger
 from caddy_core.services.router import get_route

@@ -1,5 +1,12 @@
 import logging
 import sys
+import os
+
+debug_enabled = os.environ.get("DEBUG", False)
+logger_level = logging.INFO
+
+if debug_enabled:
+    logger_level = logging.DEBUG
 
 
 class Colours:
@@ -29,7 +36,7 @@ class ColourFormatter(logging.Formatter):
         return f"{self.COLOURS.get(record.levelname, '')}{log_message}{Colours.RESET}"
 
 
-def setup_logger(name, level=logging.INFO):
+def setup_logger(name, level=logger_level):
     """
     Function to setup a colour-coded logger
     """

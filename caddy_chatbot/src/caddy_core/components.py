@@ -1,35 +1,35 @@
+import json
+import os
 from datetime import datetime
-from fastapi.responses import Response
-from fastapi import status
-
-from langchain.prompts import PromptTemplate
-from caddy_core.utils.prompt import retrieve_route_specific_augmentation, get_prompt
-
 from time import sleep
+from typing import Any, Dict, List, Tuple
 
+from boto3.dynamodb.conditions import Key
 from caddy_core.models import (
-    ProcessChatMessageEvent,
-    UserMessage,
-    LlmResponse,
-    SupervisionEvent,
     ApprovalEvent,
+    CaddyMessageEvent,
+    LlmResponse,
+    ProcessChatMessageEvent,
+    SupervisionEvent,
+    UserMessage,
 )
-
+from caddy_core.services import enrolment
+from caddy_core.services.evaluation import execute_optional_modules
+from caddy_core.services.retrieval_chain import build_chain
+from caddy_core.utils.monitoring import logger
+from caddy_core.utils.prompt import get_prompt, retrieve_route_specific_augmentation
 from caddy_core.utils.tables import (
     evaluation_table,
     responses_table,
     users_table,
 )
-from caddy_core.utils.monitoring import logger
-from caddy_core.services.retrieval_chain import build_chain
-from caddy_core.services import enrolment
-from caddy_core.services.evaluation import execute_optional_modules
-from boto3.dynamodb.conditions import Key
 
-import json
+from caddy_core.utils.prompts.rewording_query import query_length_prompts
+from fastapi import status
+from fastapi.responses import Response
+from langchain.prompts import PromptTemplate
+from langchain_aws import ChatBedrock
 from pytz import timezone
-
-from typing import List, Any, Dict, Tuple
 
 
 def rct_survey_reminder(event, user_record, chat_client):
@@ -92,7 +92,11 @@ def handle_message(caddy_message, chat_client):
         message=chat_client.messages.COMPOSING_MESSAGE,
     )
 
-    send_to_llm(caddy_query=message_query, chat_client=chat_client)
+    send_to_llm(
+        caddy_query=message_query,
+        chat_client=chat_client,
+        query_length_prompts=query_length_prompts,
+    )
 
 
 def remove_role_played_responses(response: str) -> str:
@@ -212,6 +216,29 @@ def format_chat_message(event: ProcessChatMessageEvent) -> UserMessage:
     return message_query
 
 
+def format_teams_user_message(event: CaddyMessageEvent) -> UserMessage:
+    """
+    Formats the teams message into a UserMessage object
+
+    Args:
+        event (ProcessChatMessageEvent): The event containing the chat message
+
+    Returns:
+        UserMessage: The formatted chat message
+    """
+    message_query = UserMessage(
+        thread_id=None,
+        conversation_id=event.teams_conversation["id"],
+        message_id=event.message_id,
+        client=event.source_client,
+        user_email=event.user,
+        message=event.message_string,
+        message_sent_timestamp=str(event.timestamp),
+        message_received_timestamp=datetime.now(),
+    )
+    return message_query
+
+
 def store_message(message: UserMessage):
     responses_table.put_item(
         Item={
@@ -261,8 +288,7 @@ def store_evaluation_module(user, thread_id, module_values):
     user_arguments["module_arguments"]["split"] = str(
         user_arguments["module_arguments"]["split"]
     )
-    call_start_time = datetime.now(
-        timezone("Europe/London")).strftime("%d-%m-%Y %H:%M")
+    call_start_time = datetime.now(timezone("Europe/London")).strftime("%d-%m-%Y %H:%M")
     evaluation_table.put_item(
         Item={
             "threadId": thread_id,
@@ -347,15 +373,76 @@ def check_existing_call(caddy_message) -> Tuple[Dict[str, Any], bool]:
     return module_values, survey_complete
 
 
-def send_to_llm(caddy_query: UserMessage, chat_client):
+def reword_advisor_orchestration(query: str, query_length_prompts: dict) -> str:
+    """An agent to reason whether the reworded query is sufficient.
+    It does this via two prompts for the different tail length, leaving queries in middle alone
+
+    Args:
+        query (str): incoming query from advisor
+        query_length_prompts (dict): a dict for the two prompts for either tail length
+
+    Returns:
+        str: Rewritten query for RAG processing.
+    """
+
+    reworded_query = reword_advisor_message(query)
+
+    if 50 <= len(reworded_query) <= 200:
+        return reworded_query  # no flag
+
+    llm = ChatBedrock(
+        model_id=os.getenv("LLM"),
+        region_name="eu-west-3",
+        model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},
+    )
+
+    prompt = (
+        query_length_prompts["0 to 50"]
+        if len(reworded_query) < 50
+        else query_length_prompts["400+"]
+    )
+    prompt += f"\n\nIncoming rewritten query: {reworded_query}"
+
+    return llm.invoke(prompt).content
+
+
+def reword_advisor_message(message: str) -> str:
+    llm = ChatBedrock(
+        model_id=os.getenv("LLM"),
+        region_name="eu-west-3",
+        model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},
+    )
+    prompt = f"""You are an information extraction assistant called Caddy.
+    Your task is to analyze the given message and extract key information that would be relevant
+    for a legal assistance chatbot to perform a RAG (Retrieval-Augmented Generation) search.
+    Follow these guidelines:
+        1. Identify the main legal topic or issue being discussed.
+        2. Extract any specific questions being asked.
+        3. Note any relevant personal details of the individual involved (e.g., age, nationality, employment status).
+        4. Identify key facts or circumstances related to the legal situation.
+        5. Extract any mentioned dates, locations, or monetary amounts.
+        6. Identify any legal terms or concepts mentioned.
+    Provide your response in a structured format with clear headings for each category of extracted information.
+    If any category is not applicable or no relevant information is found skip it.
+    Remember to focus only on extracting factual information without adding any interpretation or advice.
+
+    Input:
+    {message}
+
+    Extracted Information:
+    """
+    response = llm.invoke(prompt)
+    return response.content
+
+
+def send_to_llm(caddy_query: UserMessage, chat_client, query_length_prompts):
     query = caddy_query.message
 
     domain = caddy_query.user_email.split("@")[1]
 
     chat_history = get_chat_history(caddy_query)
 
-    route_specific_augmentation, route = retrieve_route_specific_augmentation(
-        query)
+    route_specific_augmentation, route = retrieve_route_specific_augmentation(query)
 
     day_date_time = datetime.now(timezone("Europe/London")).strftime(
         "%A %d %B %Y %H:%M"
@@ -370,11 +457,11 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
         partial_variables={
             "route_specific_augmentation": route_specific_augmentation,
             "day_date_time": day_date_time,
-            "office_regions": office_regions,
+            "office_regions": ", ".join(office_regions),
         },
     )
 
-    chain, ai_prompt_timestamp = build_chain(CADDY_PROMPT)
+    chain, ai_prompt_timestamp = build_chain(CADDY_PROMPT, user=caddy_query.user_email)
 
     user = caddy_query.user_email
 
@@ -403,7 +490,7 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
             accumulated_answer = ""
             for chunk in chain.stream(
                 {
-                    "input": query,
+                    "input": reword_advisor_orchestration(query, query_length_prompts),
                     "chat_history": chat_history,
                 }
             ):
@@ -419,10 +506,13 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
 
                 if "answer" in chunk:
                     if first_chunk:
-                        context_sources = [document.metadata.get("source", "")
-                                           for document in caddy_response.get("context", [])]
+                        context_sources = [
+                            document.metadata.get("source", "")
+                            for document in caddy_response.get("context", [])
+                        ]
                         response_card = chat_client.create_card(
-                            caddy_response["answer"], context_sources)
+                            caddy_response["answer"], context_sources
+                        )
                         response_card["cardsV2"][0]["card"]["sections"][0][
                             "widgets"
                         ].append(chat_client.messages.RESPONSE_STREAMING)
@@ -444,13 +534,15 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
                     accumulated_answer += chunk["answer"]
                     if len(accumulated_answer) >= 75:
                         early_terminate, caddy_response["answer"] = (
-                            remove_role_played_responses(
-                                caddy_response["answer"])
+                            remove_role_played_responses(caddy_response["answer"])
                         )
-                        context_sources = [document.metadata.get("source", "")
-                                           for document in caddy_response.get("context", [])]
+                        context_sources = [
+                            document.metadata.get("source", "")
+                            for document in caddy_response.get("context", [])
+                        ]
                         response_card = chat_client.create_card(
-                            caddy_response["answer"], context_sources)
+                            caddy_response["answer"], context_sources
+                        )
                         response_card["cardsV2"][0]["card"]["sections"][0][
                             "widgets"
                         ].append(chat_client.messages.RESPONSE_STREAMING)
@@ -488,12 +580,12 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
             print(f"Retrying in {wait}...")
             sleep(wait)
 
-    _, caddy_response["answer"] = remove_role_played_responses(
-        caddy_response["answer"])
-    context_sources = [document.metadata.get("source", "")
-                       for document in caddy_response.get("context", [])]
-    response_card = chat_client.create_card(
-        caddy_response["answer"], context_sources)
+    _, caddy_response["answer"] = remove_role_played_responses(caddy_response["answer"])
+    context_sources = [
+        document.metadata.get("source", "")
+        for document in caddy_response.get("context", [])
+    ]
+    response_card = chat_client.create_card(caddy_response["answer"], context_sources)
     chat_client.update_message_in_supervisor_space(
         space_id=supervisor_space,
         message_id=supervision_caddy_message_id,
@@ -502,7 +594,7 @@ def send_to_llm(caddy_query: UserMessage, chat_client):
 
     ai_response_timestamp = datetime.now()
 
-    logger.info(context_sources)
+    logger.debug(f"SOURCES: {context_sources}")
 
     llm_response = LlmResponse(
         message_id=caddy_query.message_id,
@@ -588,12 +680,15 @@ def store_approver_event(thread_id: str, approval_event: ApprovalEvent):
     )
 
 
-def temporary_teams_invoke(chat_client, query, event):
+def temporary_teams_invoke(chat_client, caddy_event: CaddyMessageEvent):
     """
     Temporary solution for Teams integration
     """
-    route_specific_augmentation, _ = retrieve_route_specific_augmentation(
-        query)
+    caddy_user_message = format_teams_user_message(caddy_event)
+    store_message(caddy_user_message)
+    route_specific_augmentation, route = retrieve_route_specific_augmentation(
+        caddy_event.message_string
+    )
 
     day_date_time = datetime.now(timezone("Europe/London")).strftime(
         "%A %d %B %Y %H:%M"
@@ -615,16 +710,37 @@ def temporary_teams_invoke(chat_client, query, event):
 
     caddy_response = chain.invoke(
         {
-            "input": query,
+            "input": reword_advisor_orchestration(
+                caddy_event.message_string, query_length_prompts
+            ),
             "chat_history": [],
         }
     )
 
-    _, caddy_response["answer"] = remove_role_played_responses(
-        caddy_response["answer"])
+    _, caddy_response["answer"] = remove_role_played_responses(caddy_response["answer"])
+
+    context_sources = [
+        document.metadata.get("source", "")
+        for document in caddy_response.get("context", [])
+    ]
+    ai_response_timestamp = datetime.now()
+    response_card = chat_client.messages.generate_response_card(
+        caddy_response["answer"]
+    )
+    llm_response = LlmResponse(
+        message_id=caddy_event.message_id,
+        llm_prompt=caddy_user_message.message,
+        llm_answer=caddy_response["answer"],
+        thread_id=caddy_user_message.thread_id,
+        llm_prompt_timestamp=ai_prompt_timestamp,
+        llm_response_json=json.dumps(response_card),
+        llm_response_timestamp=ai_response_timestamp,
+        route=route or "no_route",
+        context=context_sources,
+    )
+    store_response(llm_response)
 
     chat_client.send_adviser_card(
-        event,
-        card=chat_client.messages.generate_response_card(
-            caddy_response["answer"]),
+        caddy_event,
+        card=response_card,
     )
