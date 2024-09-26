@@ -27,7 +27,8 @@ from caddy_core.utils.tables import (
 from caddy_core.utils.prompts.rewording_query import query_length_prompts
 from fastapi import status
 from fastapi.responses import Response
-from langchain.prompts import PromptTemplate
+from langchain.prompts import PromptTemplate, ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
 from langchain_aws import ChatBedrock
 from pytz import timezone
 
@@ -369,42 +370,43 @@ def check_existing_call(caddy_message) -> Tuple[Dict[str, Any], bool]:
     return module_values, survey_complete
 
 
-def reword_advisor_orchestration(query: str, query_length_prompts: dict) -> str:
-    """An agent to reason whether the reworded query is sufficient.
-    It does this via two prompts for the different tail length, leaving queries in middle alone
+# def reword_advisor_orchestration(query: str, query_length_prompts: dict) -> str:
+#     """An agent to reason whether the reworded query is sufficient.
+#     It does this via two prompts for the different tail length, leaving queries in middle alone
     
-    Args:
-        query (str): incoming query from advisor
-        query_length_prompts (dict): a dict for the two prompts for either tail length
+#     Args:
+#         query (str): incoming query from advisor
+#         query_length_prompts (dict): a dict for the two prompts for either tail length
         
-    Returns:
-        str: Rewritten query for RAG processing.
-    """
+#     Returns:
+#         str: Rewritten query for RAG processing.
+#     """
     
-    reworded_query = reword_advisor_message(query)
+#     reworded_query = reword_advisor_message(query)
     
-    if 50 <= len(reworded_query) <= 200:
-        return reworded_query # no flag
+#     if 50 <= len(reworded_query) <= 200:
+#         return reworded_query # no flag
 
+#     llm = ChatBedrock(
+#         model_id=os.getenv("LLM"),
+#         region_name="eu-west-3",
+#         model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},
+#     )
+
+#     prompt = query_length_prompts['0 to 50'] if len(reworded_query) < 50 else query_length_prompts['400+']
+#     prompt += f"\n\nIncoming rewritten query: {reworded_query}"
+
+#     return llm.invoke(prompt).content
+
+
+def reword_advisor_message(message: str) -> tuple:
     llm = ChatBedrock(
         model_id=os.getenv("LLM"),
         region_name="eu-west-3",
         model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},
     )
-
-    prompt = query_length_prompts['0 to 50'] if len(reworded_query) < 50 else query_length_prompts['400+']
-    prompt += f"\n\nIncoming rewritten query: {reworded_query}"
-
-    return llm.invoke(prompt).content
-
-
-def reword_advisor_message(message: str) -> str:
-    llm = ChatBedrock(
-        model_id=os.getenv("LLM"),
-        region_name="eu-west-3",
-        model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},
-    )
-    prompt = f"""You are an information extraction assistant called Caddy. 
+    
+    reword_prompt = f"""You are an information extraction assistant called Caddy. 
     Your task is to analyze the given message and extract key information that would be relevant 
     for a legal assistance chatbot to perform a RAG (Retrieval-Augmented Generation) search. 
     Follow these guidelines: 
@@ -415,7 +417,7 @@ def reword_advisor_message(message: str) -> str:
         5. Extract any mentioned dates, locations, or monetary amounts.
         6. Identify any legal terms or concepts mentioned. 
     Provide your response in a structured format with clear headings for each category of extracted information. 
-    If any category is not applicable or no relevant information is found skip it. 
+    If any category is not applicable or no relevant information is found, skip it. 
     Remember to focus only on extracting factual information without adding any interpretation or advice. 
     
     Input:
@@ -423,13 +425,34 @@ def reword_advisor_message(message: str) -> str:
     
     Extracted Information:
     """
-    response = llm.invoke(prompt)
-    return response.content    
+    
+    reworded_response = llm.invoke(reword_prompt)
+
+    classification_prompt = ChatPromptTemplate.from_template(
+        """There are 3 types of questions asked:
+        Research: Seeking information or how-to guides.
+        Client: Specific scenarios often involving detailed client situations.
+        General: Broad or non-specific requests for information or help.
+        Based on the following extracted information, 
+        determine the question type and return the question type only.
+        
+        Extracted Information:
+        {reworded_response}
+        
+        Type of Question:
+        """
+    )
+    
+    classification_chain = classification_prompt | llm | StrOutputParser()
+
+    classification_response = classification_chain.invoke({"reworded_response": reworded_response["content"]})
+    
+    return reworded_response.content, classification_response.content
 
 
 def send_to_llm(caddy_query: UserMessage, chat_client, query_length_prompts):
 
-    query = caddy_query.message
+    query, category = reword_advisor_message(caddy_query.message)
 
     domain = caddy_query.user_email.split("@")[1]
 
@@ -444,8 +467,15 @@ def send_to_llm(caddy_query: UserMessage, chat_client, query_length_prompts):
     _, office = enrolment.check_domain_status(domain)
     office_regions = enrolment.get_office_coverage(office)
 
+    try:
+        base_category_prompt = get_prompt(f"{category}_CORE_PROMPT")
+        logger.info(f"Category prompt selected: {category}_CORE_PROMPT")
+    except Exception as e:
+        logger.error(f"Error fetching {category}_CORE_PROMPT: {e}. Falling back to default CORE_PROMPT.")
+        base_category_prompt =  get_prompt("CORE_PROMPT")
+
     CADDY_PROMPT = PromptTemplate(
-        template=get_prompt("CORE_PROMPT"),
+        template=base_category_prompt,
         input_variables=["context", "question"],
         partial_variables={
             "route_specific_augmentation": route_specific_augmentation,
@@ -454,9 +484,9 @@ def send_to_llm(caddy_query: UserMessage, chat_client, query_length_prompts):
         },
     )
 
-    chain, ai_prompt_timestamp = build_chain(CADDY_PROMPT, user=caddy_query.user_email)
-
     user = caddy_query.user_email
+
+    chain, ai_prompt_timestamp = build_chain(CADDY_PROMPT, user)
 
     supervisor_space = enrolment.get_designated_supervisor_space(user)
     if supervisor_space == "Unknown":
@@ -481,9 +511,12 @@ def send_to_llm(caddy_query: UserMessage, chat_client, query_length_prompts):
             first_chunk = True
             caddy_response = {}
             accumulated_answer = ""
+
+            reworded_response, category = reword_advisor_message(query)
+
             for chunk in chain.stream(
                 {
-                    "input": reword_advisor_orchestration(query, query_length_prompts),
+                    "input": reworded_response,
                     "chat_history": chat_history,
                 }
             ):
@@ -677,6 +710,7 @@ def temporary_teams_invoke(chat_client, caddy_event: CaddyMessageEvent):
     """
     Temporary solution for Teams integration
     """
+    caddy_event.message_string, category = reword_advisor_message(caddy_event.message_string)
     caddy_user_message = format_teams_user_message(caddy_event)
     store_message(caddy_user_message)
     route_specific_augmentation, route = retrieve_route_specific_augmentation(
@@ -689,8 +723,15 @@ def temporary_teams_invoke(chat_client, caddy_event: CaddyMessageEvent):
 
     office_regions = ["England"]
 
+    try:
+        base_category_prompt = get_prompt(f"{category}_CORE_PROMPT")
+        logger.info(f"Category prompt selected: {category}_CORE_PROMPT")
+    except Exception as e:
+        logger.error(f"Error fetching {category}_CORE_PROMPT: {e}. Falling back to default CORE_PROMPT.")
+        base_category_prompt =  get_prompt("CORE_PROMPT")
+
     CADDY_PROMPT = PromptTemplate(
-        template=get_prompt("CORE_PROMPT"),
+        template=base_category_prompt,
         input_variables=["context", "question"],
         partial_variables={
             "route_specific_augmentation": route_specific_augmentation,
@@ -701,9 +742,11 @@ def temporary_teams_invoke(chat_client, caddy_event: CaddyMessageEvent):
 
     chain, ai_prompt_timestamp = build_chain(CADDY_PROMPT)
 
+    reworded_response, category = reword_advisor_message(caddy_event.message_string)
+
     caddy_response = chain.invoke(
         {
-            "input": reword_advisor_orchestration(caddy_event.message_string, query_length_prompts),
+            "input": reworded_response,
             "chat_history": [],
         }
     )
