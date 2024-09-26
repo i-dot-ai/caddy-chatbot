@@ -17,6 +17,7 @@ from botocore.exceptions import NoCredentialsError
 from opensearchpy import RequestsHttpConnection
 from requests_aws4auth import AWS4Auth
 
+from caddy_core.utils.monitoring import logger
 from caddy_core.services.enrolment import check_user_sources
 
 import os
@@ -74,12 +75,24 @@ def build_chain(CADDY_PROMPT, user: str = None):
 
     source_list = check_user_sources(user)
 
+    sources = len(source_list)
+    total_source_docs = 6
+    input_docs_per_source = total_source_docs * 2
+    fetched_docs_per_source = total_source_docs * 3
+    filtered_docs_per_source = round(total_source_docs / sources)
+    logger.debug(f"Sources: {sources}")
+    logger.debug(f"Total source docs: {total_source_docs}")
+    logger.debug(f"Total input docs: {input_docs_per_source * sources}")
+    logger.debug(f"Total fetched docs: {fetched_docs_per_source * sources}")
+    logger.debug(f"Total filtered docs: {filtered_docs_per_source * sources}")
+
     for source in source_list:
         vectorstore = CaddyOpenSearchVectorSearch(
             index_name=f"{source}_scrape_db",
             opensearch_url=opensearch_https,
             embedding_function=embeddings,
             http_auth=auth,
+            timeout=3000,
             use_ssl=True,
             verify_certs=True,
             connection_class=RequestsHttpConnection,
@@ -87,7 +100,11 @@ def build_chain(CADDY_PROMPT, user: str = None):
         )
         retriever = vectorstore.as_retriever(
             search_type="mmr",
-            search_kwargs={"k": 12, "fetch_k": 24, "lambda_mult": 0.2},
+            search_kwargs={
+                "k": input_docs_per_source,
+                "fetch_k": fetched_docs_per_source,
+                "lambda_mult": 0.2,
+            },
         )
         caddy_retrievers.append(retriever)
 
@@ -95,8 +112,8 @@ def build_chain(CADDY_PROMPT, user: str = None):
 
     filter_ordered_by_retriever = EmbeddingsClusteringFilter(
         embeddings=embeddings,
-        num_clusters=3,
-        num_closest=4,
+        num_clusters=sources,
+        num_closest=filtered_docs_per_source,
         sorted=True,
     )
 

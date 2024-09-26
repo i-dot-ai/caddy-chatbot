@@ -92,7 +92,11 @@ def handle_message(caddy_message, chat_client):
         message=chat_client.messages.COMPOSING_MESSAGE,
     )
 
-    send_to_llm(caddy_query=message_query, chat_client=chat_client, query_length_prompts=query_length_prompts)
+    send_to_llm(
+        caddy_query=message_query,
+        chat_client=chat_client,
+        query_length_prompts=query_length_prompts,
+    )
 
 
 def remove_role_played_responses(response: str) -> str:
@@ -372,19 +376,19 @@ def check_existing_call(caddy_message) -> Tuple[Dict[str, Any], bool]:
 def reword_advisor_orchestration(query: str, query_length_prompts: dict) -> str:
     """An agent to reason whether the reworded query is sufficient.
     It does this via two prompts for the different tail length, leaving queries in middle alone
-    
+
     Args:
         query (str): incoming query from advisor
         query_length_prompts (dict): a dict for the two prompts for either tail length
-        
+
     Returns:
         str: Rewritten query for RAG processing.
     """
-    
+
     reworded_query = reword_advisor_message(query)
-    
+
     if 50 <= len(reworded_query) <= 200:
-        return reworded_query # no flag
+        return reworded_query  # no flag
 
     llm = ChatBedrock(
         model_id=os.getenv("LLM"),
@@ -392,7 +396,11 @@ def reword_advisor_orchestration(query: str, query_length_prompts: dict) -> str:
         model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},
     )
 
-    prompt = query_length_prompts['0 to 50'] if len(reworded_query) < 50 else query_length_prompts['400+']
+    prompt = (
+        query_length_prompts["0 to 50"]
+        if len(reworded_query) < 50
+        else query_length_prompts["400+"]
+    )
     prompt += f"\n\nIncoming rewritten query: {reworded_query}"
 
     return llm.invoke(prompt).content
@@ -404,31 +412,30 @@ def reword_advisor_message(message: str) -> str:
         region_name="eu-west-3",
         model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},
     )
-    prompt = f"""You are an information extraction assistant called Caddy. 
-    Your task is to analyze the given message and extract key information that would be relevant 
-    for a legal assistance chatbot to perform a RAG (Retrieval-Augmented Generation) search. 
-    Follow these guidelines: 
-        1. Identify the main legal topic or issue being discussed. 
-        2. Extract any specific questions being asked. 
-        3. Note any relevant personal details of the individual involved (e.g., age, nationality, employment status). 
-        4. Identify key facts or circumstances related to the legal situation. 
+    prompt = f"""You are an information extraction assistant called Caddy.
+    Your task is to analyze the given message and extract key information that would be relevant
+    for a legal assistance chatbot to perform a RAG (Retrieval-Augmented Generation) search.
+    Follow these guidelines:
+        1. Identify the main legal topic or issue being discussed.
+        2. Extract any specific questions being asked.
+        3. Note any relevant personal details of the individual involved (e.g., age, nationality, employment status).
+        4. Identify key facts or circumstances related to the legal situation.
         5. Extract any mentioned dates, locations, or monetary amounts.
-        6. Identify any legal terms or concepts mentioned. 
-    Provide your response in a structured format with clear headings for each category of extracted information. 
-    If any category is not applicable or no relevant information is found skip it. 
-    Remember to focus only on extracting factual information without adding any interpretation or advice. 
-    
+        6. Identify any legal terms or concepts mentioned.
+    Provide your response in a structured format with clear headings for each category of extracted information.
+    If any category is not applicable or no relevant information is found skip it.
+    Remember to focus only on extracting factual information without adding any interpretation or advice.
+
     Input:
     {message}
-    
+
     Extracted Information:
     """
     response = llm.invoke(prompt)
-    return response.content    
+    return response.content
 
 
 def send_to_llm(caddy_query: UserMessage, chat_client, query_length_prompts):
-
     query = caddy_query.message
 
     domain = caddy_query.user_email.split("@")[1]
@@ -450,7 +457,7 @@ def send_to_llm(caddy_query: UserMessage, chat_client, query_length_prompts):
         partial_variables={
             "route_specific_augmentation": route_specific_augmentation,
             "day_date_time": day_date_time,
-            "office_regions": office_regions,
+            "office_regions": ", ".join(office_regions),
         },
     )
 
@@ -587,7 +594,7 @@ def send_to_llm(caddy_query: UserMessage, chat_client, query_length_prompts):
 
     ai_response_timestamp = datetime.now()
 
-    logger.info(context_sources)
+    logger.debug(f"SOURCES: {context_sources}")
 
     llm_response = LlmResponse(
         message_id=caddy_query.message_id,
@@ -703,7 +710,9 @@ def temporary_teams_invoke(chat_client, caddy_event: CaddyMessageEvent):
 
     caddy_response = chain.invoke(
         {
-            "input": reword_advisor_orchestration(caddy_event.message_string, query_length_prompts),
+            "input": reword_advisor_orchestration(
+                caddy_event.message_string, query_length_prompts
+            ),
             "chat_history": [],
         }
     )
