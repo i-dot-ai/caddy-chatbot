@@ -610,7 +610,16 @@ class GoogleChat:
             ],
         }
 
-        reference_links_section = {"header": "Reference links", "widgets": []}
+        public_links_section = {
+            "collapsible": True,
+            "uncollapsibleWidgetsCount": 1,
+            "widgets": [],
+        }
+        internal_links_section = {
+            "collapsible": True,
+            "uncollapsibleWidgetsCount": 1,
+            "widgets": [],
+        }
 
         urls = re.findall(
             r"<ref>((?:SOURCE_URL:)?(http[s]?://[^\s>]+))</ref>", llm_response
@@ -624,7 +633,6 @@ class GoogleChat:
                 continue
 
             url_to_check = full_url.replace("SOURCE_URL:", "")
-
             url_parts = urlparse(url_to_check)
             base_url = urlunparse(url_parts._replace(fragment=""))
             fragment = url_parts.fragment
@@ -680,7 +688,11 @@ class GoogleChat:
                         "text": f'<a href="{full_use_url}">[{ref}- {resource}] {full_use_url}</a>'
                     }
                 }
-                reference_links_section["widgets"].append(reference_link)
+
+                if "advisernet" in use_url:
+                    internal_links_section["widgets"].append(reference_link)
+                else:
+                    public_links_section["widgets"].append(reference_link)
 
                 processed_urls.append(full_url)
             else:
@@ -694,8 +706,41 @@ class GoogleChat:
 
         card["cardsV2"][0]["card"]["sections"].append(llm_response_section)
 
-        if reference_links_section["widgets"]:
-            card["cardsV2"][0]["card"]["sections"].append(reference_links_section)
+        if public_links_section["widgets"]:
+            public_links = len(public_links_section["widgets"])
+            public_links_section["header"] = f"Public Links ({public_links})"
+            public_links_section["collapseControl"] = {
+                "horizontalAlignment": "CENTER",
+                "expandButton": {
+                    "text": "Show Public Sources",
+                    "type": "FILLED",
+                    "icon": {"materialIcon": {"name": "link"}},
+                },
+                "collapseButton": {
+                    "text": "Hide Public Sources",
+                    "type": "FILLED",
+                    "icon": {"materialIcon": {"name": "link"}},
+                },
+            }
+            card["cardsV2"][0]["card"]["sections"].append(public_links_section)
+
+        if internal_links_section["widgets"]:
+            internal_links = len(internal_links_section["widgets"])
+            internal_links_section["header"] = f"Internal Links ({internal_links})"
+            internal_links_section["collapseControl"] = {
+                "horizontalAlignment": "CENTER",
+                "expandButton": {
+                    "text": "Show Internal Sources",
+                    "type": "FILLED",
+                    "icon": {"materialIcon": {"name": "settings"}},
+                },
+                "collapseButton": {
+                    "text": "Hide Internal Sources",
+                    "type": "FILLED",
+                    "icon": {"materialIcon": {"name": "settings"}},
+                },
+            }
+            card["cardsV2"][0]["card"]["sections"].append(internal_links_section)
 
         return card
 
