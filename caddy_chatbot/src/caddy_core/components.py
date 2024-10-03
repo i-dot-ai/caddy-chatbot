@@ -740,7 +740,4 @@ def temporary_teams_invoke(chat_client, caddy_event: CaddyMessageEvent):
     )
     store_response(llm_response)
 
-    chat_client.send_adviser_card(
-        caddy_event,
-        card=response_card,
-    )
+    return caddy_response["answer"], context_sources

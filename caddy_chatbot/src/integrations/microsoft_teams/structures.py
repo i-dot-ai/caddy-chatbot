@@ -1,21 +1,24 @@
+import os
+import json
 import requests
 from caddy_core.models import CaddyMessageEvent
+from caddy_core.utils.monitoring import logger
 from caddy_core.services.anonymise import analyse
 from integrations.microsoft_teams import content, responses
+from datetime import datetime
 
 from .verification import get_access_token
 
 
 class MicrosoftTeams:
-    def __init__(self):
+    def __init__(self, supervision_space_id=None):
         self.client = "Microsoft Teams"
         self.access_token = get_access_token()
         self.messages = content
         self.responses = responses
-        self.reaction_actions = {
-            "like": self.handle_thumbs_up,
-            "dislike": self.handle_thumbs_down,
-        }  # TODO check works in teams with the emojis
+        self.bot_id = os.getenv("TEAMS_BOT_ID")
+        self.bot_name = "Caddy"
+        self.supervision_space_id = supervision_space_id
 
     def send_adviser_card(self, event: CaddyMessageEvent, card=None):
         """
@@ -56,7 +59,9 @@ class MicrosoftTeams:
             ],
         }
 
-        response = requests.post(response_url, json=response_activity, headers=headers)
+        response = requests.post(
+            response_url, json=response_activity, headers=headers, timeout=60
+        )
 
         print(response.json())
 
@@ -100,7 +105,9 @@ class MicrosoftTeams:
             ],
         }
 
-        response = requests.put(response_url, json=response_activity, headers=headers)
+        response = requests.put(
+            response_url, json=response_activity, headers=headers, timeout=60
+        )
 
         print(response.json())
 
@@ -121,7 +128,6 @@ class MicrosoftTeams:
                     event=event,
                     card=self.messages.create_pii_detected_card(message_string),
                 )
-
                 return "PII Detected"
 
             caddy_message = CaddyMessageEvent(
@@ -132,73 +138,122 @@ class MicrosoftTeams:
                 message_id=event["id"],
                 message_string=message_string,
                 source_client=self.client,
-                timestamp=event["timestamp"],
+                timestamp=str(event["timestamp"]),
                 teams_conversation=event["conversation"],
                 teams_from=event["from"],
                 teams_recipient=event["recipient"],
                 teams_service_url=event["serviceUrl"],
             )
-        self.send_adviser_card(caddy_message)
 
         return caddy_message
 
-    def handle_reaction_added(self, event):
-        """
-        Handles reactions added to a message, specifically for the sueprvisor space but currently applied to all
-        """
-        reaction_type = event["reactionsAdded"][0]["type"]
-        reply_to_id = event["replyToId"]
+    def json_serialise(self, obj):
+        if isinstance(obj, dict):
+            return {k: self.json_serialise(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self.json_serialise(i) for i in obj]
+        elif isinstance(obj, datetime):
+            return obj.isoformat()
+        elif isinstance(obj, CaddyMessageEvent):
+            return self.json_serialise(obj.__dict__)
+        else:
+            return obj
 
-        # Fetch original message or log activity based on reply_to_id if needed
-        response_text = (
-            f"Reaction '{reaction_type}' added to message with ID {reply_to_id}"
-        )
-        self.send_advisor_message_from_supervisor(event, response_text)
-
-        # TODO define a send_advisor_message_from_supervisor methods
-        # TODO return caddy message from supervisor channel to advisor
-
-    def handle_reaction_removed(self, event):
-        """
-        Handles reactions removed from a message, currently unsure if we need this
-        """
-        reaction_type = event["reactionsRemoved"][0]["type"]
-        reply_to_id = event["replyToId"]
-
-        # Fetch original message or log activity based on reply_to_id if needed
-
-        response_text = (
-            f"Reaction '{reaction_type}' removed from message with ID {reply_to_id}"
-        )
-        self.send_advisor_message_from_supervisor(event, response_text)
-
-    def handle_thumbs_up(self, event, removed=False):
-        """
-        Handle thumbs up reaction = an approval from supervisor
-        """
-        action = "removed" if removed else "added"
-        self.send_advisor_message_from_supervisor(
-            event,
-            f"Message approved {action} for message with ID {event['replyToId']}",
-            "share",
+    def send_to_supervision(self, caddy_message, llm_response, context_sources):
+        supervision_card = self.messages.create_supervision_card(
+            caddy_message, llm_response, context_sources
         )
 
-    def handle_thumbs_down(self, event, removed=False):
-        """
-        Handle thumbs down reaction = no approval from supervisor, caddy message not sent
-        """
-        action = "removed" if removed else "added"
-        self.send_advisor_message_from_supervisor(
-            event,
-            f"Answer not approved {action} for message with ID {event['replyToId']}",
-            "donotshare",
+        service_url = caddy_message.teams_service_url
+        response_url = (
+            f"{service_url}/v3/conversations/{self.supervision_space_id}/activities"
         )
+
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json",
+        }
+
+        response_activity = {
+            "type": "message",
+            "from": {"id": self.bot_id, "name": self.bot_name},
+            "conversation": {"id": self.supervision_space_id},
+            "attachments": [
+                {
+                    "contentType": "application/vnd.microsoft.card.adaptive",
+                    "content": {
+                        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                        "type": "AdaptiveCard",
+                        "version": "1.2",
+                        "body": supervision_card,
+                    },
+                }
+            ],
+        }
+
+        response_activity = self.json_serialise(response_activity)
+
+        try:
+            response = requests.post(
+                response_url, json=response_activity, headers=headers, timeout=60
+            )
+            response.raise_for_status()
+            print(f"Supervision message sent: {response.json()}")
+        except requests.exceptions.RequestException as e:
+            print(f"Error sending supervision message: {str(e)}")
+            print(f"Response content: {response.text}")
+
+    def handle_approval(self, event):
+        logger.info(f"Received approval event: {json.dumps(event, indent=2)}")
+
+        try:
+            if "value" in event and isinstance(event["value"], dict):
+                action_data = event["value"].get("action", {}).get("data", {})
+            elif "data" in event:
+                action_data = event["data"]
+            else:
+                action_data = event
+
+            original_message = action_data.get("original_message", {})
+            llm_response = action_data.get("llm_response", "")
+            context_sources = action_data.get("context_sources", [])
+
+            logger.debug(
+                f"Extracted data: original_message={original_message}, llm_response={llm_response}, context_sources={context_sources}"
+            )
+
+            caddy_message = CaddyMessageEvent(
+                type="APPROVED_MESSAGE",
+                user=original_message.get("user"),
+                name=original_message.get("name"),
+                space_id=original_message.get("space_id"),
+                message_id=original_message.get("message_id"),
+                message_string=original_message.get("message_string"),
+                source_client=self.client,
+                timestamp=original_message.get("timestamp"),
+                teams_conversation=original_message.get("teams_conversation"),
+                teams_from=original_message.get("teams_from"),
+                teams_recipient=original_message.get("teams_recipient"),
+                teams_service_url=original_message.get("teams_service_url"),
+            )
+
+            response_card = self.messages.generate_response_card(llm_response)
+
+            self.send_adviser_card(event=caddy_message, card=response_card)
+
+            approval_confirmation_card = (
+                self.messages.create_approval_confirmation_card(caddy_message)
+            )
+            self.update_card(event, card=approval_confirmation_card)
+
+        except Exception as e:
+            logger.error(f"Error in handle_approval: {str(e)}")
+            raise
 
     def send_advisor_message_from_supervisor(self, event, text, type):
         """
         Sends a simple text message in response to an event.
         """
-
         if type == "donotshare":
             print("No approval from supervisor")
 
@@ -220,8 +275,78 @@ class MicrosoftTeams:
             "text": text,
         }
 
-        response = requests.post(response_url, json=response_activity, headers=headers)
+        response = requests.post(
+            response_url, json=response_activity, headers=headers, timeout=60
+        )
 
         print(response.json())
 
-    # TODO make this have the details from caddy and the supervisor comments
+    def send_message_from_supervision_to_advisor(self, original_event, message):
+        conversation_id = original_event["conversation"]["id"]
+        service_url = original_event["serviceUrl"]
+
+        response_url = f"{service_url}/v3/conversations/{conversation_id}/activities"
+
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json",
+        }
+
+        response_activity = {
+            "type": "message",
+            "from": {"id": self.bot_id, "name": self.bot_name},
+            "conversation": original_event["conversation"],
+            "text": message,
+        }
+
+        try:
+            response = requests.post(
+                response_url, json=response_activity, headers=headers, timeout=60
+            )
+            response.raise_for_status()
+            print(f"Message sent from supervision to advisor: {response.json()}")
+        except requests.exceptions.RequestException as e:
+            print(f"Error sending message from supervision to advisor: {str(e)}")
+
+    def handle_rejection(self, event):
+        logger.info(f"Received rejection event: {json.dumps(event, indent=2)}")
+
+        try:
+            if "value" in event and isinstance(event["value"], dict):
+                action_data = event["value"].get("action", {}).get("data", {})
+            elif "data" in event:
+                action_data = event["data"]
+            else:
+                action_data = event
+
+            original_message = action_data.get("original_message", {})
+
+            logger.debug(f"Extracted data: original_message={original_message}")
+
+            caddy_message = CaddyMessageEvent(
+                type="REJECTED_MESSAGE",
+                user=original_message.get("user"),
+                name=original_message.get("name"),
+                space_id=original_message.get("space_id"),
+                message_id=original_message.get("message_id"),
+                message_string=original_message.get("message_string"),
+                source_client=self.client,
+                timestamp=original_message.get("timestamp"),
+                teams_conversation=original_message.get("teams_conversation"),
+                teams_from=original_message.get("teams_from"),
+                teams_recipient=original_message.get("teams_recipient"),
+                teams_service_url=original_message.get("teams_service_url"),
+            )
+
+            rejection_card = self.messages.create_rejection_card()
+
+            self.send_adviser_card(event=caddy_message, card=rejection_card)
+
+            rejection_confirmation_card = (
+                self.messages.create_rejection_confirmation_card(caddy_message)
+            )
+            self.update_card(event, card=rejection_confirmation_card)
+
+        except Exception as e:
+            logger.error(f"Error in handle_rejection: {str(e)}")
+            raise

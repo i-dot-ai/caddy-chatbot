@@ -178,3 +178,154 @@ def generate_response_card(llm_response):
     caddy_response[0]["text"] = llm_response
 
     return caddy_response
+
+
+def create_approved_response_card(caddy_message) -> List[Dict]:
+    """
+    Creates a Teams Adaptive card for the approved response
+    """
+    approved_card = [
+        {
+            "type": "TextBlock",
+            "text": "Your message has been approved",
+            "weight": "bolder",
+            "size": "medium",
+        },
+        {
+            "type": "TextBlock",
+            "text": caddy_message.message_string,
+            "wrap": True,
+        },
+    ]
+    return approved_card
+
+
+def create_approval_confirmation_card(caddy_message) -> List[Dict]:
+    """
+    Creates a Teams Adaptive card to confirm approval in the supervision space
+    """
+    confirmation_card = [
+        {
+            "type": "TextBlock",
+            "text": "Message approved",
+            "weight": "bolder",
+            "size": "medium",
+            "color": "good",
+        },
+        {
+            "type": "FactSet",
+            "facts": [
+                {"title": "From:", "value": caddy_message.name},
+                {"title": "Message:", "value": caddy_message.message_string},
+            ],
+        },
+    ]
+    return confirmation_card
+
+
+def create_rejection_card() -> List[Dict]:
+    rejection_card = [
+        {
+            "type": "TextBlock",
+            "text": "Supervisor rejected Caddy response.",
+            "weight": "bolder",
+            "size": "medium",
+            "color": "attention",
+        },
+    ]
+    return rejection_card
+
+
+def create_rejection_confirmation_card(caddy_message) -> List[Dict]:
+    confirmation_card = [
+        {
+            "type": "TextBlock",
+            "text": "Message rejected",
+            "weight": "bolder",
+            "size": "medium",
+            "color": "attention",
+        },
+        {
+            "type": "FactSet",
+            "facts": [
+                {"title": "From:", "value": caddy_message.name},
+                {"title": "Message:", "value": caddy_message.message_string},
+            ],
+        },
+    ]
+    return confirmation_card
+
+
+def create_supervision_card(caddy_message, llm_response, context_sources) -> List[Dict]:
+    supervision_card = [
+        {
+            "type": "TextBlock",
+            "text": "New message for approval",
+            "weight": "bolder",
+            "size": "medium",
+        },
+        {
+            "type": "FactSet",
+            "facts": [
+                {"title": "From:", "value": caddy_message.name},
+                {"title": "Message:", "value": caddy_message.message_string},
+            ],
+        },
+        {
+            "type": "ActionSet",
+            "actions": [
+                {
+                    "type": "Action.ToggleVisibility",
+                    "title": "Toggle Caddy Response",
+                    "targetElements": ["llmResponseContainer"],
+                },
+            ],
+        },
+        {
+            "type": "Container",
+            "id": "llmResponseContainer",
+            "isVisible": False,
+            "items": [
+                {
+                    "type": "TextBlock",
+                    "text": llm_response,
+                    "wrap": True,
+                },
+                {
+                    "type": "FactSet",
+                    "facts": [
+                        {
+                            "title": "Context Sources:",
+                            "value": ", ".join(context_sources),
+                        }
+                    ],
+                },
+            ],
+        },
+        {
+            "type": "ActionSet",
+            "actions": [
+                {
+                    "type": "Action.Execute",
+                    "title": "Approve",
+                    "verb": "approved",
+                    "data": {
+                        "action": "approved",
+                        "original_message": caddy_message.__dict__,
+                        "llm_response": llm_response,
+                        "context_sources": context_sources,
+                    },
+                },
+                {
+                    "type": "Action.Execute",
+                    "title": "Reject",
+                    "verb": "rejected",
+                    "data": {
+                        "action": "rejected",
+                        "original_message": caddy_message.__dict__,
+                    },
+                },
+            ],
+        },
+    ]
+    return supervision_card

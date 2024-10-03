@@ -256,30 +256,49 @@ def google_chat_supervision_endpoint(
 async def microsoft_teams_endpoint(request: Request):
     event = await request.json()
     print("POST request received", event)
-    microsoft_teams = MicrosoftTeams()
+
+    user_id = event["from"]["id"]
+    user_enrolled, user_record = enrolment.check_user_status(user_id)
+    if user_enrolled is not True:
+        logger.info("User is not enrolled")
+        # TODO return not enrolled response
+        raise Exception("User not enrolled")
+    logger.info("User is enrolled")
+
+    supervision_space = user_record["supervisionSpaceId"]
+    if not supervision_space:
+        # TODO return no supervision space response
+        raise Exception("No supervision space found")
+
+    microsoft_teams = MicrosoftTeams(supervision_space)
 
     match event["type"]:
         case "message":
             caddy_message = microsoft_teams.format_message(event)
-            caddy.temporary_teams_invoke(microsoft_teams, caddy_message)
+            if caddy_message != "PII Detected":
+                llm_response, context_sources = caddy.temporary_teams_invoke(
+                    microsoft_teams, caddy_message
+                )
+                microsoft_teams.send_to_supervision(
+                    caddy_message, llm_response, context_sources
+                )
+            return microsoft_teams.responses.OK
         case "invoke":
             match event["value"]["action"]["verb"]:
                 case "proceed":
-                    # TODO Handle Proceed Route
                     print("Adviser choice was to proceed")
                     microsoft_teams.update_card(event)
                     return microsoft_teams.responses.OK
                 case "redacted_query":
-                    # TODO Handle edit original query
                     print("Adviser choice was to edit original query")
                     redacted_card = microsoft_teams.messages.create_redacted_card(event)
                     microsoft_teams.update_card(event, card=redacted_card)
                     return microsoft_teams.responses.OK
                 case "approved":
-                    microsoft_teams.handle_thumbs_up(event)
+                    microsoft_teams.handle_approval(event)
                     return microsoft_teams.responses.OK
                 case "rejected":
-                    microsoft_teams.handle_thumbs_down(event)
+                    microsoft_teams.handle_rejection(event)
                     return microsoft_teams.responses.OK
 
 
