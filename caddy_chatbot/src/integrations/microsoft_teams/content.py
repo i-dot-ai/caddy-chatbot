@@ -109,7 +109,10 @@ def create_redacted_card(event) -> List[Dict]:
     return REDACTED
 
 
-def generate_response_card(llm_response):
+def generate_response_card(llm_response) -> List[Dict]:
+    """
+    Creates a Teams Adaptive Card for the Caddy response
+    """
     card_body = [
         {"type": "TextBlock", "text": llm_response, "wrap": True},
     ]
@@ -227,6 +230,14 @@ def create_approval_confirmation_card(
                         },
                         {
                             "type": "TextBlock",
+                            "text": f"by {supervisor_name}",
+                            "wrap": True,
+                            "size": "Small",
+                            "spacing": "None",
+                            "isSubtle": True,
+                        },
+                        {
+                            "type": "TextBlock",
                             "text": caddy_message.message_string,
                             "wrap": True,
                             "size": "Small",
@@ -234,10 +245,10 @@ def create_approval_confirmation_card(
                         },
                         {
                             "type": "TextBlock",
-                            "text": f"Approved by: {supervisor_name}",
+                            "text": f"{caddy_message.name}",
                             "wrap": True,
                             "size": "Small",
-                            "spacing": "None",
+                            "spacing": "Small",
                             "isSubtle": True,
                         },
                     ],
@@ -297,14 +308,7 @@ def create_approval_confirmation_card(
             "type": "Container",
             "id": "llmResponseContainer",
             "isVisible": False,
-            "items": [
-                {
-                    "type": "TextBlock",
-                    "text": llm_response,
-                    "wrap": True,
-                    "size": "Small",
-                },
-            ],
+            "items": generate_response_card(llm_response),
         }
     )
 
@@ -373,7 +377,7 @@ def create_rejection_card(supervisor_notes, supervisor_name) -> List[Dict]:
         },
         {
             "type": "TextBlock",
-            "text": f"Rejected by: {supervisor_name}",
+            "text": f"{supervisor_name}",
             "wrap": True,
             "size": "Small",
             "spacing": "Small",
@@ -418,6 +422,14 @@ def create_rejection_confirmation_card(
                         },
                         {
                             "type": "TextBlock",
+                            "text": f"by {supervisor_name}",
+                            "wrap": True,
+                            "size": "Small",
+                            "spacing": "None",
+                            "isSubtle": True,
+                        },
+                        {
+                            "type": "TextBlock",
                             "text": caddy_message.message_string,
                             "wrap": True,
                             "size": "Small",
@@ -425,10 +437,10 @@ def create_rejection_confirmation_card(
                         },
                         {
                             "type": "TextBlock",
-                            "text": f"Rejected by: {supervisor_name}",
+                            "text": f"{caddy_message.name}",
                             "wrap": True,
                             "size": "Small",
-                            "spacing": "None",
+                            "spacing": "Small",
                             "isSubtle": True,
                         },
                     ],
@@ -489,14 +501,7 @@ def create_rejection_confirmation_card(
             "type": "Container",
             "id": "llmResponseContainer",
             "isVisible": False,
-            "items": [
-                {
-                    "type": "TextBlock",
-                    "text": llm_response,
-                    "wrap": True,
-                    "size": "Small",
-                },
-            ],
+            "items": generate_response_card(llm_response),
         }
     )
 
@@ -506,6 +511,9 @@ def create_rejection_confirmation_card(
 def create_supervision_card(
     caddy_message, llm_response, context_sources, status_activity_id
 ) -> List[Dict]:
+    """
+    Creates a supervision card for the adviser request
+    """
     supervision_card = [
         {
             "type": "ColumnSet",
@@ -570,21 +578,7 @@ def create_supervision_card(
             "type": "Container",
             "id": "llmResponseContainer",
             "isVisible": False,
-            "items": [
-                {
-                    "type": "TextBlock",
-                    "text": llm_response,
-                    "wrap": True,
-                    "size": "Small",
-                },
-                {
-                    "type": "TextBlock",
-                    "text": f"Context Sources: {', '.join(context_sources)}",
-                    "wrap": True,
-                    "size": "Small",
-                    "isSubtle": True,
-                },
-            ],
+            "items": generate_response_card(llm_response),
         },
         {
             "type": "Input.Text",
@@ -658,7 +652,7 @@ def update_response_card_with_supervisor_info(
                     },
                     {
                         "type": "TextBlock",
-                        "text": f"Approved by: {supervisor_name}",
+                        "text": f"by {supervisor_name}",
                         "size": "Small",
                         "spacing": "None",
                         "isSubtle": True,
