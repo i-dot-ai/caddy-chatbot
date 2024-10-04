@@ -206,19 +206,54 @@ def create_approval_confirmation_card(caddy_message) -> List[Dict]:
     """
     confirmation_card = [
         {
-            "type": "TextBlock",
-            "text": "Message approved",
-            "weight": "bolder",
-            "size": "medium",
-            "color": "good",
-        },
-        {
-            "type": "FactSet",
-            "facts": [
-                {"title": "From:", "value": caddy_message.name},
-                {"title": "Message:", "value": caddy_message.message_string},
+            "type": "ColumnSet",
+            "columns": [
+                {
+                    "type": "Column",
+                    "width": "auto",
+                    "items": [
+                        {
+                            "type": "Image",
+                            "url": "https://storage.googleapis.com/sort_assets/verified.png",
+                            "size": "Small",
+                            "height": "20px",
+                        }
+                    ],
+                    "verticalContentAlignment": "Center",
+                },
+                {
+                    "type": "Column",
+                    "width": "stretch",
+                    "items": [
+                        {
+                            "type": "TextBlock",
+                            "text": "RESPONSE APPROVED",
+                            "weight": "Bolder",
+                            "size": "Small",
+                            "color": "Good",
+                            "spacing": "None",
+                        },
+                        {
+                            "type": "TextBlock",
+                            "text": caddy_message.message_string,
+                            "wrap": True,
+                            "size": "Small",
+                            "spacing": "Small",
+                        },
+                        {
+                            "type": "TextBlock",
+                            "text": caddy_message.name,
+                            "wrap": True,
+                            "size": "Small",
+                            "spacing": "None",
+                            "isSubtle": True,
+                        },
+                    ],
+                    "verticalContentAlignment": "Center",
+                },
             ],
-        },
+            "spacing": "Small",
+        }
     ]
     return confirmation_card
 
@@ -239,37 +274,110 @@ def create_rejection_card() -> List[Dict]:
 def create_rejection_confirmation_card(caddy_message) -> List[Dict]:
     confirmation_card = [
         {
-            "type": "TextBlock",
-            "text": "Message rejected",
-            "weight": "bolder",
-            "size": "medium",
-            "color": "attention",
-        },
-        {
-            "type": "FactSet",
-            "facts": [
-                {"title": "From:", "value": caddy_message.name},
-                {"title": "Message:", "value": caddy_message.message_string},
+            "type": "ColumnSet",
+            "columns": [
+                {
+                    "type": "Column",
+                    "width": "auto",
+                    "items": [
+                        {
+                            "type": "Image",
+                            "url": "https://storage.googleapis.com/sort_assets/block.png",
+                            "size": "Small",
+                            "height": "20px",
+                        }
+                    ],
+                    "verticalContentAlignment": "Center",
+                },
+                {
+                    "type": "Column",
+                    "width": "stretch",
+                    "items": [
+                        {
+                            "type": "TextBlock",
+                            "text": "Message rejected",
+                            "weight": "Bolder",
+                            "size": "Small",
+                            "color": "Attention",
+                            "spacing": "None",
+                        },
+                        {
+                            "type": "TextBlock",
+                            "text": caddy_message.message_string,
+                            "wrap": True,
+                            "size": "Small",
+                            "spacing": "Small",
+                        },
+                        {
+                            "type": "TextBlock",
+                            "text": caddy_message.name,
+                            "wrap": True,
+                            "size": "Small",
+                            "spacing": "None",
+                            "isSubtle": True,
+                        },
+                    ],
+                    "verticalContentAlignment": "Center",
+                },
             ],
-        },
+            "spacing": "Small",
+        }
     ]
     return confirmation_card
 
 
-def create_supervision_card(caddy_message, llm_response, context_sources) -> List[Dict]:
+def create_supervision_card(
+    caddy_message, llm_response, context_sources, status_activity_id
+) -> List[Dict]:
     supervision_card = [
         {
-            "type": "TextBlock",
-            "text": "New message for approval",
-            "weight": "bolder",
-            "size": "medium",
-        },
-        {
-            "type": "FactSet",
-            "facts": [
-                {"title": "From:", "value": caddy_message.name},
-                {"title": "Message:", "value": caddy_message.message_string},
+            "type": "ColumnSet",
+            "columns": [
+                {
+                    "type": "Column",
+                    "width": "auto",
+                    "items": [
+                        {
+                            "type": "Image",
+                            "url": "https://storage.googleapis.com/sort_assets/supervisor_account.png",
+                            "size": "Small",
+                            "height": "20px",
+                        }
+                    ],
+                    "verticalContentAlignment": "Center",
+                },
+                {
+                    "type": "Column",
+                    "width": "stretch",
+                    "items": [
+                        {
+                            "type": "TextBlock",
+                            "text": "AWAITING RESPONSE APPROVAL",
+                            "weight": "Bolder",
+                            "size": "Small",
+                            "color": "Accent",
+                            "spacing": "None",
+                        },
+                        {
+                            "type": "TextBlock",
+                            "text": caddy_message.message_string,
+                            "wrap": True,
+                            "size": "Small",
+                            "spacing": "Small",
+                        },
+                        {
+                            "type": "TextBlock",
+                            "text": caddy_message.name,
+                            "wrap": True,
+                            "size": "Small",
+                            "spacing": "None",
+                            "isSubtle": True,
+                        },
+                    ],
+                    "verticalContentAlignment": "Center",
+                },
             ],
+            "spacing": "Small",
         },
         {
             "type": "ActionSet",
@@ -290,15 +398,14 @@ def create_supervision_card(caddy_message, llm_response, context_sources) -> Lis
                     "type": "TextBlock",
                     "text": llm_response,
                     "wrap": True,
+                    "size": "Small",
                 },
                 {
-                    "type": "FactSet",
-                    "facts": [
-                        {
-                            "title": "Context Sources:",
-                            "value": ", ".join(context_sources),
-                        }
-                    ],
+                    "type": "TextBlock",
+                    "text": f"Context Sources: {', '.join(context_sources)}",
+                    "wrap": True,
+                    "size": "Small",
+                    "isSubtle": True,
                 },
             ],
         },
@@ -314,6 +421,7 @@ def create_supervision_card(caddy_message, llm_response, context_sources) -> Lis
                         "original_message": caddy_message.__dict__,
                         "llm_response": llm_response,
                         "context_sources": context_sources,
+                        "status_activity_id": status_activity_id,
                     },
                 },
                 {
@@ -323,6 +431,7 @@ def create_supervision_card(caddy_message, llm_response, context_sources) -> Lis
                     "data": {
                         "action": "rejected",
                         "original_message": caddy_message.__dict__,
+                        "status_activity_id": status_activity_id,
                     },
                 },
             ],

@@ -63,7 +63,8 @@ class MicrosoftTeams:
             response_url, json=response_activity, headers=headers, timeout=60
         )
 
-        print(response.json())
+        logger.debug(response.json())
+        return response.json().get("id")
 
     def update_card(self, event, card=None):
         """
@@ -109,7 +110,7 @@ class MicrosoftTeams:
             response_url, json=response_activity, headers=headers, timeout=60
         )
 
-        print(response.json())
+        logger.debug(response.json())
 
     def format_message(self, event):
         """
@@ -159,9 +160,11 @@ class MicrosoftTeams:
         else:
             return obj
 
-    def send_to_supervision(self, caddy_message, llm_response, context_sources):
+    def send_to_supervision(
+        self, caddy_message, llm_response, context_sources, status_activity_id
+    ):
         supervision_card = self.messages.create_supervision_card(
-            caddy_message, llm_response, context_sources
+            caddy_message, llm_response, context_sources, status_activity_id
         )
 
         service_url = caddy_message.teams_service_url
@@ -198,10 +201,10 @@ class MicrosoftTeams:
                 response_url, json=response_activity, headers=headers, timeout=60
             )
             response.raise_for_status()
-            print(f"Supervision message sent: {response.json()}")
+            logger.debug(f"Supervision message sent: {response.json()}")
         except requests.exceptions.RequestException as e:
-            print(f"Error sending supervision message: {str(e)}")
-            print(f"Response content: {response.text}")
+            logger.error(f"Error sending supervision message: {str(e)}")
+            logger.debug(f"Response content: {response.text}")
 
     def handle_approval(self, event):
         logger.info(f"Received approval event: {json.dumps(event, indent=2)}")
@@ -217,6 +220,7 @@ class MicrosoftTeams:
             original_message = action_data.get("original_message", {})
             llm_response = action_data.get("llm_response", "")
             context_sources = action_data.get("context_sources", [])
+            status_activity_id = action_data.get("status_activity_id", "")
 
             logger.debug(
                 f"Extracted data: original_message={original_message}, llm_response={llm_response}, context_sources={context_sources}"
@@ -239,7 +243,7 @@ class MicrosoftTeams:
 
             response_card = self.messages.generate_response_card(llm_response)
 
-            self.send_adviser_card(event=caddy_message, card=response_card)
+            self.update_status_card(caddy_message, status_activity_id, response_card)
 
             approval_confirmation_card = (
                 self.messages.create_approval_confirmation_card(caddy_message)
@@ -255,7 +259,7 @@ class MicrosoftTeams:
         Sends a simple text message in response to an event.
         """
         if type == "donotshare":
-            print("No approval from supervisor")
+            logger.info("No approval from supervisor")
 
         conversation_id = event["conversation"]["id"]
         service_url = event["serviceUrl"]
@@ -279,7 +283,7 @@ class MicrosoftTeams:
             response_url, json=response_activity, headers=headers, timeout=60
         )
 
-        print(response.json())
+        logger.debug(response.json())
 
     def send_message_from_supervision_to_advisor(self, original_event, message):
         conversation_id = original_event["conversation"]["id"]
@@ -304,9 +308,9 @@ class MicrosoftTeams:
                 response_url, json=response_activity, headers=headers, timeout=60
             )
             response.raise_for_status()
-            print(f"Message sent from supervision to advisor: {response.json()}")
+            logger.debug(f"Message sent from supervision to advisor: {response.json()}")
         except requests.exceptions.RequestException as e:
-            print(f"Error sending message from supervision to advisor: {str(e)}")
+            logger.error(f"Error sending message from supervision to advisor: {str(e)}")
 
     def handle_rejection(self, event):
         logger.info(f"Received rejection event: {json.dumps(event, indent=2)}")
@@ -320,6 +324,7 @@ class MicrosoftTeams:
                 action_data = event
 
             original_message = action_data.get("original_message", {})
+            status_activity_id = action_data.get("status_activity_id", "")
 
             logger.debug(f"Extracted data: original_message={original_message}")
 
@@ -340,7 +345,7 @@ class MicrosoftTeams:
 
             rejection_card = self.messages.create_rejection_card()
 
-            self.send_adviser_card(event=caddy_message, card=rejection_card)
+            self.update_status_card(caddy_message, status_activity_id, rejection_card)
 
             rejection_confirmation_card = (
                 self.messages.create_rejection_confirmation_card(caddy_message)
@@ -350,3 +355,66 @@ class MicrosoftTeams:
         except Exception as e:
             logger.error(f"Error in handle_rejection: {str(e)}")
             raise
+
+    def send_status_update(
+        self, event: CaddyMessageEvent, status: str, activity_id: str = None
+    ):
+        status_cards = {
+            "processing": self.responses.PROCESSING_MESSAGE,
+            "composing": self.responses.COMPOSING_MESSAGE,
+            "composing_retry": self.responses.COMPOSING_RETRY,
+            "request_failure": self.responses.REQUEST_FAILED,
+            "supervisor_reviewing": self.responses.SUPERVISOR_REVIEWING,
+            "awaiting_approval": self.responses.AWAITING_APPROVAL,
+        }
+
+        if status in status_cards:
+            card_content = status_cards[status]
+
+            if activity_id:
+                return self.update_status_card(event, activity_id, card_content)
+            else:
+                return self.send_adviser_card(event, card_content)
+        else:
+            logger.error(f"Unknown status: {status}")
+            return None
+
+    def update_status_card(self, event, activity_id, card):
+        conversation_id = event.teams_conversation["id"]
+        service_url = event.teams_service_url
+
+        response_url = (
+            f"{service_url}/v3/conversations/{conversation_id}/activities/{activity_id}"
+        )
+
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json",
+        }
+
+        response_activity = {
+            "type": "message",
+            "from": {"id": self.bot_id, "name": self.bot_name},
+            "conversation": event.teams_conversation,
+            "attachments": [
+                {
+                    "contentType": "application/vnd.microsoft.card.adaptive",
+                    "content": {
+                        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                        "type": "AdaptiveCard",
+                        "version": "1.2",
+                        "body": card,
+                    },
+                }
+            ],
+        }
+
+        try:
+            response = requests.put(
+                response_url, json=response_activity, headers=headers, timeout=60
+            )
+            response.raise_for_status()
+            logger.debug(f"Status card updated: {response.json()}")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error updating status card: {str(e)}")
+            logger.debug(f"Response content: {response.text}")

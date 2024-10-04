@@ -276,12 +276,7 @@ async def microsoft_teams_endpoint(request: Request):
         case "message":
             caddy_message = microsoft_teams.format_message(event)
             if caddy_message != "PII Detected":
-                llm_response, context_sources = caddy.temporary_teams_invoke(
-                    microsoft_teams, caddy_message
-                )
-                microsoft_teams.send_to_supervision(
-                    caddy_message, llm_response, context_sources
-                )
+                caddy.temporary_teams_invoke(microsoft_teams, caddy_message)
             return microsoft_teams.responses.OK
         case "invoke":
             match event["value"]["action"]["verb"]:

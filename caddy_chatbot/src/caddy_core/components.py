@@ -682,8 +682,10 @@ def store_approver_event(thread_id: str, approval_event: ApprovalEvent):
 
 def temporary_teams_invoke(chat_client, caddy_event: CaddyMessageEvent):
     """
-    Temporary solution for Teams integration
+    Temporary solution for Teams integration with status updates
     """
+    status_activity_id = chat_client.send_status_update(caddy_event, "processing")
+
     caddy_user_message = format_teams_user_message(caddy_event)
     store_message(caddy_user_message)
     route_specific_augmentation, route = retrieve_route_specific_augmentation(
@@ -708,14 +710,21 @@ def temporary_teams_invoke(chat_client, caddy_event: CaddyMessageEvent):
 
     chain, ai_prompt_timestamp = build_chain(CADDY_PROMPT)
 
-    caddy_response = chain.invoke(
-        {
-            "input": reword_advisor_orchestration(
-                caddy_event.message_string, query_length_prompts
-            ),
-            "chat_history": [],
-        }
-    )
+    chat_client.send_status_update(caddy_event, "composing", status_activity_id)
+
+    try:
+        caddy_response = chain.invoke(
+            {
+                "input": reword_advisor_orchestration(
+                    caddy_event.message_string, query_length_prompts
+                ),
+                "chat_history": [],
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error invoking chain: {str(e)}")
+        chat_client.send_status_update(caddy_event, "request_failure")
+        return None, None
 
     _, caddy_response["answer"] = remove_role_played_responses(caddy_response["answer"])
 
@@ -740,4 +749,12 @@ def temporary_teams_invoke(chat_client, caddy_event: CaddyMessageEvent):
     )
     store_response(llm_response)
 
-    return caddy_response["answer"], context_sources
+    chat_client.send_status_update(
+        caddy_event, "supervisor_reviewing", status_activity_id
+    )
+
+    chat_client.send_to_supervision(
+        caddy_event, caddy_response["answer"], context_sources, status_activity_id
+    )
+
+    chat_client.send_status_update(caddy_event, "awaiting_approval", status_activity_id)
