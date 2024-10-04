@@ -1,11 +1,13 @@
 import os
 import json
 import requests
-from caddy_core.models import CaddyMessageEvent
+from caddy_core.models import CaddyMessageEvent, ApprovalEvent
 from caddy_core.utils.monitoring import logger
 from caddy_core.services.anonymise import analyse
 from integrations.microsoft_teams import content, responses
 from datetime import datetime
+
+from caddy_core import components as caddy
 
 from .verification import get_access_token
 
@@ -138,6 +140,7 @@ class MicrosoftTeams:
                 space_id=event["channelId"],
                 message_id=event["id"],
                 message_string=message_string,
+                thread_id=event["id"],
                 source_client=self.client,
                 timestamp=str(event["timestamp"]),
                 teams_conversation=event["conversation"],
@@ -241,6 +244,20 @@ class MicrosoftTeams:
                 teams_from=original_message.get("teams_from"),
                 teams_recipient=original_message.get("teams_recipient"),
                 teams_service_url=original_message.get("teams_service_url"),
+            )
+
+            approval_event = ApprovalEvent(
+                response_id=status_activity_id,
+                thread_id=original_message.get("message_id"),
+                approver_email=supervisor_name,
+                approved=True,
+                approval_timestamp=datetime.now(),
+                user_response_timestamp=datetime.now(),
+                supervisor_message=supervisor_notes,
+            )
+
+            caddy.store_approver_event(
+                original_message.get("message_id"), approval_event
             )
 
             response_card_body = self.messages.generate_response_card(llm_response)
@@ -358,6 +375,20 @@ class MicrosoftTeams:
                 teams_from=original_message.get("teams_from"),
                 teams_recipient=original_message.get("teams_recipient"),
                 teams_service_url=original_message.get("teams_service_url"),
+            )
+
+            rejection_event = ApprovalEvent(
+                response_id=status_activity_id,
+                thread_id=original_message.get("message_id"),
+                approver_email=supervisor_name,
+                approved=False,
+                approval_timestamp=datetime.now(),
+                user_response_timestamp=datetime.now(),
+                supervisor_message=supervisor_notes,
+            )
+
+            caddy.store_approver_event(
+                original_message.get("message_id"), rejection_event
             )
 
             rejection_card = self.messages.create_rejection_card(
