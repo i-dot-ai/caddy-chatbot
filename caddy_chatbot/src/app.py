@@ -255,15 +255,15 @@ def google_chat_supervision_endpoint(
 @app.post("/microsoft-teams/chat")
 async def microsoft_teams_endpoint(request: Request):
     event = await request.json()
-    print("POST request received", event)
+    logger.debug("POST request received", event)
 
     user_id = event["from"]["id"]
     user_enrolled, user_record = enrolment.check_user_status(user_id)
     if user_enrolled is not True:
-        logger.info("User is not enrolled")
+        logger.debug("User is not enrolled")
         # TODO return not enrolled response
         raise Exception("User not enrolled")
-    logger.info("User is enrolled")
+    logger.debug("User is enrolled")
 
     supervision_space = user_record["supervisionSpaceId"]
     if not supervision_space:

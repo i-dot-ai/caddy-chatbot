@@ -221,9 +221,11 @@ class MicrosoftTeams:
             llm_response = action_data.get("llm_response", "")
             context_sources = action_data.get("context_sources", [])
             status_activity_id = action_data.get("status_activity_id", "")
+            supervisor_notes = action_data.get("supervisorNotes", "")
+            supervisor_name = event["from"]["name"]
 
             logger.debug(
-                f"Extracted data: original_message={original_message}, llm_response={llm_response}, context_sources={context_sources}"
+                f"Extracted data: original_message={original_message}, llm_response={llm_response}, context_sources={context_sources}, supervisor_notes={supervisor_notes}"
             )
 
             caddy_message = CaddyMessageEvent(
@@ -241,12 +243,22 @@ class MicrosoftTeams:
                 teams_service_url=original_message.get("teams_service_url"),
             )
 
-            response_card = self.messages.generate_response_card(llm_response)
+            response_card_body = self.messages.generate_response_card(llm_response)
 
-            self.update_status_card(caddy_message, status_activity_id, response_card)
+            updated_response_card_body = (
+                self.messages.update_response_card_with_supervisor_info(
+                    response_card_body, supervisor_notes, supervisor_name
+                )
+            )
+
+            self.update_status_card(
+                caddy_message, status_activity_id, updated_response_card_body
+            )
 
             approval_confirmation_card = (
-                self.messages.create_approval_confirmation_card(caddy_message)
+                self.messages.create_approval_confirmation_card(
+                    caddy_message, supervisor_notes, supervisor_name, llm_response
+                )
             )
             self.update_card(event, card=approval_confirmation_card)
 
@@ -325,8 +337,13 @@ class MicrosoftTeams:
 
             original_message = action_data.get("original_message", {})
             status_activity_id = action_data.get("status_activity_id", "")
+            supervisor_notes = action_data.get("supervisorNotes", "")
+            supervisor_name = event["from"]["name"]
+            llm_response = action_data.get("llm_response", "")
 
-            logger.debug(f"Extracted data: original_message={original_message}")
+            logger.debug(
+                f"Extracted data: original_message={original_message}, supervisor_notes={supervisor_notes}, llm_response={llm_response}"
+            )
 
             caddy_message = CaddyMessageEvent(
                 type="REJECTED_MESSAGE",
@@ -343,12 +360,16 @@ class MicrosoftTeams:
                 teams_service_url=original_message.get("teams_service_url"),
             )
 
-            rejection_card = self.messages.create_rejection_card()
+            rejection_card = self.messages.create_rejection_card(
+                supervisor_notes, supervisor_name
+            )
 
             self.update_status_card(caddy_message, status_activity_id, rejection_card)
 
             rejection_confirmation_card = (
-                self.messages.create_rejection_confirmation_card(caddy_message)
+                self.messages.create_rejection_confirmation_card(
+                    caddy_message, supervisor_notes, supervisor_name, llm_response
+                )
             )
             self.update_card(event, card=rejection_confirmation_card)
 
