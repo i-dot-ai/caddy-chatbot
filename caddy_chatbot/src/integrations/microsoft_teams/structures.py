@@ -248,43 +248,9 @@ class MicrosoftTeams:
 
     async def get_add_user_dialog(self, conversation_id: str):
         users = await self.get_tenant_users()
-
-        card = {
-            "type": "AdaptiveCard",
-            "body": [
-                {
-                    "type": "TextBlock",
-                    "text": "Add a new user to Caddy",
-                    "weight": "Bolder",
-                    "size": "Medium",
-                },
-                {
-                    "type": "Input.ChoiceSet",
-                    "id": "teamsUser",
-                    "label": "Select user",
-                    "choices": users,
-                },
-                {
-                    "type": "Input.ChoiceSet",
-                    "id": "role",
-                    "label": "User's role",
-                    "choices": [
-                        {"title": "Adviser", "value": "Adviser"},
-                        {"title": "Supervisor", "value": "Supervisor"},
-                    ],
-                },
-            ],
-            "actions": [
-                {
-                    "type": "Action.Submit",
-                    "title": "Add User",
-                    "data": {"action": "addUser"},
-                }
-            ],
-            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-            "version": "1.2",
-        }
-        await self.send_card_to_chat(conversation_id, card)
+        await self.send_card_to_chat(
+            conversation_id, self.responses.create_add_user_dialog(users)
+        )
 
     async def get_user_details(self, user_id: str):
         url = f"https://graph.microsoft.com/v1.0/users/{user_id}"
@@ -458,50 +424,12 @@ class MicrosoftTeams:
             except Exception as e:
                 logger.error(f"Error updating card: {str(e)}")
 
-    async def update_add_user_card(self, event, status_message, status_color):
-        card = {
-            "type": "AdaptiveCard",
-            "body": [
-                {
-                    "type": "TextBlock",
-                    "text": "Add a new user to Caddy",
-                    "weight": "Bolder",
-                    "size": "Medium",
-                },
-                {
-                    "type": "Input.ChoiceSet",
-                    "id": "teamsUser",
-                    "label": "Select user",
-                    "choices": await self.get_tenant_users(),
-                },
-                {
-                    "type": "Input.ChoiceSet",
-                    "id": "role",
-                    "label": "User's role",
-                    "choices": [
-                        {"title": "Adviser", "value": "Adviser"},
-                        {"title": "Supervisor", "value": "Supervisor"},
-                    ],
-                },
-                {
-                    "type": "TextBlock",
-                    "text": status_message,
-                    "wrap": True,
-                    "color": status_color,
-                },
-            ],
-            "actions": [
-                {
-                    "type": "Action.Submit",
-                    "title": "Add User",
-                    "data": {"action": "addUser"},
-                }
-            ],
-            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-            "version": "1.2",
-        }
-
-        await self.update_card(event, card)
+    async def update_add_user_card(self, event, status_message, status_colour):
+        choices = await self.get_tenant_users()
+        await self.update_card(
+            event,
+            self.responses.create_add_user_card(choices, status_message, status_colour),
+        )
 
     async def format_message(self, event):
         message_string = event["text"].replace("<at>Caddy</at>", "").strip()
@@ -777,47 +705,11 @@ class MicrosoftTeams:
             for id, name in enrolled_user_dict.items()
         ]
 
-        card = {
-            "type": "AdaptiveCard",
-            "body": [
-                {
-                    "type": "TextBlock",
-                    "text": "Remove a user from Caddy",
-                    "weight": "Bolder",
-                    "size": "Medium",
-                },
-                (
-                    {
-                        "type": "Input.ChoiceSet",
-                        "id": "teamsUser",
-                        "label": "Select user to remove",
-                        "choices": choices,
-                    }
-                    if choices
-                    else {
-                        "type": "TextBlock",
-                        "text": "No enrolled users found.",
-                        "color": "Attention",
-                    }
-                ),
-            ],
-            "actions": (
-                [
-                    {
-                        "type": "Action.Submit",
-                        "title": "Remove User",
-                        "data": {"action": "removeUser"},
-                    }
-                ]
-                if choices
-                else []
-            ),
-            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-            "version": "1.2",
-        }
-        await self.send_card_to_chat(conversation_id, card)
+        await self.send_card_to_chat(
+            conversation_id, self.responses.create_remove_user_dialog(choices)
+        )
 
-    async def update_remove_user_card(self, event, status_message, status_color):
+    async def update_remove_user_card(self, event, status_message, status_colour):
         tenant_users = await self.get_tenant_users()
         conversation_id = event["conversation"]["id"]
 
@@ -834,52 +726,12 @@ class MicrosoftTeams:
             for id, name in enrolled_user_dict.items()
         ]
 
-        card = {
-            "type": "AdaptiveCard",
-            "body": [
-                {
-                    "type": "TextBlock",
-                    "text": "Remove a user from Caddy",
-                    "weight": "Bolder",
-                    "size": "Medium",
-                },
-                (
-                    {
-                        "type": "Input.ChoiceSet",
-                        "id": "teamsUser",
-                        "label": "Select user to remove",
-                        "choices": choices,
-                    }
-                    if choices
-                    else {
-                        "type": "TextBlock",
-                        "text": "No enrolled users found.",
-                        "color": "Attention",
-                    }
-                ),
-                {
-                    "type": "TextBlock",
-                    "text": status_message,
-                    "wrap": True,
-                    "color": status_color,
-                },
-            ],
-            "actions": (
-                [
-                    {
-                        "type": "Action.Submit",
-                        "title": "Remove User",
-                        "data": {"action": "removeUser"},
-                    }
-                ]
-                if choices
-                else []
+        await self.update_card(
+            event,
+            self.responses.create_remove_user_card(
+                choices, status_message, status_colour
             ),
-            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-            "version": "1.2",
-        }
-
-        await self.update_card(event, card)
+        )
 
     async def add_user(self, event):
         user_data = json.loads(event["value"]["teamsUser"])
@@ -894,14 +746,14 @@ class MicrosoftTeams:
             )
             if result["status"] == 200:
                 status_message = f"{user_name} added successfully as {role}"
-                status_color = "Good"
+                status_colour = "Good"
             else:
                 raise Exception(result["content"])
         except Exception as error:
             status_message = f"Failed to add user: {str(error)}"
-            status_color = "Attention"
+            status_colour = "Attention"
 
-        await self.update_add_user_card(event, status_message, status_color)
+        await self.update_add_user_card(event, status_message, status_colour)
 
     async def remove_user(self, event):
         user_data = json.loads(event["value"]["teamsUser"])
@@ -911,102 +763,34 @@ class MicrosoftTeams:
         try:
             enrolment.remove_user(user_id)
             status_message = f"{user_name} removed successfully"
-            status_color = "Good"
+            status_colour = "Good"
         except Exception as error:
             status_message = f"Failed to remove user: {str(error)}"
-            status_color = "Attention"
+            status_colour = "Attention"
 
-        await self.update_remove_user_card(event, status_message, status_color)
+        await self.update_remove_user_card(event, status_message, status_colour)
 
     async def list_space_users(self, conversation_id: str):
         try:
             users = enrolment.list_users(conversation_id, display_names=True)
             logger.debug(f"USERS: {users}")
             user_list = "\n".join(users) if users else "No users found."
-
-            card = {
-                "type": "AdaptiveCard",
-                "body": [
-                    {
-                        "type": "ColumnSet",
-                        "columns": [
-                            {
-                                "type": "Column",
-                                "width": "auto",
-                                "items": [
-                                    {
-                                        "type": "Image",
-                                        "url": "https://storage.googleapis.com/sort_assets/groups.png",
-                                        "size": "Small",
-                                        "height": "20px",
-                                    }
-                                ],
-                                "verticalContentAlignment": "Center",
-                            },
-                            {
-                                "type": "Column",
-                                "width": "stretch",
-                                "items": [
-                                    {
-                                        "type": "TextBlock",
-                                        "text": "Registered Users",
-                                        "weight": "Bolder",
-                                        "size": "Medium",
-                                        "spacing": "None",
-                                    },
-                                ],
-                                "verticalContentAlignment": "Center",
-                            },
-                        ],
-                        "spacing": "Small",
-                    },
-                    {"type": "TextBlock", "text": user_list, "wrap": True},
-                ],
-                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                "version": "1.2",
-            }
-            result = await self.send_card_to_chat(conversation_id, card)
+            result = await self.send_card_to_chat(
+                conversation_id, self.responses.create_user_list_card(user_list)
+            )
             if result:
                 logger.debug(f"List users card sent successfully: {result}")
             else:
                 logger.error("Failed to send list users card")
         except Exception as error:
             logger.error(f"Error in list_space_users: {str(error)}")
-            error_card = {
-                "type": "AdaptiveCard",
-                "body": [
-                    {
-                        "type": "TextBlock",
-                        "text": f"Failed to list users: {str(error)}",
-                        "wrap": True,
-                        "color": "Attention",
-                    }
-                ],
-                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                "version": "1.2",
-            }
-            await self.send_card_to_chat(conversation_id, error_card)
+            await self.send_card_to_chat(
+                conversation_id,
+                self.responses.create_error_card(f"Failed to list users: {str(error)}"),
+            )
 
     async def get_help_card(self, conversation_id: str):
-        card = {
-            "type": "AdaptiveCard",
-            "body": [
-                {
-                    "type": "TextBlock",
-                    "text": "Caddy Supervision Commands",
-                    "weight": "Bolder",
-                    "size": "Medium",
-                },
-                {
-                    "type": "TextBlock",
-                    "text": "• addUser: Add a new user to Caddy\n• removeUser: Remove a user from Caddy\n• listUsers: List all users in the supervision space\n• help: Display this help information",
-                    "wrap": True,
-                },
-            ],
-            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-            "version": "1.2",
-        }
-        await self.send_card_to_chat(conversation_id, card)
+        await self.send_card_to_chat(conversation_id, self.responses.HELPER_GUIDE)
 
     async def send_status_update(
         self, event: CaddyMessageEvent, status: str, activity_id: str = None
@@ -1066,6 +850,6 @@ class MicrosoftTeams:
                 ) as response:
                     response.raise_for_status()
                     response_json = await response.json()
-                    logger.debug(f"Unauthorized access message sent: {response_json}")
+                    logger.debug(f"Unauthorised access message sent: {response_json}")
             except aiohttp.ClientError as e:
-                logger.error(f"Error sending unauthorized access message: {str(e)}")
+                logger.error(f"Error sending unauthorised access message: {str(e)}")
