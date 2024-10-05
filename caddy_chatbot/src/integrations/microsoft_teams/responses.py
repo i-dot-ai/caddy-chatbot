@@ -3,6 +3,7 @@ from fastapi.responses import Response
 
 # --- Status Responses --- #
 NO_CONTENT = Response(status_code=status.HTTP_204_NO_CONTENT)
+NOT_FOUND = Response(status_code=status.HTTP_404_NOT_FOUND)
 ACCEPTED = Response(status_code=status.HTTP_202_ACCEPTED)
 OK = Response(status_code=status.HTTP_200_OK)
 
@@ -270,6 +271,50 @@ AWAITING_APPROVAL = [
                     {
                         "type": "TextBlock",
                         "text": "Awaiting approval",
+                        "wrap": True,
+                        "size": "Small",
+                        "spacing": "None",
+                    },
+                ],
+                "verticalContentAlignment": "Center",
+            },
+        ],
+        "spacing": "Small",
+    }
+]
+
+UNAUTHORISED_SUPERVISOR_ACCESS = [
+    {
+        "type": "ColumnSet",
+        "columns": [
+            {
+                "type": "Column",
+                "width": "auto",
+                "items": [
+                    {
+                        "type": "Image",
+                        "url": "https://storage.googleapis.com/sort_assets/supervised_user_circle_off.png",
+                        "size": "Small",
+                        "height": "20px",
+                    }
+                ],
+                "verticalContentAlignment": "Center",
+            },
+            {
+                "type": "Column",
+                "width": "stretch",
+                "items": [
+                    {
+                        "type": "TextBlock",
+                        "text": "Unauthorised",
+                        "weight": "Bolder",
+                        "size": "Small",
+                        "color": "Attention",
+                        "spacing": "None",
+                    },
+                    {
+                        "type": "TextBlock",
+                        "text": "Only registered supervisors are able to access this functionality",
                         "wrap": True,
                         "size": "Small",
                         "spacing": "None",

@@ -693,11 +693,11 @@ def store_user_thanked_timestamp_teams(user_message: UserMessage):
     )
 
 
-def temporary_teams_invoke(chat_client, caddy_event: CaddyMessageEvent):
+async def temporary_teams_invoke(chat_client, caddy_event: CaddyMessageEvent):
     """
     Temporary solution for Teams integration with status updates
     """
-    status_activity_id = chat_client.send_status_update(caddy_event, "processing")
+    status_activity_id = await chat_client.send_status_update(caddy_event, "processing")
 
     caddy_user_message = format_teams_user_message(caddy_event)
     store_message(caddy_user_message)
@@ -724,10 +724,10 @@ def temporary_teams_invoke(chat_client, caddy_event: CaddyMessageEvent):
 
     chain, ai_prompt_timestamp = build_chain(CADDY_PROMPT)
 
-    chat_client.send_status_update(caddy_event, "composing", status_activity_id)
+    await chat_client.send_status_update(caddy_event, "composing", status_activity_id)
 
     try:
-        caddy_response = chain.invoke(
+        caddy_response = await chain.ainvoke(
             {
                 "input": reword_advisor_orchestration(
                     caddy_event.message_string, query_length_prompts
@@ -737,7 +737,9 @@ def temporary_teams_invoke(chat_client, caddy_event: CaddyMessageEvent):
         )
     except Exception as e:
         logger.error(f"Error invoking chain: {str(e)}")
-        chat_client.send_status_update(caddy_event, "request_failure")
+        await chat_client.send_status_update(
+            caddy_event, "request_failure", status_activity_id
+        )
         return None, None
 
     _, caddy_response["answer"] = remove_role_played_responses(caddy_response["answer"])
@@ -763,14 +765,16 @@ def temporary_teams_invoke(chat_client, caddy_event: CaddyMessageEvent):
     )
     store_response(llm_response)
 
-    chat_client.send_status_update(
+    await chat_client.send_status_update(
         caddy_event, "supervisor_reviewing", status_activity_id
     )
 
-    chat_client.send_to_supervision(
+    await chat_client.send_to_supervision(
         caddy_event, caddy_response["answer"], context_sources, status_activity_id
     )
 
-    chat_client.send_status_update(caddy_event, "awaiting_approval", status_activity_id)
+    await chat_client.send_status_update(
+        caddy_event, "awaiting_approval", status_activity_id
+    )
 
     store_approver_received_timestamp(caddy_event)

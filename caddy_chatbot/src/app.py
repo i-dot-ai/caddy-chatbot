@@ -5,6 +5,7 @@ from threading import Thread
 from caddy_core import components as caddy
 from caddy_core.services import enrolment
 from caddy_core.utils.monitoring import logger
+from caddy_core.models import UserNotEnrolledException, NoSupervisionSpaceException
 
 from integrations.google_chat.structures import GoogleChat
 from integrations.google_chat.verification import (
@@ -12,7 +13,8 @@ from integrations.google_chat.verification import (
     verify_google_chat_supervision_request,
 )
 
-from integrations.microsoft_teams.structures import MicrosoftTeams
+
+from integrations.microsoft_teams.structures import initialise_teams_client
 
 app = FastAPI(docs_url=None)
 
@@ -255,46 +257,23 @@ def google_chat_supervision_endpoint(
 @app.post("/microsoft-teams/chat")
 async def microsoft_teams_endpoint(request: Request):
     event = await request.json()
-    logger.debug("POST request received", event)
+    logger.debug(f"POST request received: {event}")
 
-    user_id = event["from"]["id"]
-    user_enrolled, user_record = enrolment.check_user_status(user_id)
-    if user_enrolled is not True:
-        logger.debug("User is not enrolled")
-        # TODO return not enrolled response
-        raise Exception("User not enrolled")
-    logger.debug("User is enrolled")
+    try:
+        microsoft_teams, user_supervisor = await initialise_teams_client(event)
+    except UserNotEnrolledException:
+        return Response(status_code=status.HTTP_403_FORBIDDEN)
+    except NoSupervisionSpaceException:
+        return Response(status_code=status.HTTP_400_BAD_REQUEST)
 
-    supervision_space = user_record["supervisionSpaceId"]
-    if not supervision_space:
-        # TODO return no supervision space response
-        raise Exception("No supervision space found")
-
-    microsoft_teams = MicrosoftTeams(supervision_space)
-
-    match event["type"]:
+    match event.get("type"):
         case "message":
-            caddy_message = microsoft_teams.format_message(event)
-            if caddy_message != "PII Detected":
-                caddy.temporary_teams_invoke(microsoft_teams, caddy_message)
-            return microsoft_teams.responses.OK
+            return await microsoft_teams.handle_message_event(event, user_supervisor)
         case "invoke":
-            match event["value"]["action"]["verb"]:
-                case "proceed":
-                    print("Adviser choice was to proceed")
-                    microsoft_teams.update_card(event)
-                    return microsoft_teams.responses.OK
-                case "redacted_query":
-                    print("Adviser choice was to edit original query")
-                    redacted_card = microsoft_teams.messages.create_redacted_card(event)
-                    microsoft_teams.update_card(event, card=redacted_card)
-                    return microsoft_teams.responses.OK
-                case "approved":
-                    microsoft_teams.handle_approval(event)
-                    return microsoft_teams.responses.OK
-                case "rejected":
-                    microsoft_teams.handle_rejection(event)
-                    return microsoft_teams.responses.OK
+            return await microsoft_teams.handle_invoke_event(event, user_supervisor)
+        case _:
+            logger.warning(f"Unhandled event type: {event.get('type')}")
+            return microsoft_teams.responses.NOT_FOUND
 
 
 @app.post("/microsoft-teams/supervision")

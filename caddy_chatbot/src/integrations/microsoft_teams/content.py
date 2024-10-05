@@ -195,7 +195,7 @@ def create_approved_response_card(caddy_message) -> List[Dict]:
 
 def create_approval_confirmation_card(
     caddy_message, supervisor_notes, supervisor_name, llm_response
-) -> List[Dict]:
+) -> Dict:
     """
     Creates a Teams Adaptive card to confirm approval in the supervision space
     """
@@ -312,7 +312,12 @@ def create_approval_confirmation_card(
         }
     )
 
-    return confirmation_card_body
+    return {
+        "type": "AdaptiveCard",
+        "body": confirmation_card_body,
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "version": "1.2",
+    }
 
 
 def create_rejection_card(supervisor_notes, supervisor_name) -> List[Dict]:
@@ -390,7 +395,7 @@ def create_rejection_card(supervisor_notes, supervisor_name) -> List[Dict]:
 
 def create_rejection_confirmation_card(
     caddy_message, supervisor_notes, supervisor_name, llm_response
-) -> List[Dict]:
+) -> Dict:
     confirmation_card = [
         {
             "type": "ColumnSet",
@@ -505,7 +510,12 @@ def create_rejection_confirmation_card(
         }
     )
 
-    return confirmation_card
+    return {
+        "type": "AdaptiveCard",
+        "body": confirmation_card,
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "version": "1.2",
+    }
 
 
 def create_supervision_card(
