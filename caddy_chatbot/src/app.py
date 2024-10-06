@@ -69,13 +69,14 @@ async def microsoft_teams_endpoint(request: Request):
     except NoSupervisionSpaceException:
         return Response(status_code=status.HTTP_400_BAD_REQUEST)
 
-    match event.get("type"):
+    event_type = event.get("type")
+    match event_type:
         case "message":
             return await microsoft_teams.handle_message_event(event, user_supervisor)
         case "invoke":
             return await microsoft_teams.handle_invoke_event(event, user_supervisor)
         case _:
-            logger.warning(f"Unhandled event type: {event.get('type')}")
+            logger.warning(f"Unhandled event type: {event_type}")
             return microsoft_teams.responses.NOT_FOUND
 
 
