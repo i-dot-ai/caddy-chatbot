@@ -78,7 +78,7 @@ def get_designated_supervisor_space(user: str):
         return "Unknown"
 
 
-def register_user(user, role, supervisor_space_id):
+def register_user(user, role, supervisor_space_id, friendly_name=None):
     match role:
         case "Supervisor":
             isApprover = True
@@ -98,6 +98,7 @@ def register_user(user, role, supervisor_space_id):
         users_table.put_item(
             Item={
                 "userEmail": user.user_email,
+                "friendlyName": friendly_name,
                 "activeCall": False,
                 "isApprover": user.is_approver,
                 "isSuperUser": False,
@@ -118,7 +119,7 @@ def remove_user(user):
         return {"status": 500, "content": f"user deletion failed: {error}"}
 
 
-def list_users(supervision_space_id):
+def list_users(supervision_space_id, display_names=False, ids_only=False):
     response = users_table.scan(
         FilterExpression=Attr("supervisionSpaceId").eq(supervision_space_id)
     )
@@ -126,6 +127,23 @@ def list_users(supervision_space_id):
     user_list = response["Items"]
 
     supervision_users = []
+
+    if ids_only:
+        for user in user_list:
+            supervision_users.append(user["userEmail"])
+        return supervision_users
+
+    if display_names:
+        for user in user_list:
+            match user["isApprover"]:
+                case False:
+                    role = "Adviser"
+                case True:
+                    role = "Supervisor"
+            user_info = f"{user['friendlyName']}: {role}"
+            supervision_users.append(f"{user_info}\n")
+
+        return supervision_users
 
     for user in user_list:
         match user["isApprover"]:

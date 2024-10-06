@@ -81,7 +81,6 @@ routes = get_routes_dynamically()
 get_route = RouteLayer(encoder=embeddings, routes=routes)
 
 
-
 # messages that work with routing
 """
 For short messages under 50 characters such as:
@@ -102,11 +101,11 @@ how long does SDPTE last for on UC?
 
 
 Caddy can provide a good response on these because things like PIP, UC are acronyms for universal credit and personal independence payment which it will be able to find in the RAG docuemnts provided.
-In addition the questions are direct and ask questions about these sections that are general like seciton 21 advice or what is pip? 
+In addition the questions are direct and ask questions about these sections that are general like seciton 21 advice or what is pip?
 Becuase they are general and not about a client, Caddy will not need further information to provide a coherent response.
 
 
-For messages under 50 characters such as: 
+For messages under 50 characters such as:
 can i get information from you?
 when did claims for irESA stop?
 section 13
@@ -115,13 +114,12 @@ can i claim uc?
 pip
 PIP pack posted
 
-Although these contain sections or PIP or section numbers, we do not inherently know what the advisor is interested in. 
+Although these contain sections or PIP or section numbers, we do not inherently know what the advisor is interested in.
 In addition questions such as can I claim UC or my client has a section 20, is this valid are going to need further client information or background to hone in the answer as applicability or validity is often too broad.
 Finally general questions that have no specific direction such as can i get information from you are not going to illicit a good response.
 
 In these eventualities, Caddy must ask for further information, and provide the advisor with several potential questions they could ask before providing a response.
 """
-
 
 
 # messages that DO NOT work with routing
@@ -130,7 +128,7 @@ For long messages with plenty detail, i.e. over 400 characters such as Caddy can
 
 Messages such as
 
-400+:  
+400+:
 I saw a house I would like to rent on Gumtree. The person advertising the house asked me to send a deposit which I did via bank transfer. They then asked for more money which I said I would send once I viewed the house. The person then disappeared and I realised it was a scam. I spoke to my bank but they will not recover my money as I willingly transferred it. I only have the person's bank details. Is there any way I can get my money back?
 Caddy, client is an EU national who has been living the UK for the last 5 years with settled status. After client got his settled status, he took a career break of 7 months to travel outside of Europe (190 days). Client then discovered law saying that one cannot stay outside of the UK for more than 90 days in the 12 months prior to applying for British Citizenship. Client is still employed in the UK. Client wants to know if he is eligible to apply for British Citizenship now or if he should wait 12 months before applying.
 Caddy, client is British, single, and lives in council property. Client is not working and claims Universal Credit and Personal Independence Payment. Client was in a brief relationship with a third party in December 2023 before it ended. Since February 2024, there has been domestic abuse towards client by third party (physical, mental and financial). Last month, third party kicked and punched the client and forced the client to withdraw their benefit payments from the bank to give to them. Third party has coerced the client to let them into their property despite them changing the locks. On 8th June 2024, third party entered client‚Äôs property and painted two of the walls. Third party then demanded the client pay them ¬£400 by 17th June 2024 (the date client's Universal Credit is paid) even though they never asked them to decorate. Client has reported third party to the police, who are investigating, but police have not arrested them. Council said they can put client in temporary accommodation (in conjunction with Leeds Domestic Violence Service) but they would be separated from their dog. Client has also contacted their MP for help. MP, police and council have signposted client to Citizens Advice for help in getting a non-molestation order and accessing legal advice.
@@ -145,12 +143,12 @@ Client wanted some advice on what her rights are regarding repairs for her new p
 Client has stated that on her tenancy agreement it is stating that the landlord is responsible for the repairs within the property unless this is damaged by the tenant. Client believes that the issue with the washing machine was present from the start, as she had gone on holiday she hadn't used her washing machine until now. Client has not yet spoken with her landlord about this as she would like to know what her legal rights are.
 
 Will stand well becaause there is plenty detail on:
-1. the main legal topic or issue being discussed. 
-2. specific questions being asked. 
-3. relevant personal details of the individual involved (e.g., age, nationality, employment status). 
-4. key facts or circumstances related to the legal situation. 
+1. the main legal topic or issue being discussed.
+2. specific questions being asked.
+3. relevant personal details of the individual involved (e.g., age, nationality, employment status).
+4. key facts or circumstances related to the legal situation.
 5. mentioned dates, locations, or monetary amounts.
-6. any legal terms or concepts mentioned. 
+6. any legal terms or concepts mentioned.
 
 Caddy will struggle iwth messages such as:
 
@@ -166,7 +164,7 @@ I have a Client who has received a managed migration notice with a deadline  of 
 
 This can be for a few reasons
 1) Caddy will always provide a section asking the advisor to ask more questions, whcih if they have asked not to be called back is not possible.
-2) The question may not be direct enough and Caddy will get focussed on one part of the context 
-3) The question may be looking for a softer touch and Caddy can be quite factual, the 
+2) The question may not be direct enough and Caddy will get focussed on one part of the context
+3) The question may be looking for a softer touch and Caddy can be quite factual, the
 
 """
