@@ -53,7 +53,6 @@ def index():
     if 'auth' not in session:
         return redirect(url_for('login'))
     questions = question_table.scan()['Items']
-    #questions = [{'QuestionId': 1, "QuestionString": 'Help I am getting deported'}]
     return render_template('index.html', questions=questions)
 
 @app.route('/questions/<int:id>', methods=['GET', 'POST'])
@@ -62,7 +61,6 @@ def question_details(id):
         return redirect(url_for('login'))
     
     question = question_table.get_item(Key={'QuestionId': id})['Item']
-    #question = {'QuestionId': 1, "QuestionString": 'Help I am getting deported'}
     form = QuestionForm()
     
     if form.validate_on_submit():
