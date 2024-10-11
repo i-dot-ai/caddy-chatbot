@@ -1,4 +1,9 @@
-python-fasthtml
-requests-aws4auth
+# #python-fasthtml
+# # requests-aws4auth
 python-dotenv
 boto3
+# flask
+Flask-SQLAlchemy
+Flask-WTF
+Flask
+gunicorn

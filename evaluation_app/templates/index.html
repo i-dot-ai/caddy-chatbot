@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Advisor Questions</h1>
+<ul class="question-list">
+    {% for question in questions %}
+    <li class="question-item">
+        <a href="{{ url_for('question_details', id=question.QuestionId) }}" class="question-link">{{
+            question.QuestionString }}</a>
+    </li>
+    {% endfor %}
+</ul>
+<style>
+    .question-list {
+        list-style-type: none;
+        padding: 0;
+    }
+
+    .question-item {
+        margin-bottom: 10px;
+    }
+
+    .question-link {
+        display: block;
+        padding: 10px;
+        background-color: #f9f9f9;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        color: #333;
+        text-decoration: none;
+        transition: background-color 0.3s;
+    }
+
+    .question-link:hover {
+        background-color: #e9e9e9;
+    }
+</style>
+{% endblock %}
