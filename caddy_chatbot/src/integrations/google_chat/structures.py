@@ -9,6 +9,7 @@ from caddy_core.models import (
     CaddyMessageEvent,
     UserNotEnrolledException,
     ApprovalEvent,
+    UserMessage,
 )
 from caddy_core.services import enrolment
 from caddy_core.utils.monitoring import logger
@@ -127,6 +128,8 @@ class GoogleChat:
                 return await self.finalise_caddy_call(event)
             case "convert_to_client_friendly":
                 return await self.convert_to_client_friendly(event)
+            case "handle_follow_up_answers":
+                return await self.process_follow_up_answers(event)
             case _:
                 logger.warning(f"Unhandled card action: {action_name}")
                 return self.responses.NO_CONTENT
@@ -1235,6 +1238,9 @@ class GoogleChat:
         request_rejected = self.responses.supervisor_request_rejected(
             user, initial_query
         )
+        request_follow_up = self.responses.supervisor_request_follow_up_details(
+            user, initial_query
+        )
 
         return (
             request_failed,
@@ -1242,6 +1248,7 @@ class GoogleChat:
             request_awaiting,
             request_approved,
             request_rejected,
+            request_follow_up,
         )
 
     def create_supervision_card(
@@ -1546,3 +1553,53 @@ class GoogleChat:
                 },
             }
         }
+
+    async def process_follow_up_answers(self, event: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Process follow-up answers and generate a new response
+        """
+        original_query = event["common"]["parameters"]["original_query"]
+        original_message = event["common"]["parameters"]["original_message"]
+        supervisor_message_id = event["common"]["parameters"]["supervisor_message_id"]
+        supervisor_thread_id = event["common"]["parameters"]["supervisor_thread_id"]
+        follow_up_questions = json.loads(
+            event["common"]["parameters"]["follow_up_questions"]
+        )
+
+        follow_up_context = f"Original Query: {original_query}\n\n"
+        follow_up_context += f"Original response: {original_message}\n\n"
+        follow_up_context += "Follow-up Questions and Answers:\n"
+
+        for i, question in enumerate(follow_up_questions, start=1):
+            answer_key = f"follow_up_answer_{i}"
+            if answer_key in event["common"]["formInputs"]:
+                answer = event["common"]["formInputs"][answer_key]["stringInputs"][
+                    "value"
+                ][0]
+                follow_up_context += f"Q: {question}\nA: {answer}\n\n"
+
+        caddy_query = UserMessage(
+            conversation_id=event["space"]["name"].split("/")[1],
+            thread_id=event["message"]["thread"]["name"].split("/")[3],
+            message_id=event["message"]["name"].split("/")[3],
+            client=self.client,
+            user_email=event["user"]["email"],
+            message=original_query,
+            message_sent_timestamp=str(datetime.now()),
+            message_received_timestamp=datetime.now(),
+        )
+
+        process_message_thread = Thread(
+            target=caddy.send_to_llm,
+            kwargs={
+                "caddy_query": caddy_query,
+                "chat_client": self,
+                "is_follow_up": True,
+                "follow_up_context": follow_up_context,
+                "supervisor_message_id": supervisor_message_id,
+                "supervisor_thread_id": supervisor_thread_id,
+            },
+        )
+        process_message_thread.start()
+
+        return self.responses.ACCEPTED

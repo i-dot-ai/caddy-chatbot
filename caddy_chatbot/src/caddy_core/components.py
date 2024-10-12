@@ -1,8 +1,7 @@
 import json
 import os
 from datetime import datetime
-from time import sleep
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union, Optional
 
 from boto3.dynamodb.conditions import Key
 from caddy_core.models import (
@@ -12,6 +11,7 @@ from caddy_core.models import (
     ProcessChatMessageEvent,
     SupervisionEvent,
     UserMessage,
+    LLMOutput,
 )
 from caddy_core.services import enrolment
 from caddy_core.services.evaluation import execute_optional_modules
@@ -31,6 +31,8 @@ from langchain.prompts import PromptTemplate
 from langchain_aws import ChatBedrock
 from pytz import timezone
 
+from langchain.output_parsers import PydanticOutputParser, RetryOutputParser
+
 
 def rct_survey_reminder(event, user_record, chat_client):
     """
@@ -48,7 +50,7 @@ def rct_survey_reminder(event, user_record, chat_client):
 
 
 def handle_message(caddy_message, chat_client):
-    logger.info("Running message handler")
+    logger.debug("Running message handler")
     module_values, survey_complete = check_existing_call(caddy_message)
 
     if survey_complete is True:
@@ -95,7 +97,6 @@ def handle_message(caddy_message, chat_client):
     send_to_llm(
         caddy_query=message_query,
         chat_client=chat_client,
-        query_length_prompts=query_length_prompts,
     )
 
 
@@ -111,12 +112,12 @@ def remove_role_played_responses(response: str) -> str:
     """
     adviser_index = response.find("Adviser: ")
     if adviser_index != -1:
-        logger.info("Removing role played response")
+        logger.debug("Removing role played response")
         return True, response[:adviser_index].strip()
 
     adviser_index = response.find("Advisor: ")
     if adviser_index != -1:
-        logger.info("Removing role played response")
+        logger.debug("Removing role played response")
         return True, response[:adviser_index].strip()
 
     return False, response.strip()
@@ -391,9 +392,9 @@ def reword_advisor_orchestration(query: str, query_length_prompts: dict) -> str:
         return reworded_query  # no flag
 
     llm = ChatBedrock(
-        model_id=os.getenv("LLM"),
+        model_id=os.getenv("AGENT_LLM"),
         region_name="eu-west-3",
-        model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},
+        model_kwargs={"temperature": 0, "top_k": 5, "max_tokens": 2000},
     )
 
     prompt = (
@@ -403,18 +404,23 @@ def reword_advisor_orchestration(query: str, query_length_prompts: dict) -> str:
     )
     prompt += f"\n\nIncoming rewritten query: {reworded_query}"
 
-    return llm.invoke(prompt).content
+    content = llm.invoke(prompt).content
+
+    logger.debug(f"content: {content}")
+
+    return content
 
 
 def reword_advisor_message(message: str) -> str:
     llm = ChatBedrock(
-        model_id=os.getenv("LLM"),
+        model_id=os.getenv("AGENT_LLM"),
         region_name="eu-west-3",
         model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},
     )
     prompt = f"""You are an information extraction assistant called Caddy.
     Your task is to analyze the given message and extract key information that would be relevant
     for a legal assistance chatbot to perform a RAG (Retrieval-Augmented Generation) search.
+
     Follow these guidelines:
         1. Identify the main legal topic or issue being discussed.
         2. Extract any specific questions being asked.
@@ -422,6 +428,7 @@ def reword_advisor_message(message: str) -> str:
         4. Identify key facts or circumstances related to the legal situation.
         5. Extract any mentioned dates, locations, or monetary amounts.
         6. Identify any legal terms or concepts mentioned.
+
     Provide your response in a structured format with clear headings for each category of extracted information.
     If any category is not applicable or no relevant information is found skip it.
     Remember to focus only on extracting factual information without adding any interpretation or advice.
@@ -432,39 +439,71 @@ def reword_advisor_message(message: str) -> str:
     Extracted Information:
     """
     response = llm.invoke(prompt)
+
+    logger.debug(f"reworded query: {response}")
+
     return response.content
 
 
-def send_to_llm(caddy_query: UserMessage, chat_client, query_length_prompts):
+def send_to_llm(
+    caddy_query: UserMessage,
+    chat_client,
+    is_follow_up=False,
+    follow_up_context="",
+    supervisor_message_id: Optional[str] = None,
+    supervisor_thread_id: Optional[str] = None,
+):
     query = caddy_query.message
-
     domain = caddy_query.user_email.split("@")[1]
-
     chat_history = get_chat_history(caddy_query)
-
     route_specific_augmentation, route = retrieve_route_specific_augmentation(query)
-
     day_date_time = datetime.now(timezone("Europe/London")).strftime(
         "%A %d %B %Y %H:%M"
     )
-
     _, office = enrolment.check_domain_status(domain)
     office_regions = enrolment.get_office_coverage(office)
 
-    CADDY_PROMPT = PromptTemplate(
-        template=get_prompt("CORE_PROMPT"),
-        input_variables=["context", "question"],
-        partial_variables={
-            "route_specific_augmentation": route_specific_augmentation,
-            "day_date_time": day_date_time,
-            "office_regions": ", ".join(office_regions),
-        },
+    llm = ChatBedrock(
+        model_id=os.getenv("AGENT_LLM"),
+        region_name="eu-west-3",
+        model_kwargs={"temperature": 0, "top_k": 5},
     )
+
+    if is_follow_up:
+        prompt_template = (
+            get_prompt("CORE_PROMPT")
+            + f"\nImportant context for client circumstances to consider in the advice and follow up steps, do not suggest the same questions:\n{follow_up_context}. \n\n Ensure to follow all formatting instructions and diverse inline citations and helpful resource links."
+        )
+        CADDY_PROMPT = PromptTemplate(
+            template=prompt_template,
+            input_variables=["context", "input"],
+            partial_variables={
+                "route_specific_augmentation": route_specific_augmentation,
+                "day_date_time": day_date_time,
+                "office_regions": ", ".join(office_regions),
+            },
+        )
+    else:
+        parser = PydanticOutputParser(pydantic_object=LLMOutput)
+        retry_parser = RetryOutputParser.from_llm(parser=parser, llm=llm)
+        prompt_template = (
+            get_prompt("CORE_PROMPT")
+            + "\n{format_instructions}\n respond with json only - no other text"
+        )
+        CADDY_PROMPT = PromptTemplate(
+            template=prompt_template,
+            input_variables=["context", "input"],
+            partial_variables={
+                "route_specific_augmentation": route_specific_augmentation,
+                "day_date_time": day_date_time,
+                "office_regions": ", ".join(office_regions),
+                "format_instructions": parser.get_format_instructions(),
+            },
+        )
 
     chain, ai_prompt_timestamp = build_chain(CADDY_PROMPT, user=caddy_query.user_email)
 
     user = caddy_query.user_email
-
     supervisor_space = enrolment.get_designated_supervisor_space(user)
     if supervisor_space == "Unknown":
         raise Exception("supervision space returned unknown")
@@ -475,122 +514,112 @@ def send_to_llm(caddy_query: UserMessage, chat_client, query_length_prompts):
         request_awaiting,
         request_approved,
         request_rejected,
+        request_follow_up,
     ) = chat_client.create_supervision_request_card(user, initial_query=query)
 
-    supervision_thread_id, supervision_message_id = (
-        chat_client.send_message_to_supervisor_space(
-            space_id=supervisor_space, message=request_processing
+    if not is_follow_up:
+        supervision_thread_id, supervisor_message_id = (
+            chat_client.send_message_to_supervisor_space(
+                space_id=supervisor_space, message=request_processing
+            )
         )
-    )
+    else:
+        supervision_thread_id = supervisor_thread_id
+        if supervisor_message_id is None or supervision_thread_id is None:
+            raise ValueError(
+                "supervisor_message_id and supervisor_thread_id are required for follow-up responses"
+            )
 
-    for attempt in range(4):
-        try:
-            first_chunk = True
-            caddy_response = {}
-            accumulated_answer = ""
-            for chunk in chain.stream(
-                {
-                    "input": reword_advisor_orchestration(query, query_length_prompts),
-                    "chat_history": chat_history,
-                }
-            ):
-                for key, value in chunk.items():
-                    if (
-                        key in caddy_response
-                        and isinstance(value, str)
-                        and isinstance(caddy_response[key], str)
-                    ):
-                        caddy_response[key] += value
-                    else:
-                        caddy_response[key] = value
+    try:
+        logger.debug(f"additional context: {follow_up_context}")
+        input_query = (
+            query
+            if not is_follow_up
+            else f"{query}\n\nAdditional context:\n{follow_up_context}"
+        )
+        reworded_query = reword_advisor_orchestration(input_query, query_length_prompts)
 
-                if "answer" in chunk:
-                    if first_chunk:
-                        context_sources = [
-                            document.metadata.get("source", "")
-                            for document in caddy_response.get("context", [])
-                        ]
-                        response_card = chat_client.create_card(
-                            caddy_response["answer"], context_sources
-                        )
-                        response_card["cardsV2"][0]["card"]["sections"][0][
-                            "widgets"
-                        ].append(chat_client.messages.RESPONSE_STREAMING)
-                        supervision_caddy_message_id = (
-                            chat_client.respond_to_supervisor_thread(
-                                space_id=supervisor_space,
-                                message=response_card,
-                                thread_id=supervision_thread_id,
-                            )
-                        )
-                        chat_client.update_message_in_adviser_space(
-                            message_type="cardsV2",
-                            space_id=caddy_query.conversation_id,
-                            message_id=caddy_query.message_id,
-                            message=chat_client.messages.SUPERVISOR_REVIEWING_RESPONSE,
-                        )
-                        first_chunk = None
+        caddy_response = chain.invoke(
+            {
+                "input": reworded_query,
+                "chat_history": chat_history,
+            }
+        )
 
-                    accumulated_answer += chunk["answer"]
-                    if len(accumulated_answer) >= 75:
-                        early_terminate, caddy_response["answer"] = (
-                            remove_role_played_responses(caddy_response["answer"])
-                        )
-                        context_sources = [
-                            document.metadata.get("source", "")
-                            for document in caddy_response.get("context", [])
-                        ]
-                        response_card = chat_client.create_card(
-                            caddy_response["answer"], context_sources
-                        )
-                        response_card["cardsV2"][0]["card"]["sections"][0][
-                            "widgets"
-                        ].append(chat_client.messages.RESPONSE_STREAMING)
-                        chat_client.update_message_in_supervisor_space(
-                            space_id=supervisor_space,
-                            message_id=supervision_caddy_message_id,
-                            new_message=response_card,
-                        )
-                        accumulated_answer = ""
-                        if early_terminate is True:
-                            break
-            break
-        except Exception as error:
-            print(f"Attempt {attempt+1} failed with error: {error}")
-            if attempt == 3:
-                chat_client.update_message_in_adviser_space(
-                    message_type="cardsV2",
-                    space_id=caddy_query.conversation_id,
-                    message_id=caddy_query.message_id,
-                    message=chat_client.messages.REQUEST_FAILURE,
-                )
-                chat_client.update_message_in_supervisor_space(
-                    space_id=supervisor_space,
-                    message_id=supervision_message_id,
-                    new_message=request_failed,
-                )
-                raise Exception(f"Caddy failed to response, error: {error}")
+        context_sources = [
+            document.metadata.get("source", "")
+            for document in caddy_response.get("context", [])
+        ]
+        logger.debug(f"SOURCES: {context_sources}")
+
+        if is_follow_up:
+            llm_output = LLMOutput(
+                message=caddy_response["answer"], follow_up_questions=[]
+            )
+        else:
+            prompt_value = CADDY_PROMPT.format_prompt(
+                context=caddy_response.get("context", []), input=reworded_query
+            )
+            llm_output = retry_parser.parse_with_prompt(
+                caddy_response["answer"], prompt_value
+            )
+
+        if llm_output.follow_up_questions and not is_follow_up:
+            follow_up_card = chat_client.responses.create_follow_up_questions_card(
+                llm_output, caddy_query, supervisor_message_id, supervision_thread_id
+            )
             chat_client.update_message_in_adviser_space(
                 message_type="cardsV2",
                 space_id=caddy_query.conversation_id,
                 message_id=caddy_query.message_id,
-                message=chat_client.messages.COMPOSING_MESSAGE_RETRY,
+                message=follow_up_card,
             )
-            wait = attempt**2
-            print(f"Retrying in {wait}...")
-            sleep(wait)
+            chat_client.update_message_in_supervisor_space(
+                space_id=supervisor_space,
+                message_id=supervisor_message_id,
+                new_message=request_follow_up,
+            )
+            return chat_client.responses.NO_CONTENT
 
-    _, caddy_response["answer"] = remove_role_played_responses(caddy_response["answer"])
-    context_sources = [
-        document.metadata.get("source", "")
-        for document in caddy_response.get("context", [])
-    ]
-    response_card = chat_client.create_card(caddy_response["answer"], context_sources)
-    chat_client.update_message_in_supervisor_space(
-        space_id=supervisor_space,
-        message_id=supervision_caddy_message_id,
-        new_message=response_card,
-    )
+        _, llm_output.message = remove_role_played_responses(llm_output.message)
+
+        logger.debug(f"LLM: {llm_output.message}")
+        response_card = chat_client.create_card(llm_output.message, context_sources)
+
+        supervision_caddy_message_id = chat_client.respond_to_supervisor_thread(
+            space_id=supervisor_space,
+            message=response_card,
+            thread_id=supervision_thread_id,
+        )
+
+        chat_client.update_message_in_supervisor_space(
+            space_id=supervisor_space,
+            message_id=supervisor_message_id,
+            new_message=request_awaiting,
+        )
+
+        chat_client.update_message_in_adviser_space(
+            message_type="cardsV2",
+            space_id=caddy_query.conversation_id,
+            message_id=caddy_query.message_id,
+            message=chat_client.messages.SUPERVISOR_REVIEWING_RESPONSE,
+        )
+
+    except Exception as error:
+        logger.error(f"Error in send_to_llm: {str(error)}")
+        chat_client.update_message_in_adviser_space(
+            message_type="cardsV2",
+            space_id=caddy_query.conversation_id,
+            message_id=caddy_query.message_id,
+            message=chat_client.messages.REQUEST_FAILURE,
+        )
+        if not is_follow_up:
+            chat_client.update_message_in_supervisor_space(
+                space_id=supervisor_space,
+                message_id=supervisor_message_id,
+                new_message=request_failed,
+            )
+        raise Exception(f"Caddy response failed: {error}")
 
     ai_response_timestamp = datetime.now()
 
@@ -599,7 +628,7 @@ def send_to_llm(caddy_query: UserMessage, chat_client, query_length_prompts):
     llm_response = LlmResponse(
         message_id=caddy_query.message_id,
         llm_prompt=caddy_query.message,
-        llm_answer=caddy_response["answer"],
+        llm_answer=llm_output.message,
         thread_id=caddy_query.thread_id,
         llm_prompt_timestamp=ai_prompt_timestamp,
         llm_response_json=json.dumps(response_card),
@@ -633,14 +662,14 @@ def send_to_llm(caddy_query: UserMessage, chat_client, query_length_prompts):
 
     chat_client.update_message_in_supervisor_space(
         space_id=supervisor_space,
-        message_id=supervision_message_id,
+        message_id=supervisor_message_id,
         new_message=request_awaiting,
     )
 
     supervision_card = chat_client.create_supervision_card(
         user_email=user,
         event=supervision_event,
-        new_request_message_id=supervision_message_id,
+        new_request_message_id=supervisor_message_id,
         request_approved=request_approved,
         request_rejected=request_rejected,
         card_for_approval=response_card,

@@ -1,6 +1,7 @@
 from fastapi import status
 from fastapi.responses import JSONResponse, Response
 from integrations.google_chat import content
+from caddy_core.models import LLMOutput, UserMessage
 import re
 import json
 
@@ -658,6 +659,53 @@ def supervisor_request_processing(user: str, initial_query: str) -> dict:
     return card
 
 
+def supervisor_request_follow_up_details(user: str, initial_query: str) -> dict:
+    """
+    Creates a supervisor request awaiting follow up details card
+
+    Args:
+        user (str): user who submitted the query
+        initial_query: query of the user
+
+    Returns:
+        card (dict)
+    """
+    card = {
+        "cardsV2": [
+            {
+                "cardId": "aiResponseCard",
+                "card": {
+                    "sections": [
+                        {
+                            "widgets": [
+                                {
+                                    "decoratedText": {
+                                        "icon": {
+                                            "materialIcon": {"name": "psychology"}
+                                        },
+                                        "text": '<b><font color="#171738">CADDY AWAITING ADVISER FOLLOW UP</font></b>',
+                                    }
+                                },
+                                {
+                                    "textParagraph": {
+                                        "text": initial_query,
+                                    }
+                                },
+                                {
+                                    "decoratedText": {
+                                        "bottomLabel": user,
+                                    }
+                                },
+                            ]
+                        }
+                    ],
+                },
+            },
+        ],
+    }
+    return card
+
+
 def supervisor_request_failed(user: str, initial_query: str) -> dict:
     """
     Creates a supervisor request failed card
@@ -838,6 +886,98 @@ def call_complete_card(survey_card: dict) -> dict:
     }
 
     return call_complete_card
+
+
+def create_follow_up_questions_card(
+    llm_output: LLMOutput,
+    caddy_query: UserMessage,
+    supervisor_message_id: str,
+    supervisor_thread_id: str,
+):
+    sections = [
+        {
+            "header": "We need more information",
+            "widgets": [
+                {
+                    "textParagraph": {
+                        "text": "To provide a better answer, please respond to these follow-up questions:"
+                    }
+                },
+            ],
+        }
+    ]
+
+    for i, question in enumerate(llm_output.follow_up_questions, start=1):
+        sections.append(
+            {
+                "widgets": [
+                    {"textParagraph": {"text": question}},
+                    {
+                        "textInput": {
+                            "label": f"Answer {i}",
+                            "type": "MULTIPLE_LINE",
+                            "name": f"follow_up_answer_{i}",
+                        }
+                    },
+                ]
+            }
+        )
+
+    sections.append(
+        {
+            "widgets": [
+                {
+                    "buttonList": {
+                        "buttons": [
+                            {
+                                "text": "Submit",
+                                "onClick": {
+                                    "action": {
+                                        "function": "handle_follow_up_answers",
+                                        "parameters": [
+                                            {
+                                                "key": "original_query",
+                                                "value": caddy_query.message,
+                                            },
+                                            {
+                                                "key": "original_message",
+                                                "value": llm_output.message,
+                                            },
+                                            {
+                                                "key": "supervisor_message_id",
+                                                "value": supervisor_message_id,
+                                            },
+                                            {
+                                                "key": "supervisor_thread_id",
+                                                "value": supervisor_thread_id,
+                                            },
+                                            {
+                                                "key": "follow_up_questions",
+                                                "value": json.dumps(
+                                                    llm_output.follow_up_questions
+                                                ),
+                                            },
+                                        ],
+                                    }
+                                },
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    )
+
+    return {
+        "cardsV2": [
+            {
+                "cardId": "follow_up_questions",
+                "card": {
+                    "sections": sections,
+                },
+            }
+        ]
+    }
 
 
 # --- Dialog Responses --- #

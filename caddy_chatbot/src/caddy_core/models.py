@@ -97,3 +97,16 @@ class UserNotEnrolledException(Exception):
 
 class NoSupervisionSpaceException(Exception):
     pass
+
+
+# --- Parser Models --- #
+
+
+class LLMOutput(pydantic.BaseModel):
+    message: str = pydantic.Field(
+        ..., description="The main response message for the query"
+    )
+    follow_up_questions: List[str] = pydantic.Field(
+        default_factory=list,
+        description="List of follow-up questions to improve the answer quality, do not include potential answers",
+    )
