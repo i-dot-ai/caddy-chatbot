@@ -1,7 +1,8 @@
 from fastapi import status
 from fastapi.responses import JSONResponse, Response
 from integrations.google_chat import content
-from caddy_core.models import LLMOutput, UserMessage
+from caddy_core.models import LLMOutput, UserMessage, SupervisionEvent
+from typing import Dict, Any
 import re
 import json
 
@@ -978,6 +979,106 @@ def create_follow_up_questions_card(
             }
         ]
     }
+
+
+def create_supervision_card(
+    user_email: str,
+    event: SupervisionEvent,
+    new_request_message_id: str,
+    request_approved: Dict[str, Any],
+    request_rejected: Dict[str, Any],
+    card_for_approval: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Create a supervision card
+    """
+    conversation_id = event.conversation_id
+    response_id = event.response_id
+    message_id = event.message_id
+    thread_id = event.thread_id
+
+    approval_buttons_section = {
+        "widgets": [
+            {
+                "textInput": {
+                    "label": "Supervisor Notes",
+                    "type": "MULTIPLE_LINE",
+                    "hintText": "Add approval notes or an override response for rejection",
+                    "name": "supervisor_notes",
+                }
+            },
+            {
+                "buttonList": {
+                    "buttons": [
+                        {
+                            "text": "👍",
+                            "onClick": {
+                                "action": {
+                                    "function": "Approved",
+                                    "parameters": [
+                                        {
+                                            "key": "aiResponse",
+                                            "value": json.dumps(card_for_approval),
+                                        },
+                                        {
+                                            "key": "conversationId",
+                                            "value": conversation_id,
+                                        },
+                                        {"key": "responseId", "value": response_id},
+                                        {"key": "messageId", "value": message_id},
+                                        {"key": "threadId", "value": thread_id},
+                                        {
+                                            "key": "newRequestId",
+                                            "value": new_request_message_id,
+                                        },
+                                        {
+                                            "key": "requestApproved",
+                                            "value": json.dumps(request_approved),
+                                        },
+                                        {"key": "userEmail", "value": user_email},
+                                    ],
+                                }
+                            },
+                        },
+                        {
+                            "text": "👎",
+                            "onClick": {
+                                "action": {
+                                    "function": "Rejected",
+                                    "parameters": [
+                                        {
+                                            "key": "conversationId",
+                                            "value": conversation_id,
+                                        },
+                                        {"key": "responseId", "value": response_id},
+                                        {"key": "messageId", "value": message_id},
+                                        {"key": "threadId", "value": thread_id},
+                                        {
+                                            "key": "newRequestId",
+                                            "value": new_request_message_id,
+                                        },
+                                        {
+                                            "key": "requestRejected",
+                                            "value": json.dumps(request_rejected),
+                                        },
+                                        {"key": "userEmail", "value": user_email},
+                                    ],
+                                }
+                            },
+                        },
+                    ]
+                }
+            },
+        ],
+    }
+
+    card_for_approval_sections = list(
+        card_for_approval["cardsV2"][0]["card"]["sections"]
+    )
+    card_for_approval_sections.append(approval_buttons_section)
+    card_for_approval["cardsV2"][0]["card"]["sections"] = card_for_approval_sections
+
+    return card_for_approval
 
 
 # --- Dialog Responses --- #

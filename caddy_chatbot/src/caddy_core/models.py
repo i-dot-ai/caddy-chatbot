@@ -26,6 +26,10 @@ class UserMessage(pydantic.BaseModel):
     message_sent_timestamp: str
     message_received_timestamp: datetime
 
+    @property
+    def space_id(self):
+        return self.conversation_id
+
 
 class LlmResponse(pydantic.BaseModel):
     response_id: str = str(uuid.uuid4())

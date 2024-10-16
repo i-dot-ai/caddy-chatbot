@@ -13,8 +13,7 @@ from caddy_core.services.anonymise import analyse
 from integrations.microsoft_teams import content, responses
 from datetime import datetime
 
-from caddy_core import components as caddy
-
+from caddy_core.components import Caddy
 from caddy_core.services import enrolment
 
 from .verification import get_access_token, get_graph_access_token
@@ -60,6 +59,7 @@ class MicrosoftTeams:
         self.supervision_space_id = supervision_space_id
         self.service_url = service_url
         self.tenant_id = tenant_id
+        self.caddy_instance = Caddy(self)
 
     async def handle_message_event(self, event, user_supervisor):
         conversation_id = event["conversation"]["id"]
@@ -155,7 +155,7 @@ class MicrosoftTeams:
     async def process_caddy_message(self, event):
         caddy_message = await self.format_message(event)
         if caddy_message != "PII Detected":
-            await caddy.temporary_teams_invoke(self, caddy_message)
+            await self.caddy_instance.handle_message(caddy_message)
         return self.responses.OK
 
     async def process_user_management_action(
@@ -561,7 +561,7 @@ class MicrosoftTeams:
                 supervisor_message=supervisor_notes,
             )
 
-            caddy.store_approver_event(
+            self.caddy_instance.store_approver_event(
                 original_message.get("message_id"), approval_event
             )
 
@@ -628,7 +628,7 @@ class MicrosoftTeams:
                 supervisor_message=supervisor_notes,
             )
 
-            caddy.store_approver_event(
+            self.caddy_instance.store_approver_event(
                 original_message.get("message_id"), rejection_event
             )
 
