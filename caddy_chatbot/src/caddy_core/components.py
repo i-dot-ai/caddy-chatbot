@@ -2,7 +2,7 @@ import json
 import os
 from datetime import datetime
 from time import sleep
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Union
 
 from boto3.dynamodb.conditions import Key
 from caddy_core.models import (
@@ -227,7 +227,7 @@ def format_teams_user_message(event: CaddyMessageEvent) -> UserMessage:
         UserMessage: The formatted chat message
     """
     message_query = UserMessage(
-        thread_id=None,
+        thread_id=event.message_id,
         conversation_id=event.teams_conversation["id"],
         message_id=event.message_id,
         client=event.source_client,
@@ -655,9 +655,13 @@ def send_to_llm(caddy_query: UserMessage, chat_client, query_length_prompts):
     store_approver_received_timestamp(supervision_event)
 
 
-def store_approver_received_timestamp(event: SupervisionEvent):
+def store_approver_received_timestamp(
+    event: Union[SupervisionEvent, CaddyMessageEvent],
+):
+    thread_id = event.thread_id if hasattr(event, "thread_id") else event.message_id
+
     responses_table.update_item(
-        Key={"threadId": event.thread_id},
+        Key={"threadId": str(thread_id)},
         UpdateExpression="set approverReceivedTimestamp=:t",
         ExpressionAttributeValues={":t": str(datetime.now())},
         ReturnValues="UPDATED_NEW",
@@ -680,12 +684,24 @@ def store_approver_event(thread_id: str, approval_event: ApprovalEvent):
     )
 
 
-def temporary_teams_invoke(chat_client, caddy_event: CaddyMessageEvent):
+def store_user_thanked_timestamp_teams(user_message: UserMessage):
+    responses_table.update_item(
+        Key={"threadId": user_message.thread_id},
+        UpdateExpression="set userThankedTimestamp=:t",
+        ExpressionAttributeValues={":t": str(datetime.now())},
+        ReturnValues="UPDATED_NEW",
+    )
+
+
+async def temporary_teams_invoke(chat_client, caddy_event: CaddyMessageEvent):
     """
-    Temporary solution for Teams integration
+    Temporary solution for Teams integration with status updates
     """
+    status_activity_id = await chat_client.send_status_update(caddy_event, "processing")
+
     caddy_user_message = format_teams_user_message(caddy_event)
     store_message(caddy_user_message)
+    store_user_thanked_timestamp_teams(caddy_user_message)
     route_specific_augmentation, route = retrieve_route_specific_augmentation(
         caddy_event.message_string
     )
@@ -708,14 +724,23 @@ def temporary_teams_invoke(chat_client, caddy_event: CaddyMessageEvent):
 
     chain, ai_prompt_timestamp = build_chain(CADDY_PROMPT)
 
-    caddy_response = chain.invoke(
-        {
-            "input": reword_advisor_orchestration(
-                caddy_event.message_string, query_length_prompts
-            ),
-            "chat_history": [],
-        }
-    )
+    await chat_client.send_status_update(caddy_event, "composing", status_activity_id)
+
+    try:
+        caddy_response = await chain.ainvoke(
+            {
+                "input": reword_advisor_orchestration(
+                    caddy_event.message_string, query_length_prompts
+                ),
+                "chat_history": [],
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error invoking chain: {str(e)}")
+        await chat_client.send_status_update(
+            caddy_event, "request_failure", status_activity_id
+        )
+        return None, None
 
     _, caddy_response["answer"] = remove_role_played_responses(caddy_response["answer"])
 
@@ -731,7 +756,7 @@ def temporary_teams_invoke(chat_client, caddy_event: CaddyMessageEvent):
         message_id=caddy_event.message_id,
         llm_prompt=caddy_user_message.message,
         llm_answer=caddy_response["answer"],
-        thread_id=caddy_user_message.thread_id,
+        thread_id=caddy_user_message.message_id,
         llm_prompt_timestamp=ai_prompt_timestamp,
         llm_response_json=json.dumps(response_card),
         llm_response_timestamp=ai_response_timestamp,
@@ -740,7 +765,16 @@ def temporary_teams_invoke(chat_client, caddy_event: CaddyMessageEvent):
     )
     store_response(llm_response)
 
-    chat_client.send_adviser_card(
-        caddy_event,
-        card=response_card,
+    await chat_client.send_status_update(
+        caddy_event, "supervisor_reviewing", status_activity_id
     )
+
+    await chat_client.send_to_supervision(
+        caddy_event, caddy_response["answer"], context_sources, status_activity_id
+    )
+
+    await chat_client.send_status_update(
+        caddy_event, "awaiting_approval", status_activity_id
+    )
+
+    store_approver_received_timestamp(caddy_event)

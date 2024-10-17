@@ -74,10 +74,9 @@ class CaddyMessageEvent(pydantic.BaseModel):
     message_string: str
     source_client: str
     timestamp: datetime
-    teams_conversation: Optional[Dict[str, str]] = None
+    teams_conversation: Optional[Dict[Any, Any]] = None
     teams_from: Optional[Dict[str, str]] = None
     teams_recipient: Optional[Dict[str, str]] = None
-    teams_service_url: Optional[str] = None
 
 
 class ProcessChatMessageEvent(pydantic.BaseModel):
@@ -90,3 +89,11 @@ class ProcessChatMessageEvent(pydantic.BaseModel):
     message_string: str
     source_client: str
     timestamp: datetime
+
+
+class UserNotEnrolledException(Exception):
+    pass
+
+
+class NoSupervisionSpaceException(Exception):
+    pass

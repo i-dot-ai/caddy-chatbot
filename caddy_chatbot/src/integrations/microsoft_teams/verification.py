@@ -1,5 +1,6 @@
 import os
 import requests
+from msal import ConfidentialClientApplication
 
 APP_ID = os.environ.get("MicrosoftAppId", "")
 APP_PASSWORD = os.environ.get("MicrosoftAppPassword", "")
@@ -22,7 +23,7 @@ def get_access_token():
     """
     Fetches an access token using the Bot credentials
     """
-    response = requests.post(url, headers=headers, data=authentication_data)
+    response = requests.post(url, headers=headers, data=authentication_data, timeout=60)
 
     if response.status_code == 200:
         response_data = response.json()
@@ -30,3 +31,25 @@ def get_access_token():
         return access_token
     else:
         print("Failed to retrieve token:", response.text)
+
+
+def get_graph_access_token(tenant_id: str):
+    """
+    Fetches an access token for Microsoft Graph API for a specific tenant
+    """
+    app = ConfidentialClientApplication(
+        APP_ID,
+        authority=f"https://login.microsoftonline.com/{tenant_id}",
+        client_credential=APP_PASSWORD,
+    )
+
+    result = app.acquire_token_for_client(
+        scopes=["https://graph.microsoft.com/.default"]
+    )
+
+    if "access_token" in result:
+        return result["access_token"]
+    else:
+        print(f"Error getting token: {result.get('error')}")
+        print(f"Error description: {result.get('error_description')}")
+        return None
