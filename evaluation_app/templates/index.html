@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h1 class="page-title">Advisor Questions</h1>
+    <ol class="question-list">
+        {% for question in questions %}
+        <li class="question-item">
+            <a href="{{ url_for('question_details', id=question.QuestionId) }}" class="question-link">
+                <span class="question-number">{{ loop.index }}</span>
+                <span class="question-text">{{ question.QuestionString }}</span>
+            </a>
+        </li>
+        {% endfor %}
+    </ol>
+</div>
+
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background-color: #f0f2f5;
+        color: #333;
+    }
+
+    .container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+
+    .page-title {
+        color: #2c3e50;
+        text-align: center;
+        margin-bottom: 30px;
+        font-size: 2.5em;
+    }
+
+    .question-list {
+        list-style-type: none;
+        padding: 0;
+    }
+
+    .question-item {
+        margin-bottom: 15px;
+    }
+
+    .question-link {
+        display: flex;
+        align-items: center;
+        padding: 15px;
+        background-color: #ffffff;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        color: #333;
+        text-decoration: none;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+
+    .question-link:hover {
+        background-color: #f8f8f8;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    .question-number {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 30px;
+        height: 30px;
+        background-color: #3498db;
+        color: white;
+        border-radius: 50%;
+        font-weight: bold;
+        margin-right: 15px;
+        flex-shrink: 0;
+    }
+
+    .question-text {
+        flex-grow: 1;
+        font-size: 1.1em;
+    }
+</style>
+{% endblock %}
