@@ -18,6 +18,7 @@ from caddy_core.services.survey import get_survey, check_if_survey_required
 from integrations.google_chat import content, responses
 from googleapiclient.discovery import build
 from integrations.google_chat.auth import get_google_creds
+from langchain_aws import ChatBedrock
 
 from urllib.parse import urlparse, urlunparse
 
@@ -124,6 +125,8 @@ class GoogleChat:
                 return await self.handle_survey_response(event)
             case "call_complete":
                 return await self.finalise_caddy_call(event)
+            case "convert_to_client_friendly":
+                return await self.convert_to_client_friendly(event)
             case _:
                 logger.warning(f"Unhandled card action: {action_name}")
                 return self.responses.NO_CONTENT
@@ -840,6 +843,32 @@ class GoogleChat:
 
         approved_card = self.create_approved_card(card, approver, supervisor_notes)
 
+        client_friendly_button = {
+            "buttonList": {
+                "buttons": [
+                    {
+                        "text": "Convert to Client Friendly",
+                        "onClick": {
+                            "action": {
+                                "function": "convert_to_client_friendly",
+                                "interaction": "OPEN_DIALOG",
+                                "parameters": [
+                                    {
+                                        "key": "card_content",
+                                        "value": json.dumps(approved_card),
+                                    },
+                                ],
+                            }
+                        },
+                    }
+                ]
+            }
+        }
+
+        approved_card["cardsV2"][0]["card"]["sections"].append(
+            {"widgets": [client_friendly_button]}
+        )
+
         domain = user_email.split("@")[1]
         _, office = enrolment.check_domain_status(domain)
         included_in_rct = enrolment.check_rct_status(office)
@@ -1440,3 +1469,80 @@ class GoogleChat:
             message=survey_card,
             thread_id=thread_for_survey,
         )
+
+    async def convert_to_client_friendly(self, event: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Converts the card content to a client-friendly version and returns it in a dialog.
+
+        Args:
+            event (Dict[str, Any]): The event containing the card content.
+
+        Returns:
+            Dict[str, Any]: The dialog response containing the client-friendly version.
+        """
+        card_content = json.loads(event["common"]["parameters"]["card_content"])
+
+        llm = ChatBedrock(
+            model_id=os.getenv("LLM"),
+            region_name="eu-west-3",
+            model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},
+        )
+
+        prompt = f"""
+        You are an AI assistant tasked with converting a technical response into a client-friendly letter style version
+        to be returned to the client via email as an overview to their advice session. Your task is to:
+
+        1. Simplify the language, avoiding jargon and technical terms.
+        2. Summarise the key points in a way that's easy for the client to understand.
+        3. Maintain the essential information and advice, but present it in a more conversational tone.
+        4. Exclude any internal references (such as advisernet) or notes that aren't relevant to the client.
+        5. Keep your response concise, aiming for about half the length of the original content.
+
+        Keep the style in line with "as discussed in our recent contact these are available options" do not
+        include any follow up questions for the client but phrase as paths they can explore. This is after
+        contact so do not ask if any further support is required, instead let the client know they can get
+        contact the service if they need further help in the future.
+
+        Include any public facing helpful links at the end of the response.
+
+        Here's the content to convert:
+
+        {card_content}
+
+        Please provide the client-friendly version:
+        """
+
+        response = llm.invoke(prompt)
+        client_friendly_content = response.content
+
+        return self.client_friendly_dialog(client_friendly_content)
+
+    def client_friendly_dialog(self, content: str) -> Dict[str, Any]:
+        """
+        Creates a dialog with the client-friendly content.
+
+        Args:
+            content (str): The client-friendly content.
+
+        Returns:
+            Dict[str, Any]: The dialog response.
+        """
+        return {
+            "action_response": {
+                "type": "DIALOG",
+                "dialog_action": {
+                    "dialog": {
+                        "body": {
+                            "sections": [
+                                {
+                                    "header": "Client Friendly Version",
+                                    "widgets": [
+                                        {"textParagraph": {"text": content}},
+                                    ],
+                                }
+                            ]
+                        }
+                    }
+                },
+            }
+        }
