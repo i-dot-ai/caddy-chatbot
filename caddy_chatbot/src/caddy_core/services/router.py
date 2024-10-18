@@ -6,6 +6,11 @@ from datetime import datetime, timezone, timedelta
 from semantic_router import Route, RouteLayer
 from semantic_router.encoders import BedrockEncoder
 from caddy_core.utils.monitoring import logger
+from caddy_core.routes import routes_data
+
+from semantic_router.index.postgres import PostgresIndex
+from semantic_router.index.local import LocalIndex
+
 
 from dotenv import load_dotenv
 
@@ -14,12 +19,14 @@ load_dotenv()
 
 class AutoRefreshBedrockEncoder:
     def __init__(self, region="eu-west-3", score_threshold=0.5):
+        logger.info("Constructing encoder")
         self.region = region
         self.score_threshold = score_threshold
         self.encoder = None
-        self.refresh_credentials()
+        self.expiration = datetime.now(timezone.utc) # assume we're expired when we construct
 
     def refresh_credentials(self):
+        logger.info("Refreshing credentials")
         try:
             sts_client = boto3.client("sts")
             role_arn = os.environ.get("TASK_ROLE_ARN")
@@ -45,6 +52,7 @@ class AutoRefreshBedrockEncoder:
             raise
 
     def __call__(self, *args, **kwargs):
+        logger.info("Calling encoder")
         if datetime.now(timezone.utc) >= self.expiration - timedelta(minutes=5):
             logger.info("Credentials expiring soon, refreshing...")
             self.refresh_credentials()
@@ -56,30 +64,32 @@ class AutoRefreshBedrockEncoder:
             return self.score_threshold
         return getattr(self.encoder, name)
 
-
-embeddings = AutoRefreshBedrockEncoder(region="eu-west-3", score_threshold=0.5)
-
-dynamodb = boto3.resource("dynamodb")
-table = dynamodb.Table(os.getenv("ROUTES_TABLE_NAME"))
-
-
-def get_routes_dynamically():
-    logger.info("Fetching routes")
-    response = table.scan()
+def load_semantic_router() -> RouteLayer:
     routes = []
-    for item in response["Items"]:
-        utterances = item["utterances"]
-        if isinstance(utterances[0], list):
-            utterances = utterances[0]
-        route = Route(name=item["name"], utterances=utterances)
+    for route in routes_data:
+        utterances = route["utterances"]
+        route = Route(name=route["name"], utterances=utterances)
         routes.append(route)
-    logger.info(f"Fetched {len(routes)} routes")
-    return routes
 
+    if os.environ.get("POSTGRES_CONNECTION_STRING", False):
+        logger.info("POSTGRES_CONNECTION_STRING is set, looking for routes in postgres...")
+        index = PostgresIndex(dimensions=1024)
+    else:
+        index = LocalIndex()
 
-routes = get_routes_dynamically()
-get_route = RouteLayer(encoder=embeddings, routes=routes)
+    try:
+        route_count_in_index = len(index.get_routes())
+    except ValueError:
+        route_count_in_index = 0
 
+    embeddings = AutoRefreshBedrockEncoder(region="eu-west-3", score_threshold=0.5)
+    if route_count_in_index > 0:
+        logger.info(f"Loading {route_count_in_index} routes from index...")
+        return RouteLayer(encoder=embeddings, index=index)
+    else:
+        return RouteLayer(encoder=embeddings, routes=routes, index=index)
+
+get_route = load_semantic_router()
 
 # messages that work with routing
 """
