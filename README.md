@@ -63,17 +63,6 @@ If you get an error with docker, note you may need to change credsStore your .do
 "credStore": "desktop",
 ```
 
-## Testing
-
-Running tests on platform agnostic Caddy components with pytest. Tests are stored in tests/caddy_components, and can be invoked by running the below:
-
-```bash
-$ docker compose up
-```
-```bash
-$ pytest
-```
-
 ## Deployment
 
 We'll use AWS CLI and Docker to create and deploy all the relevant resources.
