@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import asyncio
 import requests
 from typing import Dict, Any, List, Tuple, Optional, Union
 from datetime import datetime
@@ -43,6 +44,19 @@ class GoogleChat:
             credentials=get_google_creds(os.getenv("CADDY_SUPERVISOR_SERVICE_ACCOUNT")),
         )
         self.caddy_instance = Caddy(self)
+        self.active_tasks = {}
+
+    def extract_status_message_id(self, event: Dict[str, Any]) -> Optional[str]:
+        """
+        Extract the status message ID from the event or card content.
+        """
+        if "statusMessageId" in event.get("common", {}).get("parameters", {}):
+            return event["common"]["parameters"]["statusMessageId"]
+
+        if "message" in event and "cardsV2" in event["message"]:
+            return event["message"]["name"].split("/")[3]
+
+        return None
 
     async def handle_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -99,8 +113,23 @@ class GoogleChat:
         if caddy_message == "PII Detected":
             return self.responses.NO_CONTENT
 
-        await self.caddy_instance.handle_message(caddy_message)
+        if caddy_message.message_id not in self.active_tasks:
+            task = asyncio.create_task(self.process_message(caddy_message))
+            self.active_tasks[caddy_message.message_id] = task
+            task.add_done_callback(
+                lambda t: self.remove_active_task(caddy_message.message_id)
+            )
+
         return self.responses.ACCEPTED
+
+    async def process_message(self, caddy_message: CaddyMessageEvent):
+        try:
+            await self.caddy_instance.handle_message(caddy_message=caddy_message)
+        except Exception as e:
+            logger.error(f"Error processing message: {str(e)}")
+
+    def remove_active_task(self, message_id: str):
+        self.active_tasks.pop(message_id, None)
 
     async def handle_card_clicked(self, event: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -127,7 +156,7 @@ class GoogleChat:
             case "convert_to_client_friendly":
                 return await self.convert_to_client_friendly(event)
             case "handle_follow_up_answers":
-                return await self.process_follow_up_answers(event)
+                return await self.handle_follow_up_answers(event)
             case _:
                 logger.warning(f"Unhandled card action: {action_name}")
                 return self.responses.NO_CONTENT
@@ -255,20 +284,13 @@ class GoogleChat:
                 )
                 return "PII Detected"
 
-        thread_id, message_id = self.send_dynamic_to_adviser_space(
-            response_type="cardsV2",
-            space_id=space_id,
-            thread_id=thread_id,
-            message=self.messages.PROCESSING_MESSAGE,
-        )
-
         return CaddyMessageEvent(
             type="PROCESS_CHAT_MESSAGE",
             user=event["user"]["email"],
             name=event["user"]["name"],
             space_id=space_id,
             thread_id=thread_id,
-            message_id=message_id,
+            message_id=event["message"]["name"].split("/")[3],
             message_string=message_string,
             source_client=self.client,
             timestamp=event["eventTime"],
@@ -568,6 +590,31 @@ class GoogleChat:
         """
         user, user_space, thread_id, approval_event = self.received_approval(event)
         self.caddy_instance.store_approver_event(thread_id, approval_event)
+
+        supervisor_space = enrolment.get_designated_supervisor_space(user)
+        request_message_id = event["common"]["parameters"]["newRequestId"]
+        approved_card = self.responses.supervisor_request_approved(
+            user, approval_event.supervisor_message
+        )
+        self.update_message_in_supervisor_space(
+            space_id=supervisor_space,
+            message_id=request_message_id,
+            new_message=approved_card,
+        )
+
+        user_message_id = event["common"]["parameters"]["messageId"]
+        adviser_approved_card = self.create_approved_card(
+            json.loads(event["common"]["parameters"]["aiResponse"]),
+            event["user"]["email"],
+            approval_event.supervisor_message,
+        )
+        self.update_message_in_adviser_space(
+            message_type="cardsV2",
+            space_id=user_space,
+            message_id=user_message_id,
+            message=adviser_approved_card,
+        )
+
         return self.responses.NO_CONTENT
 
     async def handle_supervisor_rejection(
@@ -576,7 +623,32 @@ class GoogleChat:
         """
         Handle supervisor rejection
         """
-        self.handle_supervisor_rejection_internal(event)
+        user, user_space, thread_id, rejection_event = (
+            self.handle_supervisor_rejection_internal(event)
+        )
+
+        supervisor_space = enrolment.get_designated_supervisor_space(user)
+        request_message_id = event["common"]["parameters"]["newRequestId"]
+        rejected_card = self.responses.supervisor_request_rejected(
+            user, rejection_event.supervisor_message
+        )
+        self.update_message_in_supervisor_space(
+            space_id=supervisor_space,
+            message_id=request_message_id,
+            new_message=rejected_card,
+        )
+
+        user_message_id = event["common"]["parameters"]["messageId"]
+        adviser_rejected_card = self.responses.supervisor_rejection(
+            event["user"]["email"], rejection_event.supervisor_message
+        )
+        self.update_message_in_adviser_space(
+            message_type="cardsV2",
+            space_id=user_space,
+            message_id=user_message_id,
+            message=adviser_rejected_card,
+        )
+
         return self.responses.NO_CONTENT
 
     async def handle_supervisor_dialog(self, event: Dict[str, Any]) -> Dict[str, Any]:
@@ -621,8 +693,11 @@ class GoogleChat:
                     updateMask="cardsV2",
                 ).execute()
 
-    async def send_status_update(
-        self, event: CaddyMessageEvent, status: str, activity_id: str = None
+    async def update_status(
+        self,
+        message_query: UserMessage,
+        status: str,
+        status_message_id: Optional[str] = None,
     ):
         """
         Send a status update for Google Chat
@@ -639,25 +714,31 @@ class GoogleChat:
         if status in status_cards:
             card_content = status_cards[status]
 
-            if activity_id:
-                self.update_message_in_adviser_space(
-                    message_type="cardsV2",
-                    space_id=event.space_id,
-                    message_id=activity_id,
-                    message=card_content,
-                )
-                return activity_id
-            else:
-                thread_id, message_id = self.send_dynamic_to_adviser_space(
+            if status_message_id:
+                try:
+                    self.update_message_in_adviser_space(
+                        message_type="cardsV2",
+                        space_id=message_query.conversation_id,
+                        message_id=status_message_id,
+                        message=card_content,
+                    )
+                    return status_message_id
+                except Exception as e:
+                    logger.error(f"Error updating status message: {str(e)}")
+                    status_message_id = None
+
+            if not status_message_id:
+                thread_id, new_message_id = self.send_dynamic_to_adviser_space(
                     response_type="cardsV2",
-                    space_id=event.space_id,
+                    space_id=message_query.conversation_id,
                     message=card_content,
-                    thread_id=event.thread_id,
+                    thread_id=message_query.thread_id,
                 )
-                return message_id
+                return new_message_id
         else:
             logger.error(f"Unknown status: {status}")
-            return None
+
+        return None
 
     async def send_supervision_request(
         self,
@@ -1504,17 +1585,16 @@ class GoogleChat:
             }
         }
 
-    async def process_follow_up_answers(self, event: Dict[str, Any]) -> Dict[str, Any]:
+    async def handle_follow_up_answers(self, event: Dict[str, Any]):
         """
-        Process follow-up answers and generate a new response
+        Process follow up answers
         """
         original_query = event["common"]["parameters"]["original_query"]
         original_message = event["common"]["parameters"]["original_message"]
-        supervisor_message_id = event["common"]["parameters"]["supervisor_message_id"]
-        supervisor_thread_id = event["common"]["parameters"]["supervisor_thread_id"]
         follow_up_questions = json.loads(
             event["common"]["parameters"]["follow_up_questions"]
         )
+        status_message_id = self.extract_status_message_id(event)
 
         follow_up_context = f"Original Query: {original_query}\n\n"
         follow_up_context += f"Original response: {original_message}\n\n"
@@ -1528,7 +1608,7 @@ class GoogleChat:
                 ][0]
                 follow_up_context += f"Q: {question}\nA: {answer}\n\n"
 
-        caddy_query = UserMessage(
+        message_query = UserMessage(
             conversation_id=event["space"]["name"].split("/")[1],
             thread_id=event["message"]["thread"]["name"].split("/")[3],
             message_id=event["message"]["name"].split("/")[3],
@@ -1537,39 +1617,12 @@ class GoogleChat:
             message=original_query,
             message_sent_timestamp=str(datetime.now()),
             message_received_timestamp=datetime.now(),
+            status_message_id=status_message_id,
         )
 
-        status_message_id = await self.send_status_update(caddy_query, "processing")
-
-        try:
-            llm_output, context_sources = await self.caddy_instance.get_llm_response(
-                caddy_query, is_follow_up=True, follow_up_context=follow_up_context
-            )
-
-            response_card = self.create_card(llm_output.message, context_sources)
-            llm_response = self.caddy_instance.create_llm_response(
-                caddy_query, llm_output, response_card, context_sources
-            )
-            self.caddy_instance.store_response(llm_response)
-
-            supervision_event = self.caddy_instance.create_supervision_event(
-                caddy_query, llm_response
-            )
-            await self.send_status_update(
-                caddy_query, "supervisor_reviewing", status_message_id
-            )
-            await self.send_to_supervision(
-                caddy_query,
-                supervision_event,
-                response_card,
-                supervisor_message_id,
-                supervisor_thread_id,
-            )
-        except Exception as error:
-            await self.caddy_instance.handle_llm_error(
-                caddy_query, error, status_message_id
-            )
-
+        await self.caddy_instance.process_follow_up_answers(
+            message_query, follow_up_context
+        )
         return self.responses.ACCEPTED
 
     async def send_follow_up_questions(
@@ -1578,11 +1631,9 @@ class GoogleChat:
         llm_output: LLMOutput,
         context_sources: List[str],
         status_message_id: Optional[str] = None,
-        supervisor_message_id: Optional[str] = None,
-        supervisor_thread_id: Optional[str] = None,
     ):
         follow_up_card = self.responses.create_follow_up_questions_card(
-            llm_output, message_query, supervisor_message_id, supervisor_thread_id
+            llm_output, message_query
         )
         if status_message_id:
             self.update_message_in_adviser_space(
@@ -1604,55 +1655,39 @@ class GoogleChat:
         message_query: UserMessage,
         supervision_event: SupervisionEvent,
         response_card: Dict,
-        supervisor_message_id: Optional[str] = None,
-        supervisor_thread_id: Optional[str] = None,
     ):
         supervisor_space = enrolment.get_designated_supervisor_space(
             message_query.user_email
         )
 
-        if supervisor_message_id and supervisor_thread_id:
-            supervision_card = self.responses.create_supervision_card(
-                user_email=supervision_event.user,
-                event=supervision_event,
-                new_request_message_id=supervisor_message_id,
-                request_approved=self.responses.supervisor_request_approved(
-                    supervision_event.user, supervision_event.llmPrompt
-                ),
-                request_rejected=self.responses.supervisor_request_rejected(
-                    supervision_event.user, supervision_event.llmPrompt
-                ),
-                card_for_approval=response_card,
-            )
-            self.update_message_in_supervisor_space(
-                space_id=supervisor_space,
-                message_id=supervisor_message_id,
-                new_message=supervision_card,
-            )
-        else:
-            supervision_message_id = await self.send_supervision_request(
-                event=supervision_event,
-                status="processing",
-                supervisor_space=supervisor_space,
-            )
+        initial_request_card = self.responses.supervisor_request_processing(
+            supervision_event.user, supervision_event.llmPrompt
+        )
 
-            supervision_card = self.responses.create_supervision_card(
-                user_email=supervision_event.user,
-                event=supervision_event,
-                new_request_message_id=supervision_message_id,
-                request_approved=self.responses.supervisor_request_approved(
-                    supervision_event.user, supervision_event.llmPrompt
-                ),
-                request_rejected=self.responses.supervisor_request_rejected(
-                    supervision_event.user, supervision_event.llmPrompt
-                ),
-                card_for_approval=response_card,
-            )
+        thread_id, request_message_id = self.send_message_to_supervisor_space(
+            space_id=supervisor_space,
+            message=initial_request_card,
+        )
 
-            self.update_message_in_supervisor_space(
-                space_id=supervisor_space,
-                message_id=supervision_message_id,
-                new_message=supervision_card,
-            )
+        supervision_card = self.responses.create_supervision_card(
+            user_email=supervision_event.user,
+            event=supervision_event,
+            new_request_message_id=request_message_id,
+            request_approved=self.responses.supervisor_request_approved(
+                supervision_event.user, supervision_event.llmPrompt
+            ),
+            request_rejected=self.responses.supervisor_request_rejected(
+                supervision_event.user, supervision_event.llmPrompt
+            ),
+            card_for_approval=response_card,
+        )
+
+        self.update_message_in_supervisor_space(
+            space_id=supervisor_space,
+            message_id=request_message_id,
+            new_message=supervision_card,
+        )
 
         self.caddy_instance.store_approver_received_timestamp(supervision_event)
+
+        return thread_id, request_message_id

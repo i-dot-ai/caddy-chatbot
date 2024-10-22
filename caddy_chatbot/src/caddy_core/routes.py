@@ -1,10 +1,3 @@
-import boto3
-
-TABLE_NAME = "caddyRoutes"
-
-dynamodb = boto3.resource("dynamodb")
-table = dynamodb.Table(TABLE_NAME)
-
 routes_data = [
     {
         "name": "benefits_and_tax_credits",
@@ -252,13 +245,3 @@ routes_data = [
         ],
     },
 ]
-
-
-def load_routes_to_dynamodb():
-    for route in routes_data:
-        table.put_item(Item=route)
-    print("All routes have been loaded into the DynamoDB table.")
-
-
-if __name__ == "__main__":
-    load_routes_to_dynamodb()

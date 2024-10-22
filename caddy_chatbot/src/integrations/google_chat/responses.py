@@ -2,7 +2,7 @@ from fastapi import status
 from fastapi.responses import JSONResponse, Response
 from integrations.google_chat import content
 from caddy_core.models import LLMOutput, UserMessage, SupervisionEvent
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import re
 import json
 
@@ -892,8 +892,8 @@ def call_complete_card(survey_card: dict) -> dict:
 def create_follow_up_questions_card(
     llm_output: LLMOutput,
     caddy_query: UserMessage,
-    supervisor_message_id: str,
-    supervisor_thread_id: str,
+    supervisor_message_id: Optional[str] = None,
+    supervisor_thread_id: Optional[str] = None,
 ):
     sections = [
         {

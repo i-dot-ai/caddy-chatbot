@@ -1,4 +1,5 @@
 import json
+import asyncio
 from datetime import datetime
 from typing import Any, Dict, List, Tuple, Union, Optional
 
@@ -34,9 +35,25 @@ from pytz import timezone
 class Caddy:
     def __init__(self, chat_client):
         self.chat_client = chat_client
+        self.active_tasks = {}
 
     async def handle_message(self, caddy_message: CaddyMessageEvent):
-        logger.debug("Running message handler")
+        logger.debug(f"Running message handler for message: {caddy_message.message_id}")
+
+        if caddy_message.message_id in self.active_tasks:
+            logger.warning(
+                f"Message {caddy_message.message_id} is already being processed"
+            )
+            return
+
+        task = asyncio.create_task(self.process_message(caddy_message))
+        self.active_tasks[caddy_message.message_id] = task
+        try:
+            await task
+        finally:
+            del self.active_tasks[caddy_message.message_id]
+
+    async def process_message(self, caddy_message: CaddyMessageEvent):
         module_values, survey_complete = self.check_existing_call(caddy_message)
 
         if survey_complete:
@@ -52,44 +69,36 @@ class Caddy:
         message_query = self.format_chat_message(caddy_message)
         self.store_message(message_query)
 
-        status_message_id = await self.chat_client.send_status_update(
-            caddy_message, "processing"
+        status_message_id = await self.chat_client.update_status(
+            message_query, "processing"
         )
+        message_query.status_message_id = status_message_id
 
         try:
-            await self.send_to_llm(message_query, status_message_id=status_message_id)
+            await self.send_to_llm(message_query)
         except Exception as error:
             await self.handle_llm_error(message_query, error)
-
-    async def process_message(self, message_query: UserMessage):
-        await self.send_to_llm(message_query)
 
     async def send_to_llm(
         self,
         caddy_query: UserMessage,
         is_follow_up: bool = False,
         follow_up_context: str = "",
-        supervisor_message_id: Optional[str] = None,
-        supervisor_thread_id: Optional[str] = None,
-        status_message_id: Optional[str] = None,
     ):
         try:
-            await self.chat_client.send_status_update(
-                caddy_query, "composing", status_message_id
+            status_message_id = await self.chat_client.update_status(
+                caddy_query, "composing", caddy_query.status_message_id
             )
+            caddy_query.status_message_id = status_message_id
+
             llm_output, context_sources = await self.get_llm_response(
                 caddy_query, is_follow_up, follow_up_context
             )
             await self.handle_llm_response(
-                caddy_query,
-                llm_output,
-                context_sources,
-                supervisor_message_id,
-                supervisor_thread_id,
-                status_message_id,
+                caddy_query, llm_output, context_sources, is_follow_up
             )
         except Exception as error:
-            await self.handle_llm_error(caddy_query, error, status_message_id)
+            await self.handle_llm_error(caddy_query, error)
 
     async def get_llm_response(
         self,
@@ -99,14 +108,9 @@ class Caddy:
     ):
         chain, prompt = self.setup_llm_chain(message_query)
 
-        if is_follow_up:
-            reworded_query = (
-                f"{message_query.message}\n\nAdditional context:\n{follow_up_context}"
-            )
-        else:
-            reworded_query = self.reword_advisor_orchestration(
-                message_query.message, query_length_prompts
-            )
+        reworded_query = self.reword_advisor_orchestration(
+            message_query.message, follow_up_context
+        )
 
         caddy_response = await chain.ainvoke(
             {
@@ -193,18 +197,14 @@ class Caddy:
         message_query: UserMessage,
         llm_output: LLMOutput,
         context_sources: List[str],
-        supervisor_message_id: Optional[str] = None,
-        supervisor_thread_id: Optional[str] = None,
-        status_message_id: Optional[str] = None,
+        is_follow_up: bool = False,
     ):
-        if llm_output.follow_up_questions:
+        if llm_output.follow_up_questions and not is_follow_up:
             await self.chat_client.send_follow_up_questions(
                 message_query,
                 llm_output,
                 context_sources,
-                status_message_id,
-                supervisor_message_id,
-                supervisor_thread_id,
+                message_query.status_message_id,
             )
             return
 
@@ -217,26 +217,35 @@ class Caddy:
         self.store_response(llm_response)
 
         supervision_event = self.create_supervision_event(message_query, llm_response)
-        await self.chat_client.send_status_update(
-            message_query, "supervisor_reviewing", status_message_id
+        status_message_id = await self.chat_client.update_status(
+            message_query, "supervisor_reviewing", message_query.status_message_id
         )
-        await self.send_to_supervision(
-            message_query,
-            supervision_event,
-            response_card,
-            supervisor_message_id,
-            supervisor_thread_id,
+        message_query.status_message_id = status_message_id
+
+        (
+            supervision_thread_id,
+            supervision_message_id,
+        ) = await self.chat_client.send_to_supervision(
+            message_query, supervision_event, response_card
         )
+
+        llm_response.supervision_message_id = supervision_message_id
+        llm_response.supervisor_thread_id = supervision_thread_id
+        self.store_response(llm_response)
+
+        status_message_id = await self.chat_client.update_status(
+            message_query, "awaiting_approval", message_query.status_message_id
+        )
+        message_query.status_message_id = status_message_id
 
     async def handle_llm_error(
         self,
         message_query: UserMessage,
         error: Exception,
-        status_message_id: Optional[str] = None,
     ):
         logger.error(f"Error in send_to_llm: {str(error)}")
-        await self.chat_client.send_status_update(
-            message_query, "request_failure", status_message_id
+        await self.chat_client.update_status(
+            message_query, "request_failure", message_query.status_message_id
         )
         raise Exception(f"Caddy response failed: {error}")
 
@@ -445,9 +454,10 @@ class Caddy:
         return False, response.strip()
 
     def reword_advisor_orchestration(
-        self, query: str, query_length_prompts: dict
+        self, original_query: str, follow_up_context: str = ""
     ) -> str:
-        reworded_query = self.reword_advisor_message(query)
+        combined_input = f"Original Query: {original_query}\n\nAdditional Context: {follow_up_context}"
+        reworded_query = self.reword_advisor_message(combined_input)
 
         if 50 <= len(reworded_query) <= 200:
             return reworded_query
@@ -467,7 +477,7 @@ class Caddy:
 
         content = llm.invoke(prompt).content
 
-        logger.debug(f"content: {content}")
+        # logger.debug(f"content: {content}")
 
         return content
 
@@ -500,7 +510,7 @@ class Caddy:
         """
         response = llm.invoke(prompt)
 
-        logger.debug(f"reworded query: {response}")
+        # logger.debug(f"reworded query: {response}")
 
         return response.content
 
@@ -555,6 +565,22 @@ class Caddy:
             supervisor_message_id,
             supervisor_thread_id,
         )
+
+    async def process_follow_up_answers(
+        self, message_query: UserMessage, follow_up_context: str
+    ):
+        try:
+            await self.chat_client.update_status(
+                message_query, "composing", message_query.status_message_id
+            )
+
+            await self.send_to_llm(
+                message_query,
+                is_follow_up=True,
+                follow_up_context=follow_up_context,
+            )
+        except Exception as error:
+            await self.handle_llm_error(message_query, error)
 
     @staticmethod
     def mark_call_complete(user: str, thread_id: str) -> None:

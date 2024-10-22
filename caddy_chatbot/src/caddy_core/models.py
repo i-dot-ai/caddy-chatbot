@@ -25,6 +25,7 @@ class UserMessage(pydantic.BaseModel):
     message: str
     message_sent_timestamp: str
     message_received_timestamp: datetime
+    status_message_id: Union[str, None] = None
 
     @property
     def space_id(self):
@@ -42,6 +43,8 @@ class LlmResponse(pydantic.BaseModel):
     llm_response_timestamp: datetime
     route: str
     context: Union[List[Any], None]
+    supervision_message_id: Union[str, None] = None
+    supervisor_thread_id: Union[str, None] = None
 
 
 class SupervisionEvent(pydantic.BaseModel):
@@ -112,5 +115,5 @@ class LLMOutput(pydantic.BaseModel):
     )
     follow_up_questions: List[str] = pydantic.Field(
         default_factory=list,
-        description="List of follow-up questions to improve the answer quality, do not include potential answers",
+        description="List of up to 4 follow-up questions to improve the answer quality, potential answers are not to be included.",
     )

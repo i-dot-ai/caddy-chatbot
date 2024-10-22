@@ -15,6 +15,8 @@ from integrations.microsoft_teams.structures import initialise_teams_client
 
 app = FastAPI(docs_url=None)
 
+google_chat = GoogleChat()
+
 
 @app.get("/health")
 def health():
@@ -26,8 +28,7 @@ async def google_chat_endpoint(event=Depends(verify_google_chat_request)) -> dic
     """
     Handles inbound requests from Google Chat for Caddy
     """
-    logger.info("New Google Chat Request")
-    google_chat = GoogleChat()
+    logger.debug("New Google Chat Request")
     try:
         return await google_chat.handle_event(event)
     except UserNotEnrolledException:
