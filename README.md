@@ -16,6 +16,25 @@ $ 	poetry shell
 
 Then set up your local dev environment with `make setup-local-environment`.
 
+### Local dynamoDB
+
+To run the project against a [local dynamoDB](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.html), set the `DYNAMODB_URL` env var to the address of a locally running `dynamodb-local`. For example:
+
+```bash
+$    brew install dynamodb-local
+$    dynamodb-local -port 32331 -dbPath $(pwd)/db
+```
+
+The correct value for `DYNAMODB_URL` if started with those arguments will be `http://localhost:32331`.
+
+Note that the test suite requires dynamodb to be running, which is (for now!) a manual process, as above.
+
+### Running tests
+
+```bash
+$     poetry run pytest
+```
+
 ### Semantic router
 
 By default the semantic-router library will embed all the `utterances` it uses to perform semantic routing, each time the app starts up.
