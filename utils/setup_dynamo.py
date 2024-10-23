@@ -1,19 +1,15 @@
-import sys
+import caddy_chatbot.src.boot  # noqa: F401
 
+from caddy_core.utils.monitoring import logger
 from botocore.exceptions import ClientError
 from cfn_tools import load_yaml
-from dotenv import load_dotenv
-
-sys.path.append("caddy_chatbot/src")
 
 from caddy_core.hosting_environment import HostingEnvironment
 from caddy_core.utils.tables import dynamodb
 
-load_dotenv()
 
-
-def setup_dynamo():
-    if not HostingEnvironment.is_dev():
+def setup_dynamo(logger):
+    if not HostingEnvironment.is_dev() and not HostingEnvironment.is_test():
         raise Exception("Refusing to run setup_dynamo in non-dev environment")
 
     raw_yaml = open("infra/template.yaml").read()
@@ -25,8 +21,11 @@ def setup_dynamo():
         if v["Type"] == "AWS::DynamoDB::Table"
     }
 
-    for k, t in tables.items():
-        table_name = k
+    for table_name, t in tables.items():
+        # :/ but we'll make it better!
+        if HostingEnvironment.is_test():
+            table_name = f"{table_name}Test"
+
         attribute_definitions = t["Properties"]["AttributeDefinitions"]
         key_schema = t["Properties"]["KeySchema"]
 
@@ -40,10 +39,13 @@ def setup_dynamo():
                     "WriteCapacityUnits": 1,
                 },
             )
-            print(f"Created {table_name}")
+
+            if logger:
+                logger.info(f"Created {table_name}")
         except ClientError:
-            print(f"{table_name} already exists")
+            if logger:
+                logger.info(f"{table_name} already exists")
 
 
 if __name__ == "__main__":
-    setup_dynamo()
+    setup_dynamo(logger)
