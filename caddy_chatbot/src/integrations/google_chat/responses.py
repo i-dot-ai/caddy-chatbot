@@ -895,6 +895,9 @@ def create_follow_up_questions_card(
     supervisor_message_id: Optional[str] = None,
     supervisor_thread_id: Optional[str] = None,
 ):
+    """
+    Create a follow-up questions card
+    """
     sections = [
         {
             "header": "We need more information",
@@ -957,6 +960,10 @@ def create_follow_up_questions_card(
                                                 "value": json.dumps(
                                                     llm_output.follow_up_questions
                                                 ),
+                                            },
+                                            {
+                                                "key": "original_thread_id",
+                                                "value": caddy_query.thread_id,
                                             },
                                         ],
                                     }
@@ -1079,6 +1086,186 @@ def create_supervision_card(
     card_for_approval["cardsV2"][0]["card"]["sections"] = card_for_approval_sections
 
     return card_for_approval
+
+
+def create_client_friendly_dialog(content: str) -> Dict[str, Any]:
+    """
+    Create dialog for client friendly content
+    """
+    return {
+        "action_response": {
+            "type": "DIALOG",
+            "dialog_action": {
+                "dialog": {
+                    "body": {
+                        "sections": [
+                            {
+                                "header": "Client Friendly Version",
+                                "widgets": [
+                                    {"textParagraph": {"text": content}},
+                                ],
+                            }
+                        ]
+                    }
+                }
+            },
+        }
+    }
+
+
+def create_user_list_dialog(
+    supervision_users: str, space_display_name: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Create user list dialog
+    """
+    return {
+        "action_response": {
+            "type": "DIALOG",
+            "dialog_action": {
+                "dialog": {
+                    "body": {
+                        "sections": [
+                            {
+                                "header": (
+                                    f"Supervision users for {space_display_name}"
+                                    if space_display_name
+                                    else "Supervision Users"
+                                ),
+                                "widgets": [
+                                    {"textParagraph": {"text": supervision_users}}
+                                ],
+                            }
+                        ]
+                    }
+                }
+            },
+        }
+    }
+
+
+def create_pii_warning_card(
+    message: str, original_event: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Create PII warning card with redaction options
+    """
+    return {
+        "cardsV2": [
+            {
+                "cardId": "PIIDetected",
+                "card": {
+                    "sections": [
+                        {
+                            "widgets": [
+                                {
+                                    "decoratedText": {
+                                        "icon": {"materialIcon": {"name": "warning"}},
+                                        "text": '<font color="#FF0000"><b>PII Detected</b></font>',
+                                        "bottomLabel": "Please ensure all queries are anonymised",
+                                    }
+                                },
+                                {
+                                    "buttonList": {
+                                        "buttons": [
+                                            {
+                                                "text": "Proceed without redaction",
+                                                "onClick": {
+                                                    "action": {
+                                                        "function": "Proceed",
+                                                        "parameters": [
+                                                            {
+                                                                "key": "message_event",
+                                                                "value": json.dumps(
+                                                                    original_event
+                                                                ),
+                                                            }
+                                                        ],
+                                                    }
+                                                },
+                                            },
+                                            {
+                                                "text": "Edit message",
+                                                "onClick": {
+                                                    "action": {
+                                                        "function": "edit_query_dialog",
+                                                        "interaction": "OPEN_DIALOG",
+                                                        "parameters": [
+                                                            {
+                                                                "key": "original_message",
+                                                                "value": message,
+                                                            }
+                                                        ],
+                                                    }
+                                                },
+                                            },
+                                        ]
+                                    }
+                                },
+                            ]
+                        }
+                    ]
+                },
+            }
+        ]
+    }
+
+
+def edit_query_dialog(
+    message_event: Dict[str, Any], message_string: str
+) -> Dict[str, Any]:
+    """
+    Create an edit query dialog
+    """
+    return {
+        "action_response": {
+            "type": "DIALOG",
+            "dialog_action": {
+                "dialog": {
+                    "body": {
+                        "sections": [
+                            {
+                                "header": "PII Detected: Edit query",
+                                "widgets": [
+                                    {
+                                        "textInput": {
+                                            "label": "Please edit your original query to remove PII",
+                                            "type": "MULTIPLE_LINE",
+                                            "name": "editedQuery",
+                                            "value": message_string,
+                                        }
+                                    },
+                                    {
+                                        "buttonList": {
+                                            "buttons": [
+                                                {
+                                                    "text": "Submit edited query",
+                                                    "onClick": {
+                                                        "action": {
+                                                            "function": "receiveEditedQuery",
+                                                            "parameters": [
+                                                                {
+                                                                    "key": "message_event",
+                                                                    "value": json.dumps(
+                                                                        message_event
+                                                                    ),
+                                                                },
+                                                            ],
+                                                        }
+                                                    },
+                                                }
+                                            ]
+                                        },
+                                        "horizontalAlignment": "END",
+                                    },
+                                ],
+                            }
+                        ]
+                    }
+                }
+            },
+        }
+    }
 
 
 # --- Dialog Responses --- #

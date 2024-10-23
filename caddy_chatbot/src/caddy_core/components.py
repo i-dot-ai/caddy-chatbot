@@ -1,7 +1,7 @@
 import json
 import asyncio
 from datetime import datetime
-from typing import Any, Dict, List, Tuple, Union, Optional
+from typing import Any, Dict, List, Tuple, Union
 
 from boto3.dynamodb.conditions import Key
 from caddy_core.models import (
@@ -69,7 +69,7 @@ class Caddy:
         message_query = self.format_chat_message(caddy_message)
         self.store_message(message_query)
 
-        status_message_id = await self.chat_client.update_status(
+        status_message_id = await self.chat_client.send_status_update(
             message_query, "processing"
         )
         message_query.status_message_id = status_message_id
@@ -86,7 +86,7 @@ class Caddy:
         follow_up_context: str = "",
     ):
         try:
-            status_message_id = await self.chat_client.update_status(
+            status_message_id = await self.chat_client.send_status_update(
                 caddy_query, "composing", caddy_query.status_message_id
             )
             caddy_query.status_message_id = status_message_id
@@ -145,14 +145,6 @@ class Caddy:
     ):
         prompt_template = get_prompt("CORE_PROMPT")
         parser = PydanticOutputParser(pydantic_object=LLMOutput)
-        retry_parser = RetryOutputParser.from_llm(
-            parser=parser,
-            llm=ChatBedrock(
-                model_id=os.getenv("AGENT_LLM"),
-                region_name="eu-west-3",
-                model_kwargs={"temperature": 0, "top_k": 5},
-            ),
-        )
         prompt_template += (
             "\n{format_instructions}\n respond with json only - no other text"
         )
@@ -214,10 +206,9 @@ class Caddy:
         llm_response = self.create_llm_response(
             message_query, llm_output, response_card, context_sources
         )
-        self.store_response(llm_response)
 
         supervision_event = self.create_supervision_event(message_query, llm_response)
-        status_message_id = await self.chat_client.update_status(
+        status_message_id = await self.chat_client.send_status_update(
             message_query, "supervisor_reviewing", message_query.status_message_id
         )
         message_query.status_message_id = status_message_id
@@ -225,7 +216,7 @@ class Caddy:
         (
             supervision_thread_id,
             supervision_message_id,
-        ) = await self.chat_client.send_to_supervision(
+        ) = await self.chat_client.send_supervision_request(
             message_query, supervision_event, response_card
         )
 
@@ -233,7 +224,7 @@ class Caddy:
         llm_response.supervisor_thread_id = supervision_thread_id
         self.store_response(llm_response)
 
-        status_message_id = await self.chat_client.update_status(
+        status_message_id = await self.chat_client.send_status_update(
             message_query, "awaiting_approval", message_query.status_message_id
         )
         message_query.status_message_id = status_message_id
@@ -244,7 +235,7 @@ class Caddy:
         error: Exception,
     ):
         logger.error(f"Error in send_to_llm: {str(error)}")
-        await self.chat_client.update_status(
+        await self.chat_client.send_status_update(
             message_query, "request_failure", message_query.status_message_id
         )
         raise Exception(f"Caddy response failed: {error}")
@@ -550,27 +541,11 @@ class Caddy:
             response_id=str(llm_response.response_id),
         )
 
-    async def send_to_supervision(
-        self,
-        message_query: UserMessage,
-        supervision_event: SupervisionEvent,
-        response_card: Dict,
-        supervisor_message_id: Optional[str] = None,
-        supervisor_thread_id: Optional[str] = None,
-    ):
-        await self.chat_client.send_to_supervision(
-            message_query,
-            supervision_event,
-            response_card,
-            supervisor_message_id,
-            supervisor_thread_id,
-        )
-
     async def process_follow_up_answers(
         self, message_query: UserMessage, follow_up_context: str
     ):
         try:
-            await self.chat_client.update_status(
+            await self.chat_client.send_status_update(
                 message_query, "composing", message_query.status_message_id
             )
 
