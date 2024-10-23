@@ -326,8 +326,8 @@ def supervisor_rejection(approver: str, supervisor_message: str) -> dict:
                                 {
                                     "decoratedText": {
                                         "icon": {"materialIcon": {"name": "block"}},
-                                        "topLabel": "Supervisor override",
-                                        "text": '<font color="#ec0101"><B>Caddy response rejected<b></font>',
+                                        "text": '<font color="#ec0101"><b>Response rejected</b></font>',
+                                        "bottomLabel": f"by {approver}",
                                     }
                                 },
                             ]
@@ -355,13 +355,6 @@ def supervisor_rejection(approver: str, supervisor_message: str) -> dict:
             {"textParagraph": {"text": supervisor_message}}
         )
 
-    card["cardsV2"][0]["card"]["sections"][0]["widgets"].append(
-        {
-            "decoratedText": {
-                "bottomLabel": f"{approver}",
-            }
-        }
-    )
     return card
 
 
@@ -625,7 +618,7 @@ def supervisor_request_processing(user: str, initial_query: str) -> dict:
     card = {
         "cardsV2": [
             {
-                "cardId": "aiResponseCard",
+                "cardId": "statusCard",
                 "card": {
                     "sections": [
                         {
@@ -1038,11 +1031,11 @@ def create_supervision_card(
                                             "key": "newRequestId",
                                             "value": new_request_message_id,
                                         },
-                                        {
-                                            "key": "requestApproved",
-                                            "value": json.dumps(request_approved),
-                                        },
                                         {"key": "userEmail", "value": user_email},
+                                        {
+                                            "key": "original_query",
+                                            "value": event.llmPrompt,
+                                        },
                                     ],
                                 }
                             },
@@ -1054,6 +1047,10 @@ def create_supervision_card(
                                     "function": "Rejected",
                                     "parameters": [
                                         {
+                                            "key": "aiResponse",
+                                            "value": json.dumps(card_for_approval),
+                                        },
+                                        {
                                             "key": "conversationId",
                                             "value": conversation_id,
                                         },
@@ -1064,11 +1061,11 @@ def create_supervision_card(
                                             "key": "newRequestId",
                                             "value": new_request_message_id,
                                         },
-                                        {
-                                            "key": "requestRejected",
-                                            "value": json.dumps(request_rejected),
-                                        },
                                         {"key": "userEmail", "value": user_email},
+                                        {
+                                            "key": "original_query",
+                                            "value": event.llmPrompt,
+                                        },
                                     ],
                                 }
                             },
@@ -1266,6 +1263,51 @@ def edit_query_dialog(
             },
         }
     }
+
+
+def create_approved_card(
+    self, card: Dict[str, Any], approver: str, supervisor_notes: str
+) -> Dict[str, Any]:
+    """
+    Create an approved card with supervisor info
+    """
+    card["cardsV2"][0]["card"]["sections"].insert(
+        0, self.responses.approval_json_widget(approver, supervisor_notes)
+    )
+    return card
+
+
+def create_client_friendly_card(approved_card):
+    """
+    Update to card with button to invoke client friendly Caddy response
+    """
+    client_friendly_button = {
+        "buttonList": {
+            "buttons": [
+                {
+                    "text": "Convert to Client Friendly",
+                    "onClick": {
+                        "action": {
+                            "function": "convert_to_client_friendly",
+                            "interaction": "OPEN_DIALOG",
+                            "parameters": [
+                                {
+                                    "key": "card_content",
+                                    "value": json.dumps(approved_card),
+                                }
+                            ],
+                        }
+                    },
+                }
+            ]
+        }
+    }
+
+    approved_card["cardsV2"][0]["card"]["sections"].append(
+        {"widgets": [client_friendly_button]}
+    )
+
+    return approved_card
 
 
 # --- Dialog Responses --- #

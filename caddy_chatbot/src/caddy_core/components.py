@@ -94,9 +94,11 @@ class Caddy:
             llm_output, context_sources = await self.get_llm_response(
                 caddy_query, is_follow_up, follow_up_context
             )
+
             await self.handle_llm_response(
                 caddy_query, llm_output, context_sources, is_follow_up
             )
+
         except Exception as error:
             await self.handle_llm_error(caddy_query, error)
 
@@ -191,6 +193,10 @@ class Caddy:
         context_sources: List[str],
         is_follow_up: bool = False,
     ):
+        """
+        Handle LLM response
+        """
+
         if llm_output.follow_up_questions and not is_follow_up:
             await self.chat_client.send_follow_up_questions(
                 message_query,
@@ -203,41 +209,62 @@ class Caddy:
         response_card = self.chat_client.create_card(
             llm_output.message, context_sources
         )
+
         llm_response = self.create_llm_response(
             message_query, llm_output, response_card, context_sources
         )
 
         supervision_event = self.create_supervision_event(message_query, llm_response)
+
         status_message_id = await self.chat_client.send_status_update(
             message_query, "supervisor_reviewing", message_query.status_message_id
         )
         message_query.status_message_id = status_message_id
 
         (
-            supervision_thread_id,
             supervision_message_id,
+            supervisor_thread_id,
         ) = await self.chat_client.send_supervision_request(
             message_query, supervision_event, response_card
         )
 
         llm_response.supervision_message_id = supervision_message_id
-        llm_response.supervisor_thread_id = supervision_thread_id
+        llm_response.supervisor_thread_id = supervisor_thread_id
         self.store_response(llm_response)
 
-        status_message_id = await self.chat_client.send_status_update(
+        await self.chat_client.send_status_update(
             message_query, "awaiting_approval", message_query.status_message_id
         )
-        message_query.status_message_id = status_message_id
 
     async def handle_llm_error(
         self,
         message_query: UserMessage,
         error: Exception,
     ):
+        """
+        Handle LLM errors
+        """
+
         logger.error(f"Error in send_to_llm: {str(error)}")
+
+        supervisor_space = enrolment.get_designated_supervisor_space(
+            message_query.user_email
+        )
+
+        if hasattr(message_query, "supervision_message_id"):
+            await self.chat_client.update_supervision_status(
+                space_id=supervisor_space,
+                thread_id=message_query.thread_id,
+                message_id=message_query.supervision_message_id,
+                status="failed",
+                user=message_query.user_email,
+                query=message_query.message,
+            )
+
         await self.chat_client.send_status_update(
             message_query, "request_failure", message_query.status_message_id
         )
+
         raise Exception(f"Caddy response failed: {error}")
 
     def check_existing_call(
@@ -569,3 +596,48 @@ class Caddy:
             UpdateExpression="set activeCall = :ac",
             ExpressionAttributeValues={":ac": False},
         )
+
+    def _create_client_friendly_prompt(self, content: Dict[str, Any]) -> str:
+        """
+        Create prompt for client friendly response
+        """
+        return f"""
+        You are an AI assistant tasked with converting a technical response into a client-friendly letter style version
+        to be returned to the client via email as an overview to their advice session. Your task is to:
+
+        1. Simplify the language, avoiding jargon and technical terms.
+        2. Summarise the key points in a way that's easy for the client to understand.
+        3. Maintain the essential information and advice, but present it in a more conversational tone.
+        4. Exclude any internal references (such as advisernet) or notes that aren't relevant to the client.
+        5. Keep your response concise, aiming for about half the length of the original content.
+
+        Keep the style in line with "as discussed in our recent contact these are available options" do not
+        include any follow up questions for the client but phrase as paths they can explore. This is after
+        contact so do not ask if any further support is required, instead let the client know they can get
+        contact the service if they need further help in the future.
+
+        Include any public facing helpful links at the end of the response.
+
+        Here's the content to convert:
+
+        {content}
+
+        Please provide the client-friendly version:
+        """
+
+    async def create_client_friendly(
+        self, card_content: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Convert response to client friendly format
+        """
+        llm = ChatBedrock(
+            model_id=os.getenv("LLM"),
+            region_name="eu-west-3",
+            model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},
+        )
+
+        prompt = self._create_client_friendly_prompt(card_content)
+        response = llm.invoke(prompt)
+
+        return response.content
