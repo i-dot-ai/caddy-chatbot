@@ -44,6 +44,11 @@ aws-sam-cli = "^1.114.0"
 ipykernel = "^6.29.5"
 ruff = "^0.7.0"
 
+[tool.pytest.ini_options]
+env = [
+    "STAGE=test"
+]
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

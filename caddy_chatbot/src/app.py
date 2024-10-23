@@ -1,3 +1,5 @@
+import caddy_chatbot.src.boot  # noqa: F401
+
 from fastapi import FastAPI, Depends, Request, status
 from fastapi.responses import JSONResponse, Response
 
