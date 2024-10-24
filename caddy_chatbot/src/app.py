@@ -11,9 +11,11 @@ from integrations.google_chat.verification import (
 )
 
 
-from integrations.microsoft_teams.structures import initialise_teams_client
+from integrations.microsoft_teams.structures import MicrosoftTeams
 
 app = FastAPI(docs_url=None)
+
+google_chat = GoogleChat()
 
 
 @app.get("/health")
@@ -26,8 +28,7 @@ async def google_chat_endpoint(event=Depends(verify_google_chat_request)) -> dic
     """
     Handles inbound requests from Google Chat for Caddy
     """
-    logger.info("New Google Chat Request")
-    google_chat = GoogleChat()
+    logger.debug("New Google Chat Request")
     try:
         return await google_chat.handle_event(event)
     except UserNotEnrolledException:
@@ -63,21 +64,15 @@ async def microsoft_teams_endpoint(request: Request):
     logger.debug(f"POST request received: {event}")
 
     try:
-        microsoft_teams, user_supervisor = await initialise_teams_client(event)
+        microsoft_teams = MicrosoftTeams(event)
+        return await microsoft_teams.handle_event(event)
     except UserNotEnrolledException:
         return Response(status_code=status.HTTP_403_FORBIDDEN)
     except NoSupervisionSpaceException:
         return Response(status_code=status.HTTP_400_BAD_REQUEST)
-
-    event_type = event.get("type")
-    match event_type:
-        case "message":
-            return await microsoft_teams.handle_message_event(event, user_supervisor)
-        case "invoke":
-            return await microsoft_teams.handle_invoke_event(event, user_supervisor)
-        case _:
-            logger.warning(f"Unhandled event type: {event_type}")
-            return microsoft_teams.responses.NOT_FOUND
+    except Exception as e:
+        logger.error(f"Error processing Microsoft Teams supervision request: {str(e)}")
+        return Response(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @app.post("/microsoft-teams/supervision")

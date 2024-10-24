@@ -23,7 +23,9 @@ class AutoRefreshBedrockEncoder:
         self.region = region
         self.score_threshold = score_threshold
         self.encoder = None
-        self.expiration = datetime.now(timezone.utc) # assume we're expired when we construct
+        self.expiration = datetime.now(
+            timezone.utc
+        )  # assume we're expired when we construct
 
     def refresh_credentials(self):
         logger.info("Refreshing credentials")
@@ -64,6 +66,7 @@ class AutoRefreshBedrockEncoder:
             return self.score_threshold
         return getattr(self.encoder, name)
 
+
 def load_semantic_router() -> RouteLayer:
     routes = []
     for route in routes_data:
@@ -72,7 +75,9 @@ def load_semantic_router() -> RouteLayer:
         routes.append(route)
 
     if os.environ.get("POSTGRES_CONNECTION_STRING", False):
-        logger.info("POSTGRES_CONNECTION_STRING is set, looking for routes in postgres...")
+        logger.info(
+            "POSTGRES_CONNECTION_STRING is set, looking for routes in postgres..."
+        )
         index = PostgresIndex(dimensions=1024)
     else:
         index = LocalIndex()
@@ -88,6 +93,7 @@ def load_semantic_router() -> RouteLayer:
         return RouteLayer(encoder=embeddings, index=index)
     else:
         return RouteLayer(encoder=embeddings, routes=routes, index=index)
+
 
 get_route = load_semantic_router()
 

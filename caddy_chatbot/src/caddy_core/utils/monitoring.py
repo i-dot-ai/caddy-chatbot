@@ -1,6 +1,10 @@
 import logging
 import sys
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 debug_enabled = os.environ.get("DEBUG", False)
 logger_level = logging.INFO

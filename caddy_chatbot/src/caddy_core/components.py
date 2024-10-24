@@ -1,7 +1,6 @@
 import json
-import os
+import asyncio
 from datetime import datetime
-from time import sleep
 from typing import Any, Dict, List, Tuple, Union
 
 from boto3.dynamodb.conditions import Key
@@ -9,9 +8,9 @@ from caddy_core.models import (
     ApprovalEvent,
     CaddyMessageEvent,
     LlmResponse,
-    ProcessChatMessageEvent,
-    SupervisionEvent,
     UserMessage,
+    LLMOutput,
+    SupervisionEvent,
 )
 from caddy_core.services import enrolment
 from caddy_core.services.evaluation import execute_optional_modules
@@ -25,756 +24,639 @@ from caddy_core.utils.tables import (
 )
 
 from caddy_core.utils.prompts.rewording_query import query_length_prompts
-from fastapi import status
-from fastapi.responses import Response
 from langchain.prompts import PromptTemplate
 from langchain_aws import ChatBedrock
+import os
+
+from langchain.output_parsers import PydanticOutputParser, RetryOutputParser
 from pytz import timezone
 
 
-def rct_survey_reminder(event, user_record, chat_client):
-    """
-    When a user has an existing call remind them to complete survey
-    """
-    call_start_time = user_record["callStart"]
-    survey_thread_id = user_record["activeThreadId"]
-    space_id = event["space"]["name"].split("/")[1]
-    thread_id = None
-    if "thread" in event["message"]:
-        thread_id = event["message"]["thread"]["name"].split("/")[3]
-    chat_client.send_existing_call_reminder(
-        space_id, thread_id, call_start_time, survey_thread_id, event
-    )
-
-
-def handle_message(caddy_message, chat_client):
-    logger.info("Running message handler")
-    module_values, survey_complete = check_existing_call(caddy_message)
-
-    if survey_complete is True:
-        chat_client.update_message_in_adviser_space(
-            message_type="text",
-            space_id=caddy_message.space_id,
-            message_id=caddy_message.message_id,
-            message=chat_client.messages.SURVEY_ALREADY_COMPLETED,
-        )
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-    module_outputs_json = module_values["moduleOutputs"]
-    continue_conversation = module_values["continueConversation"]
-    control_group_message = module_values["controlGroupMessage"]
-
-    message_query = format_chat_message(caddy_message)
-
-    store_message(message_query)
-
-    if continue_conversation is False:
-        control_group_card = chat_client.responses.control_group_selection(
-            control_group_message, caddy_message
-        )
-        chat_client.update_message_in_adviser_space(
-            message_type="cardsV2",
-            space_id=message_query.conversation_id,
-            message_id=message_query.message_id,
-            message=control_group_card,
-        )
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-    module_outputs_json = json.loads(module_outputs_json)
-    for output in module_outputs_json.values():
-        if isinstance(output, dict) and output.get("end_interaction"):
-            return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-    chat_client.update_message_in_adviser_space(
-        message_type="cardsV2",
-        space_id=message_query.conversation_id,
-        message_id=message_query.message_id,
-        message=chat_client.messages.COMPOSING_MESSAGE,
-    )
-
-    send_to_llm(
-        caddy_query=message_query,
-        chat_client=chat_client,
-        query_length_prompts=query_length_prompts,
-    )
-
-
-def remove_role_played_responses(response: str) -> str:
-    """
-    This function checks for and cuts off the adviser output at the end of some LLM responses
-
-    Args:
-        response (str): LLM response string
-
-    Returns:
-        response (str): cleaner version of the LLM response
-    """
-    adviser_index = response.find("Adviser: ")
-    if adviser_index != -1:
-        logger.info("Removing role played response")
-        return True, response[:adviser_index].strip()
-
-    adviser_index = response.find("Advisor: ")
-    if adviser_index != -1:
-        logger.info("Removing role played response")
-        return True, response[:adviser_index].strip()
-
-    return False, response.strip()
-
-
-def format_chat_history(user_messages: List) -> List:
-    """
-    Formats chat messages for LangChain
-
-    Args:
-        user_messages (list): list of user messages
-
-    Returns:
-        history (list): langchain formatted
-    """
-    history_langchain_format = []
-    for message in user_messages:
-        human = message.get("llmPrompt")
-        ai = message.get("llmAnswer")
-
-        if human and ai:
-            history_langchain_format.append((human, ai))
-        elif human:
-            history_langchain_format.append((human, ""))
-
-    return history_langchain_format
-
-
-def get_chat_history(message: UserMessage) -> List:
-    """
-    Retrieves chats from the same thread
-
-    Args:
-        message (UserMessage): user message
-
-    Returns:
-        history (list): list of chat history
-    """
-    response = responses_table.query(
-        KeyConditionExpression=Key("threadId").eq(message.thread_id),
-    )
-
-    sorted_items = sorted(
-        response["Items"],
-        key=lambda x: x.get(
-            "messageReceivedTimestamp", x.get("llmPromptTimestamp", "")
-        ),
-    )
-
-    history = format_chat_history(sorted_items)
-    return history
-
-
-def mark_call_complete(user: str, thread_id: str) -> None:
-    """
-    Mark the call as complete in the evaluation table
-
-    Args:
-        thread_id (str): The thread id of the conversation
-
-    Returns:
-        None
-    """
-    evaluation_table.update_item(
-        Key={"threadId": thread_id},
-        UpdateExpression="set callComplete = :cc",
-        ExpressionAttributeValues={":cc": True},
-    )
-    users_table.update_item(
-        Key={"userEmail": user},
-        UpdateExpression="set activeCall = :ac",
-        ExpressionAttributeValues={":ac": False},
-    )
-
-
-def format_chat_message(event: ProcessChatMessageEvent) -> UserMessage:
-    """
-    Formats the chat message into a UserMessage object
-
-    Args:
-        event (ProcessChatMessageEvent): The event containing the chat message
-
-    Returns:
-        UserMessage: The formatted chat message
-    """
-    message_query = UserMessage(
-        conversation_id=event.space_id,
-        thread_id=event.thread_id,
-        message_id=event.message_id,
-        client=event.source_client,
-        user_email=event.user,
-        message=event.message_string,
-        message_sent_timestamp=str(event.timestamp),
-        message_received_timestamp=datetime.now(),
-    )
-
-    return message_query
-
-
-def format_teams_user_message(event: CaddyMessageEvent) -> UserMessage:
-    """
-    Formats the teams message into a UserMessage object
-
-    Args:
-        event (ProcessChatMessageEvent): The event containing the chat message
-
-    Returns:
-        UserMessage: The formatted chat message
-    """
-    message_query = UserMessage(
-        thread_id=event.message_id,
-        conversation_id=event.teams_conversation["id"],
-        message_id=event.message_id,
-        client=event.source_client,
-        user_email=event.user,
-        message=event.message_string,
-        message_sent_timestamp=str(event.timestamp),
-        message_received_timestamp=datetime.now(),
-    )
-    return message_query
-
-
-def store_message(message: UserMessage):
-    responses_table.put_item(
-        Item={
-            "threadId": str(message.thread_id),
-            "messageId": str(message.message_id),
-            "conversationId": str(message.conversation_id),
-            "client": message.client,
-            "userEmail": str(message.user_email),
-            "llmPrompt": message.message,
-            "messageSentTimestamp": message.message_sent_timestamp,
-            "messageReceivedTimestamp": str(message.message_received_timestamp),
-        }
-    )
-
-
-def store_response(response: LlmResponse):
-    responses_table.update_item(
-        Key={"threadId": str(response.thread_id)},
-        UpdateExpression="set responseId = :rId, llmAnswer = :la, llmResponseJSon = :lrj, llmPromptTimestamp = :lpt, llmResponseTimestamp = :lrt, route = :route, context = :context",
-        ExpressionAttributeValues={
-            ":rId": response.response_id,
-            ":la": response.llm_answer,
-            ":lrj": response.llm_response_json,
-            ":lpt": str(response.llm_prompt_timestamp),
-            ":lrt": str(response.llm_response_timestamp),
-            ":route": response.route,
-            ":context": response.context,
-        },
-    )
-
-
-def store_user_thanked_timestamp(ai_answer: LlmResponse):
-    responses_table.update_item(
-        Key={"threadId": ai_answer.thread_id},
-        UpdateExpression="set userThankedTimestamp=:t",
-        ExpressionAttributeValues={":t": str(datetime.now())},
-        ReturnValues="UPDATED_NEW",
-    )
-
-
-def store_evaluation_module(user, thread_id, module_values):
-    user_arguments = module_values["modulesUsed"][0]
-    argument_output = module_values["moduleOutputs"]
-    continue_conversation = module_values["continueConversation"]
-    control_group_message = module_values["controlGroupMessage"]
-    # Handles DynamoDB TypeError: Float types are not supported.
-    user_arguments["module_arguments"]["split"] = str(
-        user_arguments["module_arguments"]["split"]
-    )
-    call_start_time = datetime.now(timezone("Europe/London")).strftime("%d-%m-%Y %H:%M")
-    evaluation_table.put_item(
-        Item={
-            "threadId": thread_id,
-            "callStart": call_start_time,
-            "modulesUsed": user_arguments,
-            "moduleOutputs": argument_output,
-            "continueConversation": continue_conversation,
-            "controlGroupMessage": control_group_message,
-            "callComplete": False,
-        }
-    )
-    users_table.update_item(
-        Key={"userEmail": user},
-        UpdateExpression="set activeCall = :ac, callStart = :cs, activeThreadId = :ati, modulesUsed = :mu, moduleOutputs = :mo, continueConversation = :cc, controlGroupMessage = :cg",
-        ExpressionAttributeValues={
-            ":ac": True,
-            ":cs": call_start_time,
-            ":ati": thread_id,
-            ":mu": user_arguments,
-            ":mo": argument_output,
-            ":cc": continue_conversation,
-            ":cg": control_group_message,
-        },
-    )
-
-
-def check_existing_call(caddy_message) -> Tuple[Dict[str, Any], bool]:
-    """
-    Check if the user is in a call and whether call has already received evaluation modules, if not it creates them
-
-    Args:
-        user (str): The user
-        threadId (str): The threadId of the conversation
-
-    Returns:
-        Tuple[Dict[str, Any], bool]: A tuple containing four values:
-            - A dictionary containing the values of user_arguments, argument_output, continue_conversation, and control_group_message
-            - True if the survey is complete, False otherwise
-    """
-    survey_complete = False
-    module_values = {}
-    user_response = users_table.get_item(Key={"userEmail": caddy_message.user})
-    if "Item" in user_response and user_response["Item"]["activeCall"] is True:
-        response = evaluation_table.query(
-            KeyConditionExpression=Key("threadId").eq(caddy_message.thread_id),
-        )
-        if response["Items"]:
-            module_values = {
-                "modulesUsed": response["Items"][0]["modulesUsed"],
-                "moduleOutputs": response["Items"][0]["moduleOutputs"],
-                "continueConversation": response["Items"][0]["continueConversation"],
-                "controlGroupMessage": response["Items"][0]["controlGroupMessage"],
-            }
-            if "surveyResponse" in response["Items"][0]:
-                survey_complete = True
-            return module_values, survey_complete
-        user_active_response = users_table.get_item(
-            Key={"userEmail": caddy_message.user}
-        )
-        if "Item" in user_active_response:
-            module_values = {
-                "modulesUsed": user_active_response["Item"]["modulesUsed"],
-                "moduleOutputs": user_active_response["Item"]["moduleOutputs"],
-                "continueConversation": user_active_response["Item"][
-                    "continueConversation"
-                ],
-                "controlGroupMessage": user_active_response["Item"][
-                    "controlGroupMessage"
-                ],
-            }
-            survey_complete = False
-        return module_values, survey_complete
-
-    module_values = execute_optional_modules(
-        caddy_message, execution_time="before_message_processed"
-    )
-    store_evaluation_module(
-        user=caddy_message.user,
-        thread_id=caddy_message.thread_id,
-        module_values=module_values,
-    )
-    return module_values, survey_complete
-
-
-def reword_advisor_orchestration(query: str, query_length_prompts: dict) -> str:
-    """An agent to reason whether the reworded query is sufficient.
-    It does this via two prompts for the different tail length, leaving queries in middle alone
-
-    Args:
-        query (str): incoming query from advisor
-        query_length_prompts (dict): a dict for the two prompts for either tail length
-
-    Returns:
-        str: Rewritten query for RAG processing.
-    """
-
-    reworded_query = reword_advisor_message(query)
-
-    if 50 <= len(reworded_query) <= 200:
-        return reworded_query  # no flag
-
-    llm = ChatBedrock(
-        model_id=os.getenv("LLM"),
-        region_name="eu-west-3",
-        model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},
-    )
-
-    prompt = (
-        query_length_prompts["0 to 50"]
-        if len(reworded_query) < 50
-        else query_length_prompts["400+"]
-    )
-    prompt += f"\n\nIncoming rewritten query: {reworded_query}"
-
-    return llm.invoke(prompt).content
-
-
-def reword_advisor_message(message: str) -> str:
-    llm = ChatBedrock(
-        model_id=os.getenv("LLM"),
-        region_name="eu-west-3",
-        model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},
-    )
-    prompt = f"""You are an information extraction assistant called Caddy.
-    Your task is to analyze the given message and extract key information that would be relevant
-    for a legal assistance chatbot to perform a RAG (Retrieval-Augmented Generation) search.
-    Follow these guidelines:
-        1. Identify the main legal topic or issue being discussed.
-        2. Extract any specific questions being asked.
-        3. Note any relevant personal details of the individual involved (e.g., age, nationality, employment status).
-        4. Identify key facts or circumstances related to the legal situation.
-        5. Extract any mentioned dates, locations, or monetary amounts.
-        6. Identify any legal terms or concepts mentioned.
-    Provide your response in a structured format with clear headings for each category of extracted information.
-    If any category is not applicable or no relevant information is found skip it.
-    Remember to focus only on extracting factual information without adding any interpretation or advice.
-
-    Input:
-    {message}
-
-    Extracted Information:
-    """
-    response = llm.invoke(prompt)
-    return response.content
-
-
-def send_to_llm(caddy_query: UserMessage, chat_client, query_length_prompts):
-    query = caddy_query.message
-
-    domain = caddy_query.user_email.split("@")[1]
-
-    chat_history = get_chat_history(caddy_query)
-
-    route_specific_augmentation, route = retrieve_route_specific_augmentation(query)
-
-    day_date_time = datetime.now(timezone("Europe/London")).strftime(
-        "%A %d %B %Y %H:%M"
-    )
-
-    _, office = enrolment.check_domain_status(domain)
-    office_regions = enrolment.get_office_coverage(office)
-
-    CADDY_PROMPT = PromptTemplate(
-        template=get_prompt("CORE_PROMPT"),
-        input_variables=["context", "question"],
-        partial_variables={
-            "route_specific_augmentation": route_specific_augmentation,
-            "day_date_time": day_date_time,
-            "office_regions": ", ".join(office_regions),
-        },
-    )
-
-    chain, ai_prompt_timestamp = build_chain(CADDY_PROMPT, user=caddy_query.user_email)
-
-    user = caddy_query.user_email
-
-    supervisor_space = enrolment.get_designated_supervisor_space(user)
-    if supervisor_space == "Unknown":
-        raise Exception("supervision space returned unknown")
-
-    (
-        request_failed,
-        request_processing,
-        request_awaiting,
-        request_approved,
-        request_rejected,
-    ) = chat_client.create_supervision_request_card(user, initial_query=query)
-
-    supervision_thread_id, supervision_message_id = (
-        chat_client.send_message_to_supervisor_space(
-            space_id=supervisor_space, message=request_processing
-        )
-    )
-
-    for attempt in range(4):
-        try:
-            first_chunk = True
-            caddy_response = {}
-            accumulated_answer = ""
-            for chunk in chain.stream(
-                {
-                    "input": reword_advisor_orchestration(query, query_length_prompts),
-                    "chat_history": chat_history,
-                }
-            ):
-                for key, value in chunk.items():
-                    if (
-                        key in caddy_response
-                        and isinstance(value, str)
-                        and isinstance(caddy_response[key], str)
-                    ):
-                        caddy_response[key] += value
-                    else:
-                        caddy_response[key] = value
-
-                if "answer" in chunk:
-                    if first_chunk:
-                        context_sources = [
-                            document.metadata.get("source", "")
-                            for document in caddy_response.get("context", [])
-                        ]
-                        response_card = chat_client.create_card(
-                            caddy_response["answer"], context_sources
-                        )
-                        response_card["cardsV2"][0]["card"]["sections"][0][
-                            "widgets"
-                        ].append(chat_client.messages.RESPONSE_STREAMING)
-                        supervision_caddy_message_id = (
-                            chat_client.respond_to_supervisor_thread(
-                                space_id=supervisor_space,
-                                message=response_card,
-                                thread_id=supervision_thread_id,
-                            )
-                        )
-                        chat_client.update_message_in_adviser_space(
-                            message_type="cardsV2",
-                            space_id=caddy_query.conversation_id,
-                            message_id=caddy_query.message_id,
-                            message=chat_client.messages.SUPERVISOR_REVIEWING_RESPONSE,
-                        )
-                        first_chunk = None
-
-                    accumulated_answer += chunk["answer"]
-                    if len(accumulated_answer) >= 75:
-                        early_terminate, caddy_response["answer"] = (
-                            remove_role_played_responses(caddy_response["answer"])
-                        )
-                        context_sources = [
-                            document.metadata.get("source", "")
-                            for document in caddy_response.get("context", [])
-                        ]
-                        response_card = chat_client.create_card(
-                            caddy_response["answer"], context_sources
-                        )
-                        response_card["cardsV2"][0]["card"]["sections"][0][
-                            "widgets"
-                        ].append(chat_client.messages.RESPONSE_STREAMING)
-                        chat_client.update_message_in_supervisor_space(
-                            space_id=supervisor_space,
-                            message_id=supervision_caddy_message_id,
-                            new_message=response_card,
-                        )
-                        accumulated_answer = ""
-                        if early_terminate is True:
-                            break
-            break
-        except Exception as error:
-            print(f"Attempt {attempt+1} failed with error: {error}")
-            if attempt == 3:
-                chat_client.update_message_in_adviser_space(
-                    message_type="cardsV2",
-                    space_id=caddy_query.conversation_id,
-                    message_id=caddy_query.message_id,
-                    message=chat_client.messages.REQUEST_FAILURE,
-                )
-                chat_client.update_message_in_supervisor_space(
-                    space_id=supervisor_space,
-                    message_id=supervision_message_id,
-                    new_message=request_failed,
-                )
-                raise Exception(f"Caddy failed to response, error: {error}")
-            chat_client.update_message_in_adviser_space(
-                message_type="cardsV2",
-                space_id=caddy_query.conversation_id,
-                message_id=caddy_query.message_id,
-                message=chat_client.messages.COMPOSING_MESSAGE_RETRY,
+class Caddy:
+    def __init__(self, chat_client):
+        self.chat_client = chat_client
+        self.active_tasks = {}
+
+    async def handle_message(self, caddy_message: CaddyMessageEvent):
+        logger.debug(f"Running message handler for message: {caddy_message.message_id}")
+
+        if caddy_message.message_id in self.active_tasks:
+            logger.warning(
+                f"Message {caddy_message.message_id} is already being processed"
             )
-            wait = attempt**2
-            print(f"Retrying in {wait}...")
-            sleep(wait)
+            return
 
-    _, caddy_response["answer"] = remove_role_played_responses(caddy_response["answer"])
-    context_sources = [
-        document.metadata.get("source", "")
-        for document in caddy_response.get("context", [])
-    ]
-    response_card = chat_client.create_card(caddy_response["answer"], context_sources)
-    chat_client.update_message_in_supervisor_space(
-        space_id=supervisor_space,
-        message_id=supervision_caddy_message_id,
-        new_message=response_card,
-    )
+        task = asyncio.create_task(self.process_message(caddy_message))
+        self.active_tasks[caddy_message.message_id] = task
+        try:
+            await task
+        finally:
+            del self.active_tasks[caddy_message.message_id]
 
-    ai_response_timestamp = datetime.now()
+    async def process_message(self, caddy_message: CaddyMessageEvent):
+        # module_values, survey_complete = self.check_existing_call(caddy_message)
 
-    logger.debug(f"SOURCES: {context_sources}")
+        # if survey_complete:
+        #     await self.chat_client.send_survey_complete_message(caddy_message)
+        #     return
 
-    llm_response = LlmResponse(
-        message_id=caddy_query.message_id,
-        llm_prompt=caddy_query.message,
-        llm_answer=caddy_response["answer"],
-        thread_id=caddy_query.thread_id,
-        llm_prompt_timestamp=ai_prompt_timestamp,
-        llm_response_json=json.dumps(response_card),
-        llm_response_timestamp=ai_response_timestamp,
-        route=route or "no_route",
-        context=context_sources,
-    )
+        # if not self.should_continue_conversation(module_values):
+        #     await self.chat_client.send_control_group_message(
+        #         caddy_message, module_values
+        #     )
+        #     return
 
-    store_response(llm_response)
+        message_query = self.format_chat_message(caddy_message)
+        self.store_message(message_query)
 
-    supervision_event = SupervisionEvent(
-        type="SUPERVISION_REQUIRED",
-        source_client=caddy_query.client,
-        user=caddy_query.user_email,
-        llmPrompt=llm_response.llm_prompt,
-        llm_answer=llm_response.llm_answer,
-        llm_response_json=json.dumps(llm_response.llm_response_json),
-        conversation_id=caddy_query.conversation_id,
-        thread_id=caddy_query.thread_id,
-        message_id=caddy_query.message_id,
-        response_id=str(llm_response.response_id),
-    )
+        status_message_id = await self.chat_client.send_status_update(
+            message_query, "processing"
+        )
+        message_query.status_message_id = status_message_id
 
-    chat_client.update_message_in_adviser_space(
-        message_type="cardsV2",
-        space_id=caddy_query.conversation_id,
-        message_id=caddy_query.message_id,
-        message=chat_client.messages.AWAITING_SUPERVISOR_APPROVAL,
-    )
-    store_user_thanked_timestamp(llm_response)
+        try:
+            is_follow_up = (
+                False
+                if "follow_up" in enrolment.get_features(message_query.user_email)
+                else True
+            )
+            await self.send_to_llm(message_query, is_follow_up)
+        except Exception as error:
+            await self.handle_llm_error(message_query, error)
 
-    chat_client.update_message_in_supervisor_space(
-        space_id=supervisor_space,
-        message_id=supervision_message_id,
-        new_message=request_awaiting,
-    )
+    async def send_to_llm(
+        self,
+        caddy_query: UserMessage,
+        is_follow_up: bool = True,
+        follow_up_context: str = "",
+    ):
+        try:
+            status_message_id = await self.chat_client.send_status_update(
+                caddy_query, "composing", caddy_query.status_message_id
+            )
+            caddy_query.status_message_id = status_message_id
 
-    supervision_card = chat_client.create_supervision_card(
-        user_email=user,
-        event=supervision_event,
-        new_request_message_id=supervision_message_id,
-        request_approved=request_approved,
-        request_rejected=request_rejected,
-        card_for_approval=response_card,
-    )
+            llm_output, context_sources = await self.get_llm_response(
+                caddy_query, follow_up_context
+            )
 
-    chat_client.update_message_in_supervisor_space(
-        space_id=supervisor_space,
-        message_id=supervision_caddy_message_id,
-        new_message=supervision_card,
-    )
+            await self.handle_llm_response(
+                caddy_query, llm_output, context_sources, is_follow_up
+            )
 
-    store_approver_received_timestamp(supervision_event)
+        except Exception as error:
+            await self.handle_llm_error(caddy_query, error)
 
+    async def get_llm_response(
+        self,
+        message_query: UserMessage,
+        follow_up_context: str = "",
+    ):
+        chain, prompt = self.setup_llm_chain(message_query)
 
-def store_approver_received_timestamp(
-    event: Union[SupervisionEvent, CaddyMessageEvent],
-):
-    thread_id = event.thread_id if hasattr(event, "thread_id") else event.message_id
+        reworded_query = self.reword_advisor_orchestration(
+            message_query.message, follow_up_context
+        )
 
-    responses_table.update_item(
-        Key={"threadId": str(thread_id)},
-        UpdateExpression="set approverReceivedTimestamp=:t",
-        ExpressionAttributeValues={":t": str(datetime.now())},
-        ReturnValues="UPDATED_NEW",
-    )
-
-
-def store_approver_event(thread_id: str, approval_event: ApprovalEvent):
-    responses_table.update_item(
-        Key={"threadId": thread_id},
-        UpdateExpression="set responseId=:rId, approverEmail=:email, approved=:approved, approvalTimestamp=:atime, userResponseTimestamp=:utime, supervisorMessage=:sMessage",
-        ExpressionAttributeValues={
-            ":rId": approval_event.response_id,
-            ":email": approval_event.approver_email,
-            ":approved": approval_event.approved,
-            ":atime": str(approval_event.approval_timestamp),
-            ":utime": str(approval_event.user_response_timestamp),
-            ":sMessage": approval_event.supervisor_message,
-        },
-        ReturnValues="UPDATED_NEW",
-    )
-
-
-def store_user_thanked_timestamp_teams(user_message: UserMessage):
-    responses_table.update_item(
-        Key={"threadId": user_message.thread_id},
-        UpdateExpression="set userThankedTimestamp=:t",
-        ExpressionAttributeValues={":t": str(datetime.now())},
-        ReturnValues="UPDATED_NEW",
-    )
-
-
-async def temporary_teams_invoke(chat_client, caddy_event: CaddyMessageEvent):
-    """
-    Temporary solution for Teams integration with status updates
-    """
-    status_activity_id = await chat_client.send_status_update(caddy_event, "processing")
-
-    caddy_user_message = format_teams_user_message(caddy_event)
-    store_message(caddy_user_message)
-    store_user_thanked_timestamp_teams(caddy_user_message)
-    route_specific_augmentation, route = retrieve_route_specific_augmentation(
-        caddy_event.message_string
-    )
-
-    day_date_time = datetime.now(timezone("Europe/London")).strftime(
-        "%A %d %B %Y %H:%M"
-    )
-
-    office_regions = ["England"]
-
-    CADDY_PROMPT = PromptTemplate(
-        template=get_prompt("CORE_PROMPT"),
-        input_variables=["context", "question"],
-        partial_variables={
-            "route_specific_augmentation": route_specific_augmentation,
-            "day_date_time": day_date_time,
-            "office_regions": office_regions,
-        },
-    )
-
-    chain, ai_prompt_timestamp = build_chain(CADDY_PROMPT)
-
-    await chat_client.send_status_update(caddy_event, "composing", status_activity_id)
-
-    try:
         caddy_response = await chain.ainvoke(
             {
-                "input": reword_advisor_orchestration(
-                    caddy_event.message_string, query_length_prompts
-                ),
-                "chat_history": [],
+                "input": reworded_query,
+                "chat_history": self.get_chat_history(message_query),
             }
         )
-    except Exception as e:
-        logger.error(f"Error invoking chain: {str(e)}")
-        await chat_client.send_status_update(
-            caddy_event, "request_failure", status_activity_id
+
+        context_sources = self.extract_context_sources(caddy_response)
+        llm_output = self.parse_llm_output(caddy_response, prompt, reworded_query)
+
+        return llm_output, context_sources
+
+    def setup_llm_chain(self, message_query: UserMessage):
+        query = message_query.message
+        domain = (
+            message_query.user_email.split("@")[1]
+            if "@" in message_query.user_email
+            else "unknown"
         )
-        return None, None
+        route_specific_augmentation, route = retrieve_route_specific_augmentation(query)
+        day_date_time = datetime.now(timezone("Europe/London")).strftime(
+            "%A %d %B %Y %H:%M"
+        )
+        _, office = enrolment.check_domain_status(domain)
+        office_regions = enrolment.get_office_coverage(office)
 
-    _, caddy_response["answer"] = remove_role_played_responses(caddy_response["answer"])
+        prompt = self.create_llm_prompt(
+            route_specific_augmentation, day_date_time, office_regions
+        )
+        chain, _ = build_chain(prompt, user=message_query.user_email)
+        return chain, prompt
 
-    context_sources = [
-        document.metadata.get("source", "")
-        for document in caddy_response.get("context", [])
-    ]
-    ai_response_timestamp = datetime.now()
-    response_card = chat_client.messages.generate_response_card(
-        caddy_response["answer"]
-    )
-    llm_response = LlmResponse(
-        message_id=caddy_event.message_id,
-        llm_prompt=caddy_user_message.message,
-        llm_answer=caddy_response["answer"],
-        thread_id=caddy_user_message.message_id,
-        llm_prompt_timestamp=ai_prompt_timestamp,
-        llm_response_json=json.dumps(response_card),
-        llm_response_timestamp=ai_response_timestamp,
-        route=route or "no_route",
-        context=context_sources,
-    )
-    store_response(llm_response)
+    def create_llm_prompt(
+        self, route_specific_augmentation, day_date_time, office_regions
+    ):
+        prompt_template = get_prompt("CORE_PROMPT")
+        parser = PydanticOutputParser(pydantic_object=LLMOutput)
+        prompt_template += (
+            "\n{format_instructions}\n respond with json only - no other text"
+        )
+        return PromptTemplate(
+            template=prompt_template,
+            input_variables=["context", "input"],
+            partial_variables={
+                "route_specific_augmentation": route_specific_augmentation,
+                "day_date_time": day_date_time,
+                "office_regions": ", ".join(office_regions),
+                "format_instructions": parser.get_format_instructions(),
+            },
+        )
 
-    await chat_client.send_status_update(
-        caddy_event, "supervisor_reviewing", status_activity_id
-    )
+    def extract_context_sources(self, caddy_response):
+        return [
+            document.metadata.get("source", "")
+            for document in caddy_response.get("context", [])
+        ]
 
-    await chat_client.send_to_supervision(
-        caddy_event, caddy_response["answer"], context_sources, status_activity_id
-    )
+    def parse_llm_output(self, caddy_response, prompt, reworded_query):
+        parser = PydanticOutputParser(pydantic_object=LLMOutput)
+        retry_parser = RetryOutputParser.from_llm(
+            parser=parser,
+            llm=ChatBedrock(
+                model_id=os.getenv("AGENT_LLM"),
+                region_name="eu-west-3",
+                model_kwargs={"temperature": 0, "top_k": 5},
+            ),
+        )
+        prompt_value = prompt.format_prompt(
+            context=caddy_response.get("context", []), input=reworded_query
+        )
+        llm_output = retry_parser.parse_with_prompt(
+            caddy_response["answer"], prompt_value
+        )
+        _, llm_output.message = self.remove_role_played_responses(llm_output.message)
+        return llm_output
 
-    await chat_client.send_status_update(
-        caddy_event, "awaiting_approval", status_activity_id
-    )
+    async def handle_llm_response(
+        self,
+        message_query: UserMessage,
+        llm_output: LLMOutput,
+        context_sources: List[str],
+        is_follow_up: bool = True,
+    ):
+        """
+        Handle LLM response
+        """
 
-    store_approver_received_timestamp(caddy_event)
+        if llm_output.follow_up_questions and not is_follow_up:
+            await self.chat_client.send_follow_up_questions(
+                message_query,
+                llm_output,
+                context_sources,
+                message_query.status_message_id,
+            )
+            return
+
+        response_card = self.chat_client.create_card(
+            llm_output.message, context_sources
+        )
+
+        llm_response = self.create_llm_response(
+            message_query, llm_output, response_card, context_sources
+        )
+
+        supervision_event = self.create_supervision_event(message_query, llm_response)
+
+        status_message_id = await self.chat_client.send_status_update(
+            message_query, "supervisor_reviewing", message_query.status_message_id
+        )
+        message_query.status_message_id = status_message_id
+
+        (
+            supervision_message_id,
+            supervisor_thread_id,
+        ) = await self.chat_client.send_supervision_request(
+            message_query, supervision_event, response_card
+        )
+
+        llm_response.supervision_message_id = supervision_message_id
+        llm_response.supervisor_thread_id = supervisor_thread_id
+        self.store_response(llm_response)
+
+        await self.chat_client.send_status_update(
+            message_query, "awaiting_approval", message_query.status_message_id
+        )
+
+    async def handle_llm_error(
+        self,
+        message_query: UserMessage,
+        error: Exception,
+    ):
+        """
+        Handle LLM errors
+        """
+
+        logger.error(f"Error in send_to_llm: {str(error)}")
+
+        supervisor_space = enrolment.get_designated_supervisor_space(
+            message_query.user_email
+        )
+
+        if hasattr(message_query, "supervision_message_id"):
+            await self.chat_client.update_supervision_status(
+                space_id=supervisor_space,
+                thread_id=message_query.thread_id,
+                message_id=message_query.supervision_message_id,
+                status="failed",
+                user=message_query.user_email,
+                query=message_query.message,
+            )
+
+        await self.chat_client.send_status_update(
+            message_query, "request_failure", message_query.status_message_id
+        )
+
+        raise Exception(f"Caddy response failed: {error}")
+
+    def check_existing_call(
+        self, caddy_message: CaddyMessageEvent
+    ) -> Tuple[Dict[str, Any], bool]:
+        survey_complete = False
+        module_values = {}
+        user_response = users_table.get_item(Key={"userEmail": caddy_message.user})
+        if "Item" in user_response and user_response["Item"]["activeCall"] is True:
+            response = evaluation_table.query(
+                KeyConditionExpression=Key("threadId").eq(caddy_message.thread_id),
+            )
+            if response["Items"]:
+                module_values = {
+                    "modulesUsed": response["Items"][0]["modulesUsed"],
+                    "moduleOutputs": response["Items"][0]["moduleOutputs"],
+                    "continueConversation": response["Items"][0][
+                        "continueConversation"
+                    ],
+                    "controlGroupMessage": response["Items"][0]["controlGroupMessage"],
+                }
+                if "surveyResponse" in response["Items"][0]:
+                    survey_complete = True
+                return module_values, survey_complete
+            user_active_response = users_table.get_item(
+                Key={"userEmail": caddy_message.user}
+            )
+            if "Item" in user_active_response:
+                module_values = {
+                    "modulesUsed": user_active_response["Item"]["modulesUsed"],
+                    "moduleOutputs": user_active_response["Item"]["moduleOutputs"],
+                    "continueConversation": user_active_response["Item"][
+                        "continueConversation"
+                    ],
+                    "controlGroupMessage": user_active_response["Item"][
+                        "controlGroupMessage"
+                    ],
+                }
+                survey_complete = False
+            return module_values, survey_complete
+
+        module_values = execute_optional_modules(
+            caddy_message, execution_time="before_message_processed"
+        )
+        self.store_evaluation_module(
+            user=caddy_message.user,
+            thread_id=caddy_message.thread_id,
+            module_values=module_values,
+        )
+        return module_values, survey_complete
+
+    def should_continue_conversation(self, module_values):
+        return module_values["continueConversation"]
+
+    def store_evaluation_module(self, user, thread_id, module_values):
+        user_arguments = module_values["modulesUsed"][0]
+        argument_output = module_values["moduleOutputs"]
+        continue_conversation = module_values["continueConversation"]
+        control_group_message = module_values["controlGroupMessage"]
+        user_arguments["module_arguments"]["split"] = str(
+            user_arguments["module_arguments"]["split"]
+        )
+        call_start_time = datetime.now().strftime("%d-%m-%Y %H:%M")
+        evaluation_table.put_item(
+            Item={
+                "threadId": thread_id,
+                "callStart": call_start_time,
+                "modulesUsed": user_arguments,
+                "moduleOutputs": argument_output,
+                "continueConversation": continue_conversation,
+                "controlGroupMessage": control_group_message,
+                "callComplete": False,
+            }
+        )
+        users_table.update_item(
+            Key={"userEmail": user},
+            UpdateExpression="set activeCall = :ac, callStart = :cs, activeThreadId = :ati, modulesUsed = :mu, moduleOutputs = :mo, continueConversation = :cc, controlGroupMessage = :cg",
+            ExpressionAttributeValues={
+                ":ac": True,
+                ":cs": call_start_time,
+                ":ati": thread_id,
+                ":mu": user_arguments,
+                ":mo": argument_output,
+                ":cc": continue_conversation,
+                ":cg": control_group_message,
+            },
+        )
+
+    def format_chat_message(self, event: CaddyMessageEvent) -> UserMessage:
+        return UserMessage(
+            conversation_id=event.space_id,
+            thread_id=event.thread_id,
+            message_id=event.message_id,
+            client=event.source_client,
+            user_email=event.user,
+            message=event.message_string,
+            message_sent_timestamp=str(event.timestamp),
+            message_received_timestamp=datetime.now(),
+            teams_conversation=event.teams_conversation,
+            teams_from=event.teams_from,
+            teams_recipient=event.teams_recipient,
+        )
+
+    def store_message(self, message: UserMessage):
+        responses_table.put_item(
+            Item={
+                "threadId": str(message.thread_id),
+                "messageId": str(message.message_id),
+                "conversationId": str(message.conversation_id),
+                "client": message.client,
+                "userEmail": str(message.user_email),
+                "llmPrompt": message.message,
+                "messageSentTimestamp": message.message_sent_timestamp,
+                "messageReceivedTimestamp": str(message.message_received_timestamp),
+            }
+        )
+
+    def store_response(self, response: LlmResponse):
+        responses_table.update_item(
+            Key={"threadId": str(response.thread_id)},
+            UpdateExpression="set responseId = :rId, llmAnswer = :la, llmResponseJSon = :lrj, llmPromptTimestamp = :lpt, llmResponseTimestamp = :lrt, route = :route, context = :context",
+            ExpressionAttributeValues={
+                ":rId": response.response_id,
+                ":la": response.llm_answer,
+                ":lrj": response.llm_response_json,
+                ":lpt": str(response.llm_prompt_timestamp),
+                ":lrt": str(response.llm_response_timestamp),
+                ":route": response.route,
+                ":context": response.context,
+            },
+        )
+
+    def store_user_thanked_timestamp(
+        self, ai_answer: Union[LlmResponse, SupervisionEvent]
+    ):
+        responses_table.update_item(
+            Key={"threadId": ai_answer.thread_id},
+            UpdateExpression="set userThankedTimestamp=:t",
+            ExpressionAttributeValues={":t": str(datetime.now())},
+            ReturnValues="UPDATED_NEW",
+        )
+
+    def store_approver_received_timestamp(
+        self,
+        event: Union[SupervisionEvent, CaddyMessageEvent],
+    ):
+        thread_id = event.thread_id if hasattr(event, "thread_id") else event.message_id
+        responses_table.update_item(
+            Key={"threadId": str(thread_id)},
+            UpdateExpression="set approverReceivedTimestamp=:t",
+            ExpressionAttributeValues={":t": str(datetime.now())},
+            ReturnValues="UPDATED_NEW",
+        )
+
+    def store_approver_event(self, thread_id: str, approval_event: ApprovalEvent):
+        responses_table.update_item(
+            Key={"threadId": thread_id},
+            UpdateExpression="set responseId=:rId, approverEmail=:email, approved=:approved, approvalTimestamp=:atime, userResponseTimestamp=:utime, supervisorMessage=:sMessage",
+            ExpressionAttributeValues={
+                ":rId": approval_event.response_id,
+                ":email": approval_event.approver_email,
+                ":approved": approval_event.approved,
+                ":atime": str(approval_event.approval_timestamp),
+                ":utime": str(approval_event.user_response_timestamp),
+                ":sMessage": approval_event.supervisor_message,
+            },
+            ReturnValues="UPDATED_NEW",
+        )
+
+    def get_chat_history(self, message: UserMessage) -> List:
+        response = responses_table.query(
+            KeyConditionExpression=Key("threadId").eq(message.thread_id),
+        )
+
+        sorted_items = sorted(
+            response["Items"],
+            key=lambda x: x.get(
+                "messageReceivedTimestamp", x.get("llmPromptTimestamp", "")
+            ),
+        )
+
+        return self.format_chat_history(sorted_items)
+
+    def format_chat_history(self, user_messages: List) -> List:
+        history_langchain_format = []
+        for message in user_messages:
+            human = message.get("llmPrompt")
+            ai = message.get("llmAnswer")
+
+            if human and ai:
+                history_langchain_format.append((human, ai))
+            elif human:
+                history_langchain_format.append((human, ""))
+
+        return history_langchain_format
+
+    def remove_role_played_responses(self, response: str) -> Tuple[bool, str]:
+        adviser_index = response.find("Adviser: ")
+        if adviser_index != -1:
+            logger.debug("Removing role played response")
+            return True, response[:adviser_index].strip()
+
+        adviser_index = response.find("Advisor: ")
+        if adviser_index != -1:
+            logger.debug("Removing role played response")
+            return True, response[:adviser_index].strip()
+
+        return False, response.strip()
+
+    def reword_advisor_orchestration(
+        self, original_query: str, follow_up_context: str = ""
+    ) -> str:
+        combined_input = f"Original Query: {original_query}\n\nAdditional Context: {follow_up_context}"
+        reworded_query = self.reword_advisor_message(combined_input)
+
+        if 50 <= len(reworded_query) <= 200:
+            return reworded_query
+
+        llm = ChatBedrock(
+            model_id=os.getenv("AGENT_LLM"),
+            region_name="eu-west-3",
+            model_kwargs={"temperature": 0, "top_k": 5, "max_tokens": 2000},
+        )
+
+        prompt = (
+            query_length_prompts["0 to 50"]
+            if len(reworded_query) < 50
+            else query_length_prompts["400+"]
+        )
+        prompt += f"\n\nIncoming rewritten query: {reworded_query}"
+
+        content = llm.invoke(prompt).content
+
+        # logger.debug(f"content: {content}")
+
+        return content
+
+    def reword_advisor_message(self, message: str) -> str:
+        llm = ChatBedrock(
+            model_id=os.getenv("AGENT_LLM"),
+            region_name="eu-west-3",
+            model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},
+        )
+        prompt = f"""You are an information extraction assistant called Caddy.
+        Your task is to analyze the given message and extract key information that would be relevant
+        for a legal assistance chatbot to perform a RAG (Retrieval-Augmented Generation) search.
+
+        Follow these guidelines:
+            1. Identify the main legal topic or issue being discussed.
+            2. Extract any specific questions being asked.
+            3. Note any relevant personal details of the individual involved (e.g., age, nationality, employment status).
+            4. Identify key facts or circumstances related to the legal situation.
+            5. Extract any mentioned dates, locations, or monetary amounts.
+            6. Identify any legal terms or concepts mentioned.
+
+        Provide your response in a structured format with clear headings for each category of extracted information.
+        If any category is not applicable or no relevant information is found skip it.
+        Remember to focus only on extracting factual information without adding any interpretation or advice.
+
+        Input:
+        {message}
+
+        Extracted Information:
+        """
+        response = llm.invoke(prompt)
+
+        # logger.debug(f"reworded query: {response}")
+
+        return response.content
+
+    def create_llm_response(
+        self,
+        message_query: UserMessage,
+        llm_output: LLMOutput,
+        response_card: Dict,
+        context_sources: List[str],
+    ):
+        return LlmResponse(
+            message_id=message_query.message_id,
+            llm_prompt=message_query.message,
+            llm_answer=llm_output.message,
+            thread_id=message_query.thread_id,
+            llm_prompt_timestamp=datetime.now(),
+            llm_response_json=json.dumps(response_card),
+            llm_response_timestamp=datetime.now(),
+            route=retrieve_route_specific_augmentation(message_query.message)[1]
+            or "no_route",
+            context=context_sources,
+        )
+
+    def create_supervision_event(
+        self, message_query: UserMessage, llm_response: LlmResponse
+    ):
+        return SupervisionEvent(
+            type="SUPERVISION_REQUIRED",
+            source_client=message_query.client,
+            user=message_query.user_email,
+            llmPrompt=llm_response.llm_prompt,
+            llm_answer=llm_response.llm_answer,
+            llm_response_json=json.dumps(llm_response.llm_response_json),
+            conversation_id=message_query.conversation_id,
+            thread_id=message_query.thread_id,
+            message_id=message_query.message_id,
+            response_id=str(llm_response.response_id),
+            status_message_id=message_query.status_message_id,
+        )
+
+    async def process_follow_up_answers(
+        self, message_query: UserMessage, follow_up_context: str
+    ):
+        try:
+            await self.chat_client.send_status_update(
+                message_query, "composing", message_query.status_message_id
+            )
+
+            task = asyncio.create_task(
+                self.send_to_llm(
+                    message_query,
+                    is_follow_up=True,
+                    follow_up_context=follow_up_context,
+                )
+            )
+            self.active_tasks[message_query.message_id] = task
+            try:
+                await task
+            finally:
+                del self.active_tasks[message_query.message_id]
+        except Exception as error:
+            await self.handle_llm_error(message_query, error)
+
+    @staticmethod
+    def mark_call_complete(user: str, thread_id: str) -> None:
+        evaluation_table.update_item(
+            Key={"threadId": thread_id},
+            UpdateExpression="set callComplete = :cc",
+            ExpressionAttributeValues={":cc": True},
+        )
+        users_table.update_item(
+            Key={"userEmail": user},
+            UpdateExpression="set activeCall = :ac",
+            ExpressionAttributeValues={":ac": False},
+        )
+
+    def _create_client_friendly_prompt(self, content: Dict[str, Any]) -> str:
+        """
+        Create prompt for client friendly response
+        """
+        return f"""
+        You are an AI assistant tasked with converting a technical response into a client-friendly letter style version
+        to be returned to the client via email as an overview to their advice session. Your task is to:
+
+        1. Simplify the language, avoiding jargon and technical terms.
+        2. Summarise the key points in a way that's easy for the client to understand.
+        3. Maintain the essential information and advice, but present it in a more conversational tone.
+        4. Exclude any internal references (such as advisernet) or notes that aren't relevant to the client.
+        5. Keep your response concise, aiming for about half the length of the original content.
+
+        Keep the style in line with "as discussed in our recent contact these are available options" do not
+        include any follow up questions for the client but phrase as paths they can explore. This is after
+        contact so do not ask if any further support is required, instead let the client know they can get
+        contact the service if they need further help in the future.
+
+        Include any public facing helpful links at the end of the response.
+
+        Here's the content to convert:
+
+        {content}
+
+        Please provide the client-friendly version:
+        """
+
+    async def create_client_friendly(
+        self, card_content: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Convert response to client friendly format
+        """
+        llm = ChatBedrock(
+            model_id=os.getenv("LLM"),
+            region_name="eu-west-3",
+            model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},
+        )
+
+        prompt = self._create_client_friendly_prompt(card_content)
+        response = llm.invoke(prompt)
+
+        return response.content
