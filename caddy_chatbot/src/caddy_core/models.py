@@ -28,6 +28,9 @@ class UserMessage(pydantic.BaseModel):
     message_sent_timestamp: str
     message_received_timestamp: datetime
     status_message_id: Union[str, None] = None
+    teams_conversation: Optional[Dict[Any, Any]] = None
+    teams_from: Optional[Dict[str, str]] = None
+    teams_recipient: Optional[Dict[str, str]] = None
 
     @property
     def space_id(self):
@@ -61,6 +64,7 @@ class SupervisionEvent(pydantic.BaseModel):
     message_id: str
     approver_received_timestamp: Union[datetime, None] = None
     response_id: str
+    status_message_id: Union[str, None] = None
 
 
 class ApprovalEvent(pydantic.BaseModel):

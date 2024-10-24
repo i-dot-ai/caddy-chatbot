@@ -11,7 +11,7 @@ def get_prompt(prompt_name):
 
     response = table.get_item(Key={"PromptName": prompt_name})
     logger.info(f"Fetched prompt: {prompt_name}")
-    return response["Item"]["Prompt"] if "Item" in response else None
+    return response["Item"]["Prompt"] if "Item" in response else ""
 
 
 def retrieve_route_specific_augmentation(query):

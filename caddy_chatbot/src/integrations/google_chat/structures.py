@@ -766,7 +766,7 @@ class GoogleChat(ChatIntegration):
             try:
                 await self.update_message(
                     space_id=user_space,
-                    message_id=event["common"]["parameters"]["messageId"],
+                    message_id=event["common"]["parameters"]["status_id"],
                     message=adviser_card,
                 )
             except Exception as e:
@@ -849,7 +849,7 @@ class GoogleChat(ChatIntegration):
             try:
                 await self.update_message(
                     space_id=user_space,
-                    message_id=event["common"]["parameters"]["messageId"],
+                    message_id=event["common"]["parameters"]["status_id"],
                     message=adviser_card,
                 )
             except Exception as e:

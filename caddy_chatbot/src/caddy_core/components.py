@@ -54,17 +54,17 @@ class Caddy:
             del self.active_tasks[caddy_message.message_id]
 
     async def process_message(self, caddy_message: CaddyMessageEvent):
-        module_values, survey_complete = self.check_existing_call(caddy_message)
+        # module_values, survey_complete = self.check_existing_call(caddy_message)
 
-        if survey_complete:
-            await self.chat_client.send_survey_complete_message(caddy_message)
-            return
+        # if survey_complete:
+        #     await self.chat_client.send_survey_complete_message(caddy_message)
+        #     return
 
-        if not self.should_continue_conversation(module_values):
-            await self.chat_client.send_control_group_message(
-                caddy_message, module_values
-            )
-            return
+        # if not self.should_continue_conversation(module_values):
+        #     await self.chat_client.send_control_group_message(
+        #         caddy_message, module_values
+        #     )
+        #     return
 
         message_query = self.format_chat_message(caddy_message)
         self.store_message(message_query)
@@ -75,14 +75,19 @@ class Caddy:
         message_query.status_message_id = status_message_id
 
         try:
-            await self.send_to_llm(message_query)
+            is_follow_up = (
+                False
+                if "follow_up" in enrolment.get_features(message_query.user_email)
+                else True
+            )
+            await self.send_to_llm(message_query, is_follow_up)
         except Exception as error:
             await self.handle_llm_error(message_query, error)
 
     async def send_to_llm(
         self,
         caddy_query: UserMessage,
-        is_follow_up: bool = False,
+        is_follow_up: bool = True,
         follow_up_context: str = "",
     ):
         try:
@@ -92,7 +97,7 @@ class Caddy:
             caddy_query.status_message_id = status_message_id
 
             llm_output, context_sources = await self.get_llm_response(
-                caddy_query, is_follow_up, follow_up_context
+                caddy_query, follow_up_context
             )
 
             await self.handle_llm_response(
@@ -105,7 +110,6 @@ class Caddy:
     async def get_llm_response(
         self,
         message_query: UserMessage,
-        is_follow_up: bool = False,
         follow_up_context: str = "",
     ):
         chain, prompt = self.setup_llm_chain(message_query)
@@ -128,7 +132,11 @@ class Caddy:
 
     def setup_llm_chain(self, message_query: UserMessage):
         query = message_query.message
-        domain = message_query.user_email.split("@")[1]
+        domain = (
+            message_query.user_email.split("@")[1]
+            if "@" in message_query.user_email
+            else "unknown"
+        )
         route_specific_augmentation, route = retrieve_route_specific_augmentation(query)
         day_date_time = datetime.now(timezone("Europe/London")).strftime(
             "%A %d %B %Y %H:%M"
@@ -191,7 +199,7 @@ class Caddy:
         message_query: UserMessage,
         llm_output: LLMOutput,
         context_sources: List[str],
-        is_follow_up: bool = False,
+        is_follow_up: bool = True,
     ):
         """
         Handle LLM response
@@ -363,6 +371,9 @@ class Caddy:
             message=event.message_string,
             message_sent_timestamp=str(event.timestamp),
             message_received_timestamp=datetime.now(),
+            teams_conversation=event.teams_conversation,
+            teams_from=event.teams_from,
+            teams_recipient=event.teams_recipient,
         )
 
     def store_message(self, message: UserMessage):
@@ -566,6 +577,7 @@ class Caddy:
             thread_id=message_query.thread_id,
             message_id=message_query.message_id,
             response_id=str(llm_response.response_id),
+            status_message_id=message_query.status_message_id,
         )
 
     async def process_follow_up_answers(
@@ -576,11 +588,18 @@ class Caddy:
                 message_query, "composing", message_query.status_message_id
             )
 
-            await self.send_to_llm(
-                message_query,
-                is_follow_up=True,
-                follow_up_context=follow_up_context,
+            task = asyncio.create_task(
+                self.send_to_llm(
+                    message_query,
+                    is_follow_up=True,
+                    follow_up_context=follow_up_context,
+                )
             )
+            self.active_tasks[message_query.message_id] = task
+            try:
+                await task
+            finally:
+                del self.active_tasks[message_query.message_id]
         except Exception as error:
             await self.handle_llm_error(message_query, error)
 

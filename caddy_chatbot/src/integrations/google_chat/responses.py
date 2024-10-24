@@ -996,6 +996,7 @@ def create_supervision_card(
     response_id = event.response_id
     message_id = event.message_id
     thread_id = event.thread_id
+    status_id = event.status_message_id
 
     approval_buttons_section = {
         "widgets": [
@@ -1027,6 +1028,7 @@ def create_supervision_card(
                                         {"key": "responseId", "value": response_id},
                                         {"key": "messageId", "value": message_id},
                                         {"key": "threadId", "value": thread_id},
+                                        {"key": "status_id", "value": status_id},
                                         {
                                             "key": "newRequestId",
                                             "value": new_request_message_id,
@@ -1057,6 +1059,7 @@ def create_supervision_card(
                                         {"key": "responseId", "value": response_id},
                                         {"key": "messageId", "value": message_id},
                                         {"key": "threadId", "value": thread_id},
+                                        {"key": "status_id", "value": status_id},
                                         {
                                             "key": "newRequestId",
                                             "value": new_request_message_id,
