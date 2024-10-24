@@ -1,14 +1,9 @@
-import os
-import boto3
-
 from caddy_core.utils.monitoring import logger
 from caddy_core.services.router import get_route
+from caddy_core.utils.tables import prompts_table as table
 
 
 def get_prompt(prompt_name):
-    dynamodb = boto3.resource("dynamodb")
-    table = dynamodb.Table(os.getenv("PROMPTS_TABLE_NAME"))
-
     response = table.get_item(Key={"PromptName": prompt_name})
     logger.info(f"Fetched prompt: {prompt_name}")
     return response["Item"]["Prompt"] if "Item" in response else None
