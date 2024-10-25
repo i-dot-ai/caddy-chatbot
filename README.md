@@ -4,8 +4,6 @@ Caddy is an LLM powered co-pilot for customer service functions everywhere. This
 
 ## How to Run
 
-This version is intended for deployment on serverless infrastructure, and will ideally use Docker and AWS CLI.
-
 ### Environment Management
 We recommend using [Poetry](https://github.com/python-poetry/poetry) for managing dependencies.
 
@@ -15,6 +13,39 @@ To create your virtual environment, run
 $ 	poetry install
 $ 	poetry shell
 ```
+
+Then set up your local dev environment with `make setup-local-environment`.
+
+### Local dynamoDB
+
+To run the project against a [local dynamoDB](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.html), set the `DYNAMODB_URL` env var to the address of a locally running `dynamodb-local`. For example:
+
+```bash
+$    brew install dynamodb-local
+$    dynamodb-local -port 32331 -dbPath $(pwd)/db
+```
+
+The correct value for `DYNAMODB_URL` if started with those arguments will be `http://localhost:32331`.
+
+Note that the test suite requires dynamodb to be running, which is (for now!) a manual process, as above.
+
+### Running tests
+
+```bash
+$     poetry run pytest
+```
+
+### Semantic router
+
+By default the semantic-router library will embed all the `utterances` it uses to perform semantic routing, each time the app starts up.
+
+To avoid doing this work every time you restart, you can cache the embeddings in postgres.
+
+Set `POSTGRES_CONNECTION_STRING` in `.env` (see example in `example.env`) to use this feature.
+
+**Important** if you use this feature and change the routes, you'll need to reset the postgres database yourself.
+
+Coming soon: docker-compose to do this all for you.
 
 ### AWS CLI
 

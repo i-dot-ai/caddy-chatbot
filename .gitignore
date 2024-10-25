@@ -22,3 +22,5 @@ caddy_chatbot/src/pyproject.toml
 _site
 /_site/
 /.quarto/
+db/*.db
+logs/*.log
