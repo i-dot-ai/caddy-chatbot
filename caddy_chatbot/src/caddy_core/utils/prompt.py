@@ -21,7 +21,7 @@ def get_local_prompt(prompt_name: str):
 def get_prompt(prompt_name):
     logger.info(f"Attempting to fetch {prompt_name} from dynamodb")
     response = table.get_item(Key={"PromptName": prompt_name})
-    if "Test" in response:
+    if "Item" in response:
         prompt = response["Item"]["Prompt"]
     else:
         logger.warning("No prompt found in dynamodb")
