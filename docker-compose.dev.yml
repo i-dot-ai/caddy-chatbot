@@ -1,0 +1,51 @@
+services:
+  caddy-dev:
+    build:
+      context: .
+      dockerfile: ./caddy_chatbot/Dockerfile.dev
+      cache_from:
+        - caddy-dev:latest
+    image: caddy-dev:latest
+    container_name: caddy_chatbot_dev
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/caddy_chatbot
+      - ~/.aws/:/root/.aws:ro
+      - /caddy_chatbot/.venv/
+      - /caddy_chatbot/.pytest_cache/
+      - /caddy_chatbot/__pycache__/
+    networks:
+      - caddy
+    env_file:
+      - .env
+    environment:
+      - DOCKER_BUILDKIT=1
+      - COMPOSE_DOCKER_CLI_BUILD=1
+      - DYNAMODB_URL=http://dynamodb-local:8000
+    depends_on:
+      dynamodb-local:
+        condition: service_started
+
+  dynamodb-local:
+    image: amazon/dynamodb-local
+    ports:
+      - "8000:8000"
+    volumes:
+      - "./dynamodb-data:/home/dynamodblocal/data"
+    command: "-jar DynamoDBLocal.jar -sharedDb -dbPath /home/dynamodblocal/data/"
+    networks:
+      - caddy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+networks:
+  caddy:
+    external: true
+
+volumes:
+  dynamodb-data:
+    name: caddy-chatbot_dynamodb-data
