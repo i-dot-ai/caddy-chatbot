@@ -12,4 +12,4 @@ if os.getenv("STAGE") == "dev":
     load_dotenv(".env")
 elif os.getenv("STAGE") == "test":
     load_dotenv(".env")
-    load_dotenv("test.env")
+    load_dotenv(".env.test")
