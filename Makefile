@@ -54,3 +54,23 @@ run-dev-docker: ensure-network init-dynamodb
 clean-dev:
 	docker-compose -f docker-compose.dev.yml down -v --remove-orphans
 	rm -rf dynamodb-data
+
+# Used for manually syncing local prompt changes into your local dynamodb
+sync-prompts:
+	@was_running=false; \
+	if docker-compose -f docker-compose.dev.yml ps dynamodb-local | grep -q "Up"; then \
+		was_running=true; \
+		echo "DynamoDB is already running..."; \
+	else \
+		echo "Starting dynamodb..."; \
+		docker-compose -f docker-compose.dev.yml up dynamodb-local -d; \
+		echo "Waiting for DynamoDB to be ready..."; \
+		sleep 5; \
+	fi; \
+	echo "Loading prompts..."; \
+	poetry run python utils/sync_prompts.py || exit_code=$$?; \
+	if [ "$$was_running" = false ]; then \
+		echo "Stopping DynamoDB..."; \
+		docker-compose -f docker-compose.dev.yml stop dynamodb-local; \
+	fi; \
+	exit $$exit_code
