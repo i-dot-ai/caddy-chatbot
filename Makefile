@@ -22,10 +22,14 @@ setup-dev-container:
 install-spacy-pipeline:
 	poetry run spacy download en_core_web_sm --quiet
 
-setup-local-database:
+setup-dynamo:
 	poetry run python utils/setup_dynamo.py
 
-setup-local-environment: requirements-dev install-spacy-pipeline setup-env-vars setup-pre-commit setup-local-database
+setup-postgres:
+	-createdb caddy_semantic_router
+	source .env && poetry run python utils/load_routes.py
+
+setup-local-environment: requirements-dev install-spacy-pipeline setup-env-vars setup-pre-commit setup-dynamo setup-postgres
 
 setup-docker: create-docker-network
 

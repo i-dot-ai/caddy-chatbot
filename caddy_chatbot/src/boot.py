@@ -11,4 +11,5 @@ sys.path.append("caddy_chatbot/src")
 if os.getenv("STAGE") == "dev":
     load_dotenv(".env")
 elif os.getenv("STAGE") == "test":
+    load_dotenv(".env")
     load_dotenv("test.env")
