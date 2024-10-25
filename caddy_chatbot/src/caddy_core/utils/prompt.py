@@ -1,7 +1,7 @@
 from caddy_core.utils.monitoring import logger
 from caddy_core.services.router import get_route
 from caddy_core.utils.tables import prompts_table as table
-import caddy_core.utils.prompts as prompts
+from caddy_core.utils import prompts
 
 
 def get_local_prompt(prompt_name: str):

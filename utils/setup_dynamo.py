@@ -7,7 +7,7 @@ from cfn_tools import load_yaml
 from caddy_core.hosting_environment import HostingEnvironment
 from caddy_core.utils.tables import dynamodb
 
-import caddy_core.utils.prompts as prompts
+from caddy_core.utils import prompts
 
 
 def get_table_name(table_name) -> str:
