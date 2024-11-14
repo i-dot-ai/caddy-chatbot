@@ -48,6 +48,9 @@ Parameters:
   LLM:
     Type: String
     Description: LLM to use
+  AgentLLM:
+    Type: String
+    Description: LLM to use for tasks
   DomainName:
     Type: String
     Description: Domain for Cert
@@ -267,6 +270,8 @@ Resources:
               Value: /tmp
             - Name: LLM
               Value: !Ref LLM
+            - Name: AGENT_LLM
+              Value: !Ref AgentLLM
             - Name: OPENSEARCH_HTTPS
               Value: !Ref OpensearchUrl
             - Name: OPENSEARCH_INDEX
