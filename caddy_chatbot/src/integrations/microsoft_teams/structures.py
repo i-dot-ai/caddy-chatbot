@@ -3,8 +3,12 @@ import json
 import aiohttp
 import asyncio
 from caddy_core.models import (
+    ChatIntegration,
     CaddyMessageEvent,
     ApprovalEvent,
+    UserMessage,
+    LLMOutput,
+    SupervisionEvent,
     UserNotEnrolledException,
     NoSupervisionSpaceException,
 )
@@ -13,44 +17,32 @@ from caddy_core.services.anonymise import analyse
 from integrations.microsoft_teams import content, responses
 from datetime import datetime
 
-from caddy_core import components as caddy
-
+from caddy_core.components import Caddy
 from caddy_core.services import enrolment
 
 from .verification import get_access_token, get_graph_access_token
+from typing import Dict, Any, List, Optional, Tuple
 
 
-async def initialise_teams_client(event):
-    user_id = event["from"]["aadObjectId"]
-    user_enrolled, user_record = enrolment.check_user_status(user_id)
-    user_supervisor = enrolment.check_user_role(user_record)
+class MicrosoftTeams(ChatIntegration):
+    def __init__(self, event):
+        user_id = event["from"]["aadObjectId"]
+        user_enrolled, user_record = enrolment.check_user_status(user_id)
 
-    if not user_enrolled:
-        logger.debug("User is not enrolled")
-        raise UserNotEnrolledException("User is not enrolled in Caddy.")
+        if not user_enrolled:
+            logger.debug("User is not enrolled")
+            raise UserNotEnrolledException("User is not enrolled in Caddy.")
 
-    logger.debug("User is enrolled")
+        logger.debug("User is enrolled")
 
-    supervision_space_id = user_record.get("supervisionSpaceId")
-    if not supervision_space_id:
-        logger.error("No supervision space found for user")
-        raise NoSupervisionSpaceException("No supervision space found for user.")
+        supervision_space_id = user_record.get("supervisionSpaceId")
+        if not supervision_space_id:
+            logger.error("No supervision space found for user")
+            raise NoSupervisionSpaceException("No supervision space found for user.")
 
-    service_url = event["serviceUrl"]
-    tenant_id = event["conversation"]["tenantId"]
+        service_url = event["serviceUrl"]
+        tenant_id = event["conversation"]["tenantId"]
 
-    return (
-        MicrosoftTeams(
-            supervision_space_id=supervision_space_id,
-            service_url=service_url,
-            tenant_id=tenant_id,
-        ),
-        user_supervisor,
-    )
-
-
-class MicrosoftTeams:
-    def __init__(self, supervision_space_id=None, service_url=None, tenant_id=None):
         self.client = "Microsoft Teams"
         self.access_token = get_access_token()
         self.messages = content
@@ -60,6 +52,25 @@ class MicrosoftTeams:
         self.supervision_space_id = supervision_space_id
         self.service_url = service_url
         self.tenant_id = tenant_id
+        self.caddy_instance = Caddy(self)
+
+    async def handle_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Handle incoming Microsoft Teams event
+        """
+        user_id = event.get("from", {}).get("aadObjectId", "")
+        user_enrolled, user_record = enrolment.check_user_status(user_id)
+        user_supervisor = enrolment.check_user_role(user_record)
+
+        event_type = event.get("type")
+        match event_type:
+            case "message":
+                return await self.handle_message_event(event, user_supervisor)
+            case "invoke":
+                return await self.handle_invoke_event(event, user_supervisor)
+            case _:
+                logger.warning(f"Unhandled event type: {event_type}")
+                return self.responses.NOT_FOUND
 
     async def handle_message_event(self, event, user_supervisor):
         conversation_id = event["conversation"]["id"]
@@ -94,7 +105,7 @@ class MicrosoftTeams:
                     case "removeUser":
                         await self.get_remove_user_dialog(conversation_id)
                     case "listUsers":
-                        await self.list_space_users(conversation_id)
+                        await self.list_users(conversation_id)
                     case "help":
                         await self.get_help_card(conversation_id)
                 return self.responses.OK
@@ -108,14 +119,16 @@ class MicrosoftTeams:
             await self.send_unauthorised_access_message(conversation_id)
             return self.responses.OK
 
-        action_data = event["value"]["action"]["data"]
-        action = action_data["action"]
+        action_data = event.get("value", {}).get("action", {}).get("data", {})
+        action = action_data.get("action", "")
 
         match action:
             case "approved":
-                await self.handle_approval(event)
+                return await self.handle_supervision_approval(event)
             case "rejected":
-                await self.handle_rejection(event)
+                return await self.handle_supervision_rejection(event)
+            case "follow_up_submission":
+                return await self.process_follow_up_answers(event)
             case _:
                 logger.warning(f"Unhandled adaptive card action: {action}")
 
@@ -135,7 +148,7 @@ class MicrosoftTeams:
                 )
             case "listusers":
                 return await self.handle_supervisor_command(
-                    self.list_space_users, user_supervisor, conversation_id
+                    self.list_users, user_supervisor, conversation_id
                 )
             case "help":
                 await self.get_help_card(conversation_id)
@@ -153,9 +166,9 @@ class MicrosoftTeams:
         return self.responses.OK
 
     async def process_caddy_message(self, event):
-        caddy_message = await self.format_message(event)
+        caddy_message = await self.format_event_to_message(event)
         if caddy_message != "PII Detected":
-            await caddy.temporary_teams_invoke(self, caddy_message)
+            await self.caddy_instance.handle_message(caddy_message)
         return self.responses.OK
 
     async def process_user_management_action(
@@ -350,7 +363,7 @@ class MicrosoftTeams:
                 logger.error(f"Unexpected error while fetching team members: {str(e)}")
                 return []
 
-    async def send_adviser_card(self, event: CaddyMessageEvent, card=None):
+    async def send_message(self, event: CaddyMessageEvent, card=None):
         if card is None:
             card = self.messages.CADDY_PROCESSING
 
@@ -391,7 +404,7 @@ class MicrosoftTeams:
                 logger.debug(response_json)
                 return response_json.get("id")
 
-    async def update_card(self, event, card):
+    async def update_message(self, event, card):
         conversation_id = event["conversation"]["id"]
         activity_id = event["replyToId"]
 
@@ -426,12 +439,12 @@ class MicrosoftTeams:
 
     async def update_add_user_card(self, event, status_message, status_colour):
         choices = await self.get_tenant_users()
-        await self.update_card(
+        await self.update_message(
             event,
             self.responses.create_add_user_card(choices, status_message, status_colour),
         )
 
-    async def format_message(self, event):
+    async def format_event_to_message(self, event):
         message_string = event["text"].replace("<at>Caddy</at>", "").strip()
 
         if "proceed" not in event:
@@ -441,7 +454,7 @@ class MicrosoftTeams:
                 # Optionally redact PII from the message by importing redact from services.anonymise
                 # message_string = redact(message_string, pii_identified)
 
-                await self.send_adviser_card(
+                await self.send_message(
                     event=event,
                     card=self.messages.create_pii_detected_card(message_string),
                 )
@@ -477,10 +490,16 @@ class MicrosoftTeams:
             return obj
 
     async def send_to_supervision(
-        self, caddy_message, llm_response, context_sources, status_activity_id
+        self,
+        caddy_message: UserMessage,
+        supervision_event: SupervisionEvent,
+        response_card: Dict[str, Any],
     ):
         supervision_card = self.messages.create_supervision_card(
-            caddy_message, llm_response, context_sources, status_activity_id
+            caddy_message,
+            supervision_event.llm_answer,
+            [],
+            caddy_message.status_message_id,
         )
 
         response_url = f"{self.service_url}/v3/conversations/{self.supervision_space_id}/activities"
@@ -517,10 +536,12 @@ class MicrosoftTeams:
                     response.raise_for_status()
                     response_json = await response.json()
                     logger.debug(f"Supervision message sent: {response_json}")
+                return "", ""
             except aiohttp.ClientError as e:
                 logger.error(f"Error sending supervision message: {str(e)}")
+                return "", ""
 
-    async def handle_approval(self, event):
+    async def handle_supervision_approval(self, event):
         logger.debug(f"Received approval event: {json.dumps(event, indent=2)}")
 
         try:
@@ -539,13 +560,14 @@ class MicrosoftTeams:
 
             caddy_message = CaddyMessageEvent(
                 type="APPROVED_MESSAGE",
-                user=original_message.get("user"),
-                name=original_message.get("name"),
-                space_id=original_message.get("space_id"),
-                message_id=original_message.get("message_id"),
-                message_string=original_message.get("message_string"),
+                user=original_message.get("user_email", ""),
+                name=original_message.get("teams_from", {}).get("name", ""),
+                space_id=original_message.get("conversation_id", ""),
+                message_id=original_message.get("message_id", ""),
+                thread_id=original_message.get("thread_id", ""),
+                message_string=original_message.get("message"),
                 source_client=self.client,
-                timestamp=original_message.get("timestamp"),
+                timestamp=original_message.get("message_sent_timestamp"),
                 teams_conversation=original_message.get("teams_conversation"),
                 teams_from=original_message.get("teams_from"),
                 teams_recipient=original_message.get("teams_recipient"),
@@ -561,8 +583,8 @@ class MicrosoftTeams:
                 supervisor_message=supervisor_notes,
             )
 
-            caddy.store_approver_event(
-                original_message.get("message_id"), approval_event
+            self.caddy_instance.store_approver_event(
+                original_message.get("thread_id"), approval_event
             )
 
             response_card_body = self.messages.generate_response_card(llm_response)
@@ -582,13 +604,13 @@ class MicrosoftTeams:
                     caddy_message, supervisor_notes, supervisor_name, llm_response
                 )
             )
-            await self.update_card(event, card=approval_confirmation_card)
-
+            await self.update_message(event, card=approval_confirmation_card)
+            return self.responses.OK
         except Exception as e:
-            logger.error(f"Error in handle_approval: {str(e)}")
+            logger.error(f"Error in handle_supervision_approval: {str(e)}")
             raise
 
-    async def handle_rejection(self, event):
+    async def handle_supervision_rejection(self, event):
         logger.debug(f"Received rejection event: {json.dumps(event, indent=2)}")
 
         try:
@@ -606,13 +628,14 @@ class MicrosoftTeams:
 
             caddy_message = CaddyMessageEvent(
                 type="REJECTED_MESSAGE",
-                user=original_message.get("user"),
-                name=original_message.get("name"),
-                space_id=original_message.get("space_id"),
-                message_id=original_message.get("message_id"),
-                message_string=original_message.get("message_string"),
+                user=original_message.get("user_email", ""),
+                name=original_message.get("teams_from", {}).get("name", ""),
+                space_id=original_message.get("conversation_id", ""),
+                message_id=original_message.get("message_id", ""),
+                thread_id=original_message.get("thread_id", ""),
+                message_string=original_message.get("message"),
                 source_client=self.client,
-                timestamp=original_message.get("timestamp"),
+                timestamp=original_message.get("message_sent_timestamp"),
                 teams_conversation=original_message.get("teams_conversation"),
                 teams_from=original_message.get("teams_from"),
                 teams_recipient=original_message.get("teams_recipient"),
@@ -628,8 +651,8 @@ class MicrosoftTeams:
                 supervisor_message=supervisor_notes,
             )
 
-            caddy.store_approver_event(
-                original_message.get("message_id"), rejection_event
+            self.caddy_instance.store_approver_event(
+                original_message.get("thread_id"), rejection_event
             )
 
             rejection_card = self.messages.create_rejection_card(
@@ -645,10 +668,10 @@ class MicrosoftTeams:
                     caddy_message, supervisor_notes, supervisor_name, llm_response
                 )
             )
-            await self.update_card(event, card=rejection_confirmation_card)
-
+            await self.update_message(event, card=rejection_confirmation_card)
+            return self.responses.OK
         except Exception as e:
-            logger.error(f"Error in handle_rejection: {str(e)}")
+            logger.error(f"Error in handle_supervision_rejection: {str(e)}")
             raise
 
     async def update_status_card(self, event, activity_id, card):
@@ -686,6 +709,7 @@ class MicrosoftTeams:
                     response.raise_for_status()
                     response_json = await response.json()
                     logger.debug(f"Status card updated: {response_json}")
+                return activity_id
             except aiohttp.ClientError as e:
                 logger.error(f"Error updating status card: {str(e)}")
 
@@ -726,7 +750,7 @@ class MicrosoftTeams:
             for id, name in enrolled_user_dict.items()
         ]
 
-        await self.update_card(
+        await self.update_message(
             event,
             self.responses.create_remove_user_card(
                 choices, status_message, status_colour
@@ -770,7 +794,7 @@ class MicrosoftTeams:
 
         await self.update_remove_user_card(event, status_message, status_colour)
 
-    async def list_space_users(self, conversation_id: str):
+    async def list_users(self, conversation_id: str):
         try:
             users = enrolment.list_users(conversation_id, display_names=True)
             logger.debug(f"USERS: {users}")
@@ -783,7 +807,7 @@ class MicrosoftTeams:
             else:
                 logger.error("Failed to send list users card")
         except Exception as error:
-            logger.error(f"Error in list_space_users: {str(error)}")
+            logger.error(f"Error in list_users: {str(error)}")
             await self.send_card_to_chat(
                 conversation_id,
                 self.responses.create_error_card(f"Failed to list users: {str(error)}"),
@@ -811,7 +835,7 @@ class MicrosoftTeams:
             if activity_id:
                 return await self.update_status_card(event, activity_id, card_content)
             else:
-                return await self.send_adviser_card(event, card_content)
+                return await self.send_message(event, card_content)
         else:
             logger.error(f"Unknown status: {status}")
             return None
@@ -853,3 +877,170 @@ class MicrosoftTeams:
                     logger.debug(f"Unauthorised access message sent: {response_json}")
             except aiohttp.ClientError as e:
                 logger.error(f"Error sending unauthorised access message: {str(e)}")
+
+    def convert_to_client_friendly(
+        self, card_content: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        TODO Implement
+        """
+        pass
+
+    def create_card(
+        self, llm_output: str, context_sources: List[str]
+    ) -> Dict[str, Any]:
+        """
+        Create integration specific response card
+        """
+        return self.messages.generate_response_card(llm_output, context_sources)
+
+    def create_pii_warning(
+        self, message: str, original_event: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Create PII warning card
+        """
+        return self.messages.create_pii_detected_card(message)
+
+    async def send_pii_warning(
+        self, message: str, original_event: Optional[Dict[str, Any]] = None
+    ):
+        """
+        Send PII Warning
+        """
+        await self.send_message(
+            event=original_event,
+            card=self.messages.create_pii_detected_card(message),
+        )
+
+    def create_supervision_card(
+        self,
+        user_email: str,
+        supervision_event: SupervisionEvent,
+        response_card: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Create supervision card for review
+        """
+        pass
+
+    async def process_follow_up_answers(self, event: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Process follow-up answers from a Teams event
+        """
+
+        original_query = event["value"]["action"]["data"]["original_query"]
+        original_message = event["value"]["action"]["data"]["original_message"]
+        follow_up_questions = event["value"]["action"]["data"]["follow_up_questions"]
+        original_thread_id = event["value"]["action"]["data"]["original_thread_id"]
+        teams_recipient = event["value"]["action"]["data"]["teams_recipient"]
+        teams_conversation = event["value"]["action"]["data"]["teams_conversation"]
+        teams_from = event["value"]["action"]["data"]["teams_from"]
+        status_message_id = event["replyToId"]
+
+        follow_up_answers = {
+            "answer_1": event["value"]["action"]["data"].get("follow_up_answer_1", ""),
+            "answer_2": event["value"]["action"]["data"].get("follow_up_answer_2", ""),
+            "answer_3": event["value"]["action"]["data"].get("follow_up_answer_3", ""),
+            "answer_4": event["value"]["action"]["data"].get("follow_up_answer_4", ""),
+        }
+
+        user_id = event["from"]["id"]
+        conversation_id = event["conversation"]["id"]
+        message_id = event["replyToId"]
+
+        follow_up_context = self._build_follow_up_context(
+            original_query, original_message, follow_up_questions, follow_up_answers
+        )
+
+        message_query = UserMessage(
+            conversation_id=conversation_id,
+            thread_id=original_thread_id,
+            message_id=message_id,
+            client=self.client,
+            user_email=user_id,
+            message=original_query,
+            message_sent_timestamp=str(datetime.now()),
+            message_received_timestamp=datetime.now(),
+            status_message_id=status_message_id,
+            teams_conversation=teams_conversation,
+            teams_from=teams_from,
+            teams_recipient=teams_recipient,
+        )
+
+        await self.caddy_instance.process_follow_up_answers(
+            message_query, follow_up_context
+        )
+
+        return self.responses.OK
+
+    def _build_follow_up_context(
+        self,
+        original_query: str,
+        original_message: str,
+        follow_up_questions: List[str],
+        follow_up_answers: Dict[str, str],
+    ) -> str:
+        """
+        Build context string from follow up answers
+        """
+        context = f"Original Query: {original_query}\n\n"
+        context += f"Original response: {original_message}\n\n"
+        context += "Follow-up Questions and Answers:\n"
+
+        for i, question in enumerate(follow_up_questions, start=1):
+            answer_key = f"follow_up_answer_{i}"
+            answer = follow_up_answers.get(answer_key, "No answer provided")
+            context += f"Q: {question}\nA: {answer}\n\n"
+
+        return context
+
+    async def send_follow_up_questions(
+        self,
+        message_query: UserMessage,
+        llm_output: LLMOutput,
+        context_sources: List[str],
+        status_message_id: Optional[str] = None,
+    ) -> None:
+        """
+        Send follow-up questions to user
+        """
+        follow_up_card = self.messages.create_teams_follow_up_questions_card(
+            llm_output,
+            message_query,
+        )
+
+        await self.update_status_card(message_query, status_message_id, follow_up_card)
+
+    async def send_message_to_supervision_space(
+        self, space_id: str, message: Dict[str, Any]
+    ) -> Tuple[str, str]:
+        """
+        Send message to supervision space
+
+        Returns (thread_id - N/A for Teams, message_id - "")
+        """
+        pass
+
+    async def send_supervision_request(
+        self,
+        message_query: UserMessage,
+        supervision_event: SupervisionEvent,
+        response_card: Dict[str, Any],
+    ) -> Tuple[str, str]:
+        """
+        Send request to supervision space
+
+        Returns (thread_id - N/A for Teams, message_id - "")
+        """
+        return await self.send_to_supervision(
+            message_query, supervision_event, response_card
+        )
+
+    def update_message_in_supervision_space(
+        self, space_id: str, message_id: str, message: Dict[str, Any]
+    ) -> None:
+        """
+        TODO Update message in supervision space
+        """
+        pass

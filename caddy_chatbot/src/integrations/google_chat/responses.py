@@ -1,6 +1,8 @@
 from fastapi import status
 from fastapi.responses import JSONResponse, Response
 from integrations.google_chat import content
+from caddy_core.models import LLMOutput, UserMessage, SupervisionEvent
+from typing import Dict, Any, Optional
 import re
 import json
 
@@ -324,8 +326,8 @@ def supervisor_rejection(approver: str, supervisor_message: str) -> dict:
                                 {
                                     "decoratedText": {
                                         "icon": {"materialIcon": {"name": "block"}},
-                                        "topLabel": "Supervisor override",
-                                        "text": '<font color="#ec0101"><B>Caddy response rejected<b></font>',
+                                        "text": '<font color="#ec0101"><b>Response rejected</b></font>',
+                                        "bottomLabel": f"by {approver}",
                                     }
                                 },
                             ]
@@ -353,13 +355,6 @@ def supervisor_rejection(approver: str, supervisor_message: str) -> dict:
             {"textParagraph": {"text": supervisor_message}}
         )
 
-    card["cardsV2"][0]["card"]["sections"][0]["widgets"].append(
-        {
-            "decoratedText": {
-                "bottomLabel": f"{approver}",
-            }
-        }
-    )
     return card
 
 
@@ -623,7 +618,7 @@ def supervisor_request_processing(user: str, initial_query: str) -> dict:
     card = {
         "cardsV2": [
             {
-                "cardId": "aiResponseCard",
+                "cardId": "statusCard",
                 "card": {
                     "sections": [
                         {
@@ -636,6 +631,53 @@ def supervisor_request_processing(user: str, initial_query: str) -> dict:
                                             }
                                         },
                                         "text": '<b><font color="#171738">CADDY PROCESSING</font></b>',
+                                    }
+                                },
+                                {
+                                    "textParagraph": {
+                                        "text": initial_query,
+                                    }
+                                },
+                                {
+                                    "decoratedText": {
+                                        "bottomLabel": user,
+                                    }
+                                },
+                            ]
+                        }
+                    ],
+                },
+            },
+        ],
+    }
+    return card
+
+
+def supervisor_request_follow_up_details(user: str, initial_query: str) -> dict:
+    """
+    Creates a supervisor request awaiting follow up details card
+
+    Args:
+        user (str): user who submitted the query
+        initial_query: query of the user
+
+    Returns:
+        card (dict)
+    """
+    card = {
+        "cardsV2": [
+            {
+                "cardId": "aiResponseCard",
+                "card": {
+                    "sections": [
+                        {
+                            "widgets": [
+                                {
+                                    "decoratedText": {
+                                        "icon": {
+                                            "materialIcon": {"name": "psychology"}
+                                        },
+                                        "text": '<b><font color="#171738">CADDY AWAITING ADVISER FOLLOW UP</font></b>',
                                     }
                                 },
                                 {
@@ -838,6 +880,437 @@ def call_complete_card(survey_card: dict) -> dict:
     }
 
     return call_complete_card
+
+
+def create_follow_up_questions_card(
+    llm_output: LLMOutput,
+    caddy_query: UserMessage,
+    supervisor_message_id: Optional[str] = None,
+    supervisor_thread_id: Optional[str] = None,
+):
+    """
+    Create a follow-up questions card
+    """
+    sections = [
+        {
+            "header": "We need more information",
+            "widgets": [
+                {
+                    "textParagraph": {
+                        "text": "To provide a better answer, please respond to these follow-up questions:"
+                    }
+                },
+            ],
+        }
+    ]
+
+    for i, question in enumerate(llm_output.follow_up_questions, start=1):
+        sections.append(
+            {
+                "widgets": [
+                    {"textParagraph": {"text": question}},
+                    {
+                        "textInput": {
+                            "label": f"Answer {i}",
+                            "type": "MULTIPLE_LINE",
+                            "name": f"follow_up_answer_{i}",
+                        }
+                    },
+                ]
+            }
+        )
+
+    sections.append(
+        {
+            "widgets": [
+                {
+                    "buttonList": {
+                        "buttons": [
+                            {
+                                "text": "Submit",
+                                "onClick": {
+                                    "action": {
+                                        "function": "handle_follow_up_answers",
+                                        "parameters": [
+                                            {
+                                                "key": "original_query",
+                                                "value": caddy_query.message,
+                                            },
+                                            {
+                                                "key": "original_message",
+                                                "value": llm_output.message,
+                                            },
+                                            {
+                                                "key": "supervisor_message_id",
+                                                "value": supervisor_message_id,
+                                            },
+                                            {
+                                                "key": "supervisor_thread_id",
+                                                "value": supervisor_thread_id,
+                                            },
+                                            {
+                                                "key": "follow_up_questions",
+                                                "value": json.dumps(
+                                                    llm_output.follow_up_questions
+                                                ),
+                                            },
+                                            {
+                                                "key": "original_thread_id",
+                                                "value": caddy_query.thread_id,
+                                            },
+                                        ],
+                                    }
+                                },
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    )
+
+    return {
+        "cardsV2": [
+            {
+                "cardId": "follow_up_questions",
+                "card": {
+                    "sections": sections,
+                },
+            }
+        ]
+    }
+
+
+def create_supervision_card(
+    user_email: str,
+    event: SupervisionEvent,
+    new_request_message_id: str,
+    request_approved: Dict[str, Any],
+    request_rejected: Dict[str, Any],
+    card_for_approval: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Create a supervision card
+    """
+    conversation_id = event.conversation_id
+    response_id = event.response_id
+    message_id = event.message_id
+    thread_id = event.thread_id
+    status_id = event.status_message_id
+
+    approval_buttons_section = {
+        "widgets": [
+            {
+                "textInput": {
+                    "label": "Supervisor Notes",
+                    "type": "MULTIPLE_LINE",
+                    "hintText": "Add approval notes or an override response for rejection",
+                    "name": "supervisor_notes",
+                }
+            },
+            {
+                "buttonList": {
+                    "buttons": [
+                        {
+                            "text": "👍",
+                            "onClick": {
+                                "action": {
+                                    "function": "Approved",
+                                    "parameters": [
+                                        {
+                                            "key": "aiResponse",
+                                            "value": json.dumps(card_for_approval),
+                                        },
+                                        {
+                                            "key": "conversationId",
+                                            "value": conversation_id,
+                                        },
+                                        {"key": "responseId", "value": response_id},
+                                        {"key": "messageId", "value": message_id},
+                                        {"key": "threadId", "value": thread_id},
+                                        {"key": "status_id", "value": status_id},
+                                        {
+                                            "key": "newRequestId",
+                                            "value": new_request_message_id,
+                                        },
+                                        {"key": "userEmail", "value": user_email},
+                                        {
+                                            "key": "original_query",
+                                            "value": event.llmPrompt,
+                                        },
+                                    ],
+                                }
+                            },
+                        },
+                        {
+                            "text": "👎",
+                            "onClick": {
+                                "action": {
+                                    "function": "Rejected",
+                                    "parameters": [
+                                        {
+                                            "key": "aiResponse",
+                                            "value": json.dumps(card_for_approval),
+                                        },
+                                        {
+                                            "key": "conversationId",
+                                            "value": conversation_id,
+                                        },
+                                        {"key": "responseId", "value": response_id},
+                                        {"key": "messageId", "value": message_id},
+                                        {"key": "threadId", "value": thread_id},
+                                        {"key": "status_id", "value": status_id},
+                                        {
+                                            "key": "newRequestId",
+                                            "value": new_request_message_id,
+                                        },
+                                        {"key": "userEmail", "value": user_email},
+                                        {
+                                            "key": "original_query",
+                                            "value": event.llmPrompt,
+                                        },
+                                    ],
+                                }
+                            },
+                        },
+                    ]
+                }
+            },
+        ],
+    }
+
+    card_for_approval_sections = list(
+        card_for_approval["cardsV2"][0]["card"]["sections"]
+    )
+    card_for_approval_sections.append(approval_buttons_section)
+    card_for_approval["cardsV2"][0]["card"]["sections"] = card_for_approval_sections
+
+    return card_for_approval
+
+
+def create_client_friendly_dialog(content: str) -> Dict[str, Any]:
+    """
+    Create dialog for client friendly content
+    """
+    return {
+        "action_response": {
+            "type": "DIALOG",
+            "dialog_action": {
+                "dialog": {
+                    "body": {
+                        "sections": [
+                            {
+                                "header": "Client Friendly Version",
+                                "widgets": [
+                                    {"textParagraph": {"text": content}},
+                                ],
+                            }
+                        ]
+                    }
+                }
+            },
+        }
+    }
+
+
+def create_user_list_dialog(
+    supervision_users: str, space_display_name: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Create user list dialog
+    """
+    return {
+        "action_response": {
+            "type": "DIALOG",
+            "dialog_action": {
+                "dialog": {
+                    "body": {
+                        "sections": [
+                            {
+                                "header": (
+                                    f"Supervision users for {space_display_name}"
+                                    if space_display_name
+                                    else "Supervision Users"
+                                ),
+                                "widgets": [
+                                    {"textParagraph": {"text": supervision_users}}
+                                ],
+                            }
+                        ]
+                    }
+                }
+            },
+        }
+    }
+
+
+def create_pii_warning_card(
+    message: str, original_event: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Create PII warning card with redaction options
+    """
+    return {
+        "cardsV2": [
+            {
+                "cardId": "PIIDetected",
+                "card": {
+                    "sections": [
+                        {
+                            "widgets": [
+                                {
+                                    "decoratedText": {
+                                        "icon": {"materialIcon": {"name": "warning"}},
+                                        "text": '<font color="#FF0000"><b>PII Detected</b></font>',
+                                        "bottomLabel": "Please ensure all queries are anonymised",
+                                    }
+                                },
+                                {
+                                    "buttonList": {
+                                        "buttons": [
+                                            {
+                                                "text": "Proceed without redaction",
+                                                "onClick": {
+                                                    "action": {
+                                                        "function": "Proceed",
+                                                        "parameters": [
+                                                            {
+                                                                "key": "message_event",
+                                                                "value": json.dumps(
+                                                                    original_event
+                                                                ),
+                                                            }
+                                                        ],
+                                                    }
+                                                },
+                                            },
+                                            {
+                                                "text": "Edit message",
+                                                "onClick": {
+                                                    "action": {
+                                                        "function": "edit_query_dialog",
+                                                        "interaction": "OPEN_DIALOG",
+                                                        "parameters": [
+                                                            {
+                                                                "key": "original_message",
+                                                                "value": message,
+                                                            }
+                                                        ],
+                                                    }
+                                                },
+                                            },
+                                        ]
+                                    }
+                                },
+                            ]
+                        }
+                    ]
+                },
+            }
+        ]
+    }
+
+
+def edit_query_dialog(
+    message_event: Dict[str, Any], message_string: str
+) -> Dict[str, Any]:
+    """
+    Create an edit query dialog
+    """
+    return {
+        "action_response": {
+            "type": "DIALOG",
+            "dialog_action": {
+                "dialog": {
+                    "body": {
+                        "sections": [
+                            {
+                                "header": "PII Detected: Edit query",
+                                "widgets": [
+                                    {
+                                        "textInput": {
+                                            "label": "Please edit your original query to remove PII",
+                                            "type": "MULTIPLE_LINE",
+                                            "name": "editedQuery",
+                                            "value": message_string,
+                                        }
+                                    },
+                                    {
+                                        "buttonList": {
+                                            "buttons": [
+                                                {
+                                                    "text": "Submit edited query",
+                                                    "onClick": {
+                                                        "action": {
+                                                            "function": "receiveEditedQuery",
+                                                            "parameters": [
+                                                                {
+                                                                    "key": "message_event",
+                                                                    "value": json.dumps(
+                                                                        message_event
+                                                                    ),
+                                                                },
+                                                            ],
+                                                        }
+                                                    },
+                                                }
+                                            ]
+                                        },
+                                        "horizontalAlignment": "END",
+                                    },
+                                ],
+                            }
+                        ]
+                    }
+                }
+            },
+        }
+    }
+
+
+def create_approved_card(
+    self, card: Dict[str, Any], approver: str, supervisor_notes: str
+) -> Dict[str, Any]:
+    """
+    Create an approved card with supervisor info
+    """
+    card["cardsV2"][0]["card"]["sections"].insert(
+        0, self.responses.approval_json_widget(approver, supervisor_notes)
+    )
+    return card
+
+
+def create_client_friendly_card(approved_card):
+    """
+    Update to card with button to invoke client friendly Caddy response
+    """
+    client_friendly_button = {
+        "buttonList": {
+            "buttons": [
+                {
+                    "text": "Convert to Client Friendly",
+                    "onClick": {
+                        "action": {
+                            "function": "convert_to_client_friendly",
+                            "interaction": "OPEN_DIALOG",
+                            "parameters": [
+                                {
+                                    "key": "card_content",
+                                    "value": json.dumps(approved_card),
+                                }
+                            ],
+                        }
+                    },
+                }
+            ]
+        }
+    }
+
+    approved_card["cardsV2"][0]["card"]["sections"].append(
+        {"widgets": [client_friendly_button]}
+    )
+
+    return approved_card
 
 
 # --- Dialog Responses --- #

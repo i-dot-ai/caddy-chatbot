@@ -61,8 +61,9 @@ def get_office_coverage(office: dict):
     Gets areas covered for the office
     """
     coverage = ["England"]
-    if "officeCoverage" in office:
-        coverage = office["officeCoverage"]
+    if office:
+        if "officeCoverage" in office:
+            coverage = office["officeCoverage"]
     return coverage
 
 
@@ -174,3 +175,14 @@ def check_user_sources(user: str = None):
     default_sources = ["citizensadvice", "govuk", "advisernet"]
 
     return default_sources
+
+
+def get_features(user: str):
+    """
+    Gets features for user
+    """
+    user = users_table.get_item(Key={"userEmail": user})
+    if "Item" in user and "features" in user["Item"]:
+        return user["Item"]["features"]
+    else:
+        return []
