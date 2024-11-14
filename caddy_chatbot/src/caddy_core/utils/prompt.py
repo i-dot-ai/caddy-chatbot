@@ -1,12 +1,33 @@
 from caddy_core.utils.monitoring import logger
 from caddy_core.services.router import get_route
 from caddy_core.utils.tables import prompts_table as table
+from caddy_core.utils import prompts
+
+
+def get_local_prompt(prompt_name: str):
+    logger.info(f"Fetching {prompt_name} from local prompts")
+
+    PROMPT_MAP = {name: getattr(prompts, name) for name in prompts.__all__}
+
+    prompt = PROMPT_MAP.get(prompt_name.split("_PROMPT")[0], None)
+
+    if prompt is None:
+        logger.warning("Prompt not found locally, using fallback prompt")
+        prompt = PROMPT_MAP["FALLBACK"]
+
+    return prompt
 
 
 def get_prompt(prompt_name):
+    logger.info(f"Attempting to fetch {prompt_name} from dynamodb")
     response = table.get_item(Key={"PromptName": prompt_name})
+    if "Item" in response:
+        prompt = response["Item"]["Prompt"]
+    else:
+        logger.warning("No prompt found in dynamodb")
+        prompt = get_local_prompt(prompt_name)
     logger.info(f"Fetched prompt: {prompt_name}")
-    return response["Item"]["Prompt"] if "Item" in response else ""
+    return prompt
 
 
 def retrieve_route_specific_augmentation(query):

@@ -124,8 +124,8 @@ Resources:
           ToPort: 443
           CidrIp: 0.0.0.0/0
         - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
+          FromPort: 8080
+          ToPort: 8080
           CidrIp: 0.0.0.0/0
       SecurityGroupEgress:
         - IpProtocol: -1
@@ -209,10 +209,10 @@ Resources:
     DependsOn: CaddyLoadBalancer
     Properties:
       Name: !Sub caddy-targetgroup-${StageName}
-      Port: 80
+      Port: 8080
       Protocol: HTTP
       TargetType: ip
-      HealthCheckPort: 80
+      HealthCheckPort: 8080
       HealthCheckProtocol: HTTP
       HealthCheckPath: /health
       Matcher:
@@ -234,7 +234,7 @@ Resources:
         - Name: caddy-container
           Image: !Ref CaddyImage
           PortMappings:
-            - ContainerPort: 80
+            - ContainerPort: 8080
           Secrets:
             - Name: CADDY_SERVICE_ACCOUNT
               ValueFrom: !Ref CaddyServiceAccountSecretArn
@@ -307,7 +307,7 @@ Resources:
       HealthCheckGracePeriodSeconds: 30
       LoadBalancers:
         - ContainerName: caddy-container
-          ContainerPort: 80
+          ContainerPort: 8080
           TargetGroupArn: !Ref CaddyTargetGroup
 
   CaddyLogGroup:

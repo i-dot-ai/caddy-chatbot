@@ -29,6 +29,12 @@ The correct value for `DYNAMODB_URL` if started with those arguments will be `ht
 
 Note that the test suite requires dynamodb to be running, which is (for now!) a manual process, as above.
 
+Utilising the docker compose file you can simply run:
+
+```bash
+$ make run-dev-docker
+```
+
 ### Running tests
 
 ```bash

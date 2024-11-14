@@ -20,4 +20,5 @@ COPY caddy_chatbot/src ./caddy_chatbot/src/
 
 WORKDIR /caddy_chatbot
 
-ENTRYPOINT ["poetry", "run", "uvicorn", "caddy_chatbot.src.app:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "4"]
+# Dev command for reload
+ENTRYPOINT ["poetry", "run", "uvicorn", "caddy_chatbot.src.app:app", "--host", "0.0.0.0", "--port", "8080", "--reload"]

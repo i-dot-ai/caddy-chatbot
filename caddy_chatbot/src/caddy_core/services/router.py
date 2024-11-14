@@ -97,7 +97,18 @@ def load_semantic_router() -> RouteLayer:
     except ValueError:
         route_count_in_index = 0
 
-    embeddings = AutoRefreshBedrockEncoder(region="eu-west-3", score_threshold=0.5)
+    if os.environ.get("AWS_SESSION_TOKEN", None):
+        embeddings = AutoRefreshBedrockEncoder(region="eu-west-3", score_threshold=0.5)
+    else:
+        session = boto3.Session()
+        credentials = session.get_credentials()
+        embeddings = BedrockEncoder(
+            region="eu-west-3",
+            score_threshold=0.5,
+            access_key_id=credentials.access_key,
+            secret_access_key=credentials.secret_key,
+        )
+
     if route_count_in_index > 0:
         logger.info(f"Loading {route_count_in_index} routes from index...")
         return CachedRouteLayer(encoder=embeddings, routes=routes, index=index)

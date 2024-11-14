@@ -16,6 +16,7 @@ junit
 notebooks/*
 .pre-commit-trivy-cache
 caddy_chatbot/src/pyproject.toml
+dynamodb-data
 # Ignore virtual environments
 **/venv/
 .ruff_cache
