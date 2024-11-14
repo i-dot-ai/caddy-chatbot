@@ -1,4 +1,5 @@
-from typing import List, Dict
+from typing import List, Dict, Optional
+from caddy_core.models import LLMOutput, UserMessage
 import re
 
 CADDY_PROCESSING = [
@@ -109,7 +110,9 @@ def create_redacted_card(event) -> List[Dict]:
     return REDACTED
 
 
-def generate_response_card(llm_response) -> List[Dict]:
+def generate_response_card(
+    llm_response: str, context_sources: Optional[List[str]] = []
+) -> List[Dict]:
     """
     Creates a Teams Adaptive Card for the Caddy response
     """
@@ -308,7 +311,7 @@ def create_approval_confirmation_card(
             "type": "Container",
             "id": "llmResponseContainer",
             "isVisible": False,
-            "items": generate_response_card(llm_response),
+            "items": generate_response_card(llm_response, []),
         }
     )
 
@@ -506,7 +509,7 @@ def create_rejection_confirmation_card(
             "type": "Container",
             "id": "llmResponseContainer",
             "isVisible": False,
-            "items": generate_response_card(llm_response),
+            "items": generate_response_card(llm_response, []),
         }
     )
 
@@ -555,14 +558,14 @@ def create_supervision_card(
                         },
                         {
                             "type": "TextBlock",
-                            "text": caddy_message.message_string,
+                            "text": caddy_message.message,
                             "wrap": True,
                             "size": "Small",
                             "spacing": "Small",
                         },
                         {
                             "type": "TextBlock",
-                            "text": caddy_message.name,
+                            "text": caddy_message.teams_from["name"],
                             "wrap": True,
                             "size": "Small",
                             "spacing": "None",
@@ -588,7 +591,7 @@ def create_supervision_card(
             "type": "Container",
             "id": "llmResponseContainer",
             "isVisible": False,
-            "items": generate_response_card(llm_response),
+            "items": generate_response_card(llm_response, []),
         },
         {
             "type": "Input.Text",
@@ -712,5 +715,73 @@ def update_response_card_with_supervisor_info(
         if section.get("type") != "ActionSet"
         or "approvalButtons" not in section.get("id", "")
     ]
+
+    return card_body
+
+
+def create_teams_follow_up_questions_card(
+    llm_output: LLMOutput,
+    caddy_query: UserMessage,
+    supervisor_message_id: Optional[str] = None,
+    supervisor_thread_id: Optional[str] = None,
+) -> Dict:
+    """
+    Create a follow up questions card for Microsoft Teams
+    """
+    card_body = [
+        {
+            "type": "TextBlock",
+            "text": "We need more information",
+            "weight": "Bolder",
+            "size": "Medium",
+        },
+        {
+            "type": "TextBlock",
+            "text": "To provide a better answer, please respond to these follow-up questions:",
+            "wrap": True,
+        },
+    ]
+
+    for i, question in enumerate(llm_output.follow_up_questions, start=1):
+        card_body.extend(
+            [
+                {
+                    "type": "TextBlock",
+                    "text": question,
+                    "wrap": True,
+                    "spacing": "Medium",
+                },
+                {
+                    "type": "Input.Text",
+                    "id": f"follow_up_answer_{i}",
+                    "placeholder": f"Answer {i}",
+                    "isMultiline": True,
+                    "spacing": "Small",
+                },
+            ]
+        )
+
+    card_body.append(
+        {
+            "type": "ActionSet",
+            "actions": [
+                {
+                    "type": "Action.Execute",
+                    "title": "Submit",
+                    "verb": "follow_up_submission",
+                    "data": {
+                        "action": "follow_up_submission",
+                        "original_query": caddy_query.message,
+                        "original_message": llm_output.message,
+                        "follow_up_questions": llm_output.follow_up_questions,
+                        "original_thread_id": caddy_query.thread_id,
+                        "teams_recipient": caddy_query.teams_recipient,
+                        "teams_conversation": caddy_query.teams_conversation,
+                        "teams_from": caddy_query.teams_from,
+                    },
+                }
+            ],
+        }
+    )
 
     return card_body

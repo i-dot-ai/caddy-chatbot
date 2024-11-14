@@ -1,31 +1,34 @@
 import os
 import json
 import re
+import asyncio
 import requests
 from typing import Dict, Any, List, Tuple, Optional
 from datetime import datetime
-from threading import Thread
 from caddy_core.models import (
+    ChatIntegration,
     CaddyMessageEvent,
     UserNotEnrolledException,
     ApprovalEvent,
+    UserMessage,
+    LLMOutput,
+    SupervisionEvent,
 )
 from caddy_core.services import enrolment
 from caddy_core.utils.monitoring import logger
-from caddy_core import components as caddy
+from caddy_core.components import Caddy
 from caddy_core.services.anonymise import analyse
 from caddy_core.services.survey import get_survey, check_if_survey_required
 from integrations.google_chat import content, responses
 from googleapiclient.discovery import build
 from integrations.google_chat.auth import get_google_creds
-from langchain_aws import ChatBedrock
 
 from urllib.parse import urlparse, urlunparse
 
 from thefuzz import fuzz
 
 
-class GoogleChat:
+class GoogleChat(ChatIntegration):
     def __init__(self):
         self.client = "Google Chat"
         self.messages = content
@@ -40,6 +43,20 @@ class GoogleChat:
             "v1",
             credentials=get_google_creds(os.getenv("CADDY_SUPERVISOR_SERVICE_ACCOUNT")),
         )
+        self.caddy_instance = Caddy(self)
+        self.active_tasks = {}
+
+    def _extract_status_message_id(self, event: Dict[str, Any]) -> Optional[str]:
+        """
+        Extract the status message ID from the event or card content.
+        """
+        if "statusMessageId" in event.get("common", {}).get("parameters", {}):
+            return event["common"]["parameters"]["statusMessageId"]
+
+        if "message" in event and "cardsV2" in event["message"]:
+            return event["message"]["name"].split("/")[3]
+
+        return None
 
     async def handle_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -92,16 +109,26 @@ class GoogleChat:
         if included_in_rct and await self.check_existing_call(event, user_record):
             return self.responses.NO_CONTENT
 
-        caddy_message = self.format_message(event)
+        caddy_message = await self.format_event_to_message(event)
         if caddy_message == "PII Detected":
             return self.responses.NO_CONTENT
 
-        process_message_thread = Thread(
-            target=caddy.handle_message,
-            kwargs={"caddy_message": caddy_message, "chat_client": self},
-        )
-        process_message_thread.start()
+        if caddy_message.message_id not in self.active_tasks:
+            task = asyncio.create_task(
+                self.caddy_instance.process_message(caddy_message)
+            )
+            self.active_tasks[caddy_message.message_id] = task
+            task.add_done_callback(
+                lambda t: self.remove_active_task(caddy_message.message_id)
+            )
+
         return self.responses.ACCEPTED
+
+    def remove_active_task(self, message_id: str) -> None:
+        """
+        Remove task from active tasks
+        """
+        self.active_tasks.pop(message_id, None)
 
     async def handle_card_clicked(self, event: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -127,6 +154,8 @@ class GoogleChat:
                 return await self.finalise_caddy_call(event)
             case "convert_to_client_friendly":
                 return await self.convert_to_client_friendly(event)
+            case "handle_follow_up_answers":
+                return await self.process_follow_up_answers(event)
             case _:
                 logger.warning(f"Unhandled card action: {action_name}")
                 return self.responses.NO_CONTENT
@@ -176,17 +205,29 @@ class GoogleChat:
         """
         Handle supervisor card click events
         """
-        action_name = event["action"]["actionMethodName"]
-        match action_name:
-            case "Approved":
-                return await self.handle_supervisor_approval(event)
-            case "Rejected":
-                return await self.handle_supervisor_rejection(event)
-            case "receiveDialog":
-                return await self.handle_supervisor_dialog(event)
-            case _:
-                logger.warning(f"Unhandled supervisor card action: {action_name}")
-                return self.responses.NO_CONTENT
+        try:
+            action_name = event["action"]["actionMethodName"]
+            match action_name:
+                case "Approved":
+                    approval_event, response_card = self._create_approval_event(event)
+                    return await self.handle_supervision_approval(
+                        event=event,
+                        approval_event=approval_event,
+                        response_card=response_card,
+                    )
+                case "Rejected":
+                    rejection_event = self._create_rejection_event(event)
+                    return await self.handle_supervision_rejection(
+                        event=event, rejection_event=rejection_event
+                    )
+                case "receiveDialog":
+                    return await self.handle_supervisor_dialog(event)
+                case _:
+                    logger.warning(f"Unhandled supervisor card action: {action_name}")
+                    return self.responses.NO_CONTENT
+        except Exception as e:
+            logger.error(f"Error processing supervisor card click: {str(e)}")
+            return self.responses.NO_CONTENT
 
     async def handle_supervisor_message(self, event: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -201,7 +242,7 @@ class GoogleChat:
                 case "/help":
                     return self.responses.HELPER_DIALOG
                 case "/listUsers":
-                    return await self.list_space_users(event)
+                    return await self.list_users(event)
         return self.responses.NO_CONTENT
 
     async def check_existing_call(
@@ -218,7 +259,8 @@ class GoogleChat:
                 if "thread" in event["message"]
                 else None
             )
-            self.send_existing_call_reminder(
+
+            await self._send_existing_call_reminder(
                 space_id=space_id,
                 thread_id=thread_id,
                 call_start_time=user_record["callStart"],
@@ -228,9 +270,9 @@ class GoogleChat:
             return True
         return False
 
-    def format_message(self, event: Dict[str, Any]) -> CaddyMessageEvent:
+    async def format_event_to_message(self, event: Dict[str, Any]) -> CaddyMessageEvent:
         """
-        Format the incoming message into a CaddyMessageEvent
+        Convert Google Chat event to CaddyMessageEvent
         """
         space_id = event["space"]["name"].split("/")[1]
         thread_id = (
@@ -240,26 +282,15 @@ class GoogleChat:
         )
         message_string = event["message"]["text"].replace("@Caddy", "").strip()
 
+        # Check for PII
         if "proceed" not in event:
             pii_identified = analyse(message_string)
             if pii_identified:
                 # Optionally redact PII from the message by importing redact from services.anonymise
                 # message_string = redact(message_string, pii_identified)
 
-                self.send_pii_warning_to_adviser_space(
-                    space_id=space_id,
-                    thread_id=thread_id,
-                    message=self.messages.PII_DETECTED,
-                    message_event=event,
-                )
+                await self.send_pii_warning(space_id, thread_id, message_string, event)
                 return "PII Detected"
-
-        thread_id, message_id = self.send_dynamic_to_adviser_space(
-            response_type="cardsV2",
-            space_id=space_id,
-            thread_id=thread_id,
-            message=self.messages.PROCESSING_MESSAGE,
-        )
 
         return CaddyMessageEvent(
             type="PROCESS_CHAT_MESSAGE",
@@ -267,146 +298,52 @@ class GoogleChat:
             name=event["user"]["name"],
             space_id=space_id,
             thread_id=thread_id,
-            message_id=message_id,
+            message_id=event["message"]["name"].split("/")[3],
             message_string=message_string,
             source_client=self.client,
             timestamp=event["eventTime"],
         )
 
-    def send_existing_call_reminder(
+    async def _send_existing_call_reminder(
         self,
         space_id: str,
         thread_id: str,
         call_start_time: str,
         survey_thread_id: str,
         event: Dict[str, Any],
-    ):
+    ) -> None:
         """
         Send a reminder for an existing call
         """
-        self.caddy.spaces().messages().create(
-            parent=f"spaces/{space_id}",
-            body=self.responses.existing_call_reminder(
-                event, space_id, thread_id, call_start_time, survey_thread_id
-            ),
-            messageReplyOption="REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD",
-        ).execute()
+        reminder_card = self.responses.existing_call_reminder(
+            event, space_id, thread_id, call_start_time, survey_thread_id
+        )
+        await self.send_message(space_id, reminder_card)
 
-    def send_pii_warning_to_adviser_space(
-        self, space_id: str, thread_id: str, message: str, message_event: Dict[str, Any]
-    ):
+    async def send_pii_warning(
+        self,
+        space_id: str,
+        thread_id: str,
+        message: str,
+        original_event: Dict[str, Any],
+    ) -> None:
         """
         Send a PII warning to the adviser space
         """
-        self.caddy.spaces().messages().create(
-            parent=f"spaces/{space_id}",
-            body={
-                "cardsV2": [
-                    {
-                        "cardId": "PIIDetected",
-                        "card": {
-                            "sections": [
-                                {
-                                    "widgets": [
-                                        {"textParagraph": {"text": message}},
-                                    ],
-                                },
-                                {
-                                    "widgets": [
-                                        {
-                                            "buttonList": {
-                                                "buttons": [
-                                                    {
-                                                        "text": "Proceed without redaction",
-                                                        "onClick": {
-                                                            "action": {
-                                                                "function": "Proceed",
-                                                                "parameters": [
-                                                                    {
-                                                                        "key": "message_event",
-                                                                        "value": json.dumps(
-                                                                            message_event
-                                                                        ),
-                                                                    },
-                                                                ],
-                                                            }
-                                                        },
-                                                    },
-                                                    {
-                                                        "text": "Edit original query",
-                                                        "onClick": {
-                                                            "action": {
-                                                                "function": "edit_query_dialog",
-                                                                "interaction": "OPEN_DIALOG",
-                                                                "parameters": [
-                                                                    {
-                                                                        "key": "message_event",
-                                                                        "value": json.dumps(
-                                                                            message_event
-                                                                        ),
-                                                                    },
-                                                                ],
-                                                            }
-                                                        },
-                                                    },
-                                                ]
-                                            }
-                                        }
-                                    ],
-                                },
-                            ],
-                        },
-                    },
-                ],
-                "thread": {"name": f"spaces/{space_id}/threads/{thread_id}"},
-            },
-            messageReplyOption="REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD",
-        ).execute()
+        warning_card = self.create_pii_warning(message, original_event)
 
-    def send_dynamic_to_adviser_space(
-        self, response_type: str, space_id: str, message: Dict[str, Any], thread_id: str
-    ) -> Tuple[str, str]:
+        if thread_id:
+            warning_card["thread"] = {"name": f"spaces/{space_id}/threads/{thread_id}"}
+
+        await self.send_message(space_id, warning_card)
+
+    def create_pii_warning(
+        self, message: str, original_event: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
-        Send a dynamic message to the adviser space
+        Create PII Warning Card for Google Chat
         """
-        match response_type:
-            case "text":
-                response = (
-                    self.caddy.spaces()
-                    .messages()
-                    .create(
-                        parent=f"spaces/{space_id}",
-                        body={
-                            "text": message,
-                            "thread": {
-                                "name": f"spaces/{space_id}/threads/{thread_id}"
-                            },
-                        },
-                        messageReplyOption="REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD",
-                    )
-                    .execute()
-                )
-            case "cardsV2":
-                response = (
-                    self.caddy.spaces()
-                    .messages()
-                    .create(
-                        parent=f"spaces/{space_id}",
-                        body={
-                            "cardsV2": message["cardsV2"],
-                            "thread": {
-                                "name": f"spaces/{space_id}/threads/{thread_id}"
-                            },
-                        },
-                        messageReplyOption="REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD",
-                    )
-                    .execute()
-                )
-
-        thread_id = response["thread"]["name"].split("/")[3]
-        message_id = response["name"].split("/")[3]
-
-        return thread_id, message_id
+        return self.responses.create_pii_warning_card(message, original_event)
 
     async def handle_proceed_query(self, event: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -414,12 +351,34 @@ class GoogleChat:
         """
         event = json.loads(event["common"]["parameters"]["message_event"])
         event["proceed"] = True
-        caddy_message = self.format_message(event)
-        process_message_thread = Thread(
-            target=caddy.handle_message,
-            kwargs={"caddy_message": caddy_message, "chat_client": self},
+        caddy_message = await self.format_event_to_message(event)
+        await self.caddy_instance.handle_message(caddy_message)
+        return self.responses.ACCEPTED
+
+    async def get_edit_query_dialog(self, event: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Get the edit query dialog
+        """
+        message_string = (
+            event["common"]["parameters"]["original_message"]
+            .replace("@Caddy", "")
+            .strip()
         )
-        process_message_thread.start()
+        edit_query_dialog = self.responses.edit_query_dialog(event, message_string)
+        return edit_query_dialog
+
+    async def handle_edited_query(self, event: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Handle an edited query event
+        """
+        edited_message = event["common"]["formInputs"]["editedQuery"]["stringInputs"][
+            "value"
+        ][0]
+        event = json.loads(event["common"]["parameters"]["message_event"])
+        event["message"]["text"] = edited_message
+        event["proceed"] = True
+        caddy_message = await self.format_event_to_message(event)
+        await self.caddy_instance.handle_message(caddy_message)
         return self.responses.ACCEPTED
 
     async def handle_control_group_forward(
@@ -433,7 +392,7 @@ class GoogleChat:
         caddy_message = CaddyMessageEvent(**caddy_message_event)
 
         supervisor_space = enrolment.get_designated_supervisor_space(caddy_message.user)
-        self.send_message_to_supervisor_space(
+        await self.send_message_to_supervision_space(
             space_id=supervisor_space,
             message=self.responses.message_control_forward(
                 caddy_message.user, caddy_message.message_string
@@ -452,53 +411,696 @@ class GoogleChat:
         control_group_card = self.append_survey_questions(
             control_group_card, caddy_message.thread_id, caddy_message.user
         )
-        self.update_message_in_adviser_space(
-            message_type="cardsV2",
+        await self.update_message(
             space_id=caddy_message.space_id,
             message_id=caddy_message.message_id,
             message={"cardsV2": control_group_card},
         )
         return self.responses.NO_CONTENT
 
-    async def get_edit_query_dialog(self, event: Dict[str, Any]) -> Dict[str, Any]:
+    async def send_message(
+        self, space_id: str, message: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
-        Get the edit query dialog
+        Send a message to a Google Chat space
         """
-        event = json.loads(event["common"]["parameters"]["message_event"])
-        message_string = event["message"]["text"].replace("@Caddy", "").strip()
-        edit_query_dialog = self.edit_query_dialog(event, message_string)
-        return edit_query_dialog
+        try:
+            response = (
+                self.caddy.spaces()
+                .messages()
+                .create(
+                    parent=f"spaces/{space_id}",
+                    body=message,
+                )
+                .execute()
+            )
+            return response
+        except Exception as e:
+            logger.error(f"Error sending message: {str(e)}")
+            raise
 
-    async def handle_edited_query(self, event: Dict[str, Any]) -> Dict[str, Any]:
+    async def update_message(
+        self, space_id: str, message_id: str, message: Dict[str, Any]
+    ) -> None:
         """
-        Handle an edited query event
+        Update an existing message
         """
-        edited_message = event["common"]["formInputs"]["editedQuery"]["stringInputs"][
-            "value"
-        ][0]
-        event = json.loads(event["common"]["parameters"]["message_event"])
-        event["message"]["text"] = edited_message
-        event["proceed"] = True
-        caddy_message = self.format_message(event)
-        process_message_thread = Thread(
-            target=caddy.handle_message,
-            kwargs={"caddy_message": caddy_message, "chat_client": self},
+        try:
+            self.caddy.spaces().messages().patch(
+                name=f"spaces/{space_id}/messages/{message_id}",
+                body=message,
+                updateMask="cardsV2",
+            ).execute()
+        except Exception as e:
+            logger.error(f"Error updating message: {str(e)}")
+            raise
+
+    async def send_status_update(
+        self, message: UserMessage, status: str, message_id: Optional[str] = None
+    ) -> Optional[str]:
+        """
+        Send or update a status message
+        """
+        status_cards = {
+            "processing": self.messages.PROCESSING_MESSAGE,
+            "composing": self.messages.COMPOSING_MESSAGE,
+            "composing_retry": self.messages.COMPOSING_MESSAGE_RETRY,
+            "request_failure": self.messages.REQUEST_FAILURE,
+            "supervisor_reviewing": self.messages.SUPERVISOR_REVIEWING_RESPONSE,
+            "awaiting_approval": self.messages.AWAITING_SUPERVISOR_APPROVAL,
+        }
+
+        if status not in status_cards:
+            logger.error(f"Unknown status: {status}")
+            return None
+
+        status_card = status_cards[status]
+
+        try:
+            if message_id:
+                await self.update_message(
+                    space_id=message.conversation_id,
+                    message_id=message_id,
+                    message=status_card,
+                )
+                return message_id
+            else:
+                if hasattr(message, "thread_id") and message.thread_id:
+                    status_card["thread"] = {
+                        "name": f"spaces/{message.conversation_id}/threads/{message.thread_id}"
+                    }
+
+                response = await self.send_message(
+                    space_id=message.conversation_id, message=status_card
+                )
+                return response.get("name", "").split("/")[-1]
+        except Exception as e:
+            logger.error(f"Error sending status update: {str(e)}")
+            return None
+
+    async def update_message_in_supervision_space(
+        self, space_id: str, message_id: str, message: Dict[str, Any]
+    ) -> None:
+        """
+        Update an existing message in the supervision space
+        """
+        try:
+            self.supervisor.spaces().messages().patch(
+                name=f"spaces/{space_id}/messages/{message_id}",
+                body=message,
+                updateMask="cardsV2",
+            ).execute()
+        except Exception as e:
+            logger.error(f"Error updating message in supervision space: {str(e)}")
+            raise
+
+    async def send_message_to_supervision_space(
+        self, space_id: str, message: Dict[str, Any]
+    ) -> Tuple[str, str]:
+        """
+        Send message to supervision space and return thread and message IDs
+        """
+        try:
+            response = (
+                self.supervisor.spaces()
+                .messages()
+                .create(parent=f"spaces/{space_id}", body=message)
+                .execute()
+            )
+
+            thread_id = (
+                response["thread"]["name"].split("/")[3]
+                if "thread" in response
+                else response["name"].split("/")[3]
+            )
+            message_id = response["name"].split("/")[3]
+
+            return thread_id, message_id
+        except Exception as e:
+            logger.error(f"Error sending message to supervision space: {str(e)}")
+            raise
+
+    def create_card(
+        self, llm_output: str, context_sources: List[str]
+    ) -> Dict[str, Any]:
+        """
+        Create Google Chat card from LLM response
+        """
+        card = {
+            "cardsV2": [
+                {
+                    "cardId": "aiResponseCard",
+                    "card": {
+                        "sections": [],
+                    },
+                }
+            ]
+        }
+
+        url_matches = re.findall(
+            r"<ref>((?:SOURCE_URL:)?(http[s]?://[^\s>]+))</ref>", llm_output
         )
-        process_message_thread.start()
+        processed_urls = []
+        ref_count = 0
+        reference_section = {"header": "Reference links", "widgets": []}
+
+        for full_url, base_url in url_matches:
+            if full_url in processed_urls:
+                continue
+
+            url_to_check = full_url.replace("SOURCE_URL:", "")
+            url_parts = urlparse(url_to_check)
+            base_url = urlunparse(url_parts._replace(fragment=""))
+            fragment = url_parts.fragment
+
+            best_match = max(context_sources, key=lambda x: fuzz.ratio(base_url, x))
+            match_score = fuzz.ratio(base_url, best_match)
+            use_url = best_match if match_score > 95 else base_url
+
+            url_valid = self._validate_url(use_url, context_sources)
+            if url_valid:
+                ref_count += 1
+                domain = self._get_domain(use_url)
+                full_use_url = f"{use_url}#{fragment}" if fragment else use_url
+
+                llm_output = llm_output.replace(
+                    f"<ref>{full_url}</ref>",
+                    f'<a href="{full_use_url}">[{ref_count} - {domain}]</a>',
+                )
+
+                reference_section["widgets"].append(
+                    {
+                        "textParagraph": {
+                            "text": f'<a href="{full_use_url}">[{ref_count} - {domain}] {full_use_url}</a>'
+                        }
+                    }
+                )
+
+                processed_urls.append(full_url)
+            else:
+                llm_output = llm_output.replace(f"<ref>{full_url}</ref>", "")
+
+        card["cardsV2"][0]["card"]["sections"].append(
+            {
+                "widgets": [
+                    {"textParagraph": {"text": llm_output}},
+                ],
+            }
+        )
+
+        if reference_section["widgets"]:
+            card["cardsV2"][0]["card"]["sections"].append(reference_section)
+
+        return card
+
+    async def send_supervision_request(
+        self,
+        message_query: UserMessage,
+        supervision_event: SupervisionEvent,
+        response_card: Dict[str, Any],
+    ) -> Tuple[str, str]:
+        """
+        Send request to supervision space
+        """
+        supervisor_space = enrolment.get_designated_supervisor_space(
+            message_query.user_email
+        )
+
+        status_card = self.responses.supervisor_request_pending(
+            supervision_event.user, supervision_event.llmPrompt
+        )
+
+        (
+            supervision_thread_id,
+            supervision_message_id,
+        ) = await self.send_message_to_supervision_space(
+            space_id=supervisor_space, message=status_card
+        )
+
+        supervision_card = self.responses.create_supervision_card(
+            user_email=supervision_event.user,
+            event=supervision_event,
+            new_request_message_id=supervision_message_id,
+            request_approved=self.responses.supervisor_request_approved(
+                supervision_event.user, supervision_event.llmPrompt
+            ),
+            request_rejected=self.responses.supervisor_request_rejected(
+                supervision_event.user, supervision_event.llmPrompt
+            ),
+            card_for_approval=response_card,
+        )
+
+        supervision_message = {
+            "cardsV2": supervision_card["cardsV2"],
+            "thread": {
+                "name": f"spaces/{supervisor_space}/threads/{supervision_thread_id}"
+            },
+        }
+
+        try:
+            self.supervisor.spaces().messages().create(
+                parent=f"spaces/{supervisor_space}",
+                messageReplyOption="REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD",
+                body=supervision_message,
+            ).execute()
+        except Exception as e:
+            logger.error(f"Error sending threaded supervision message: {str(e)}")
+            raise
+
+        self.caddy_instance.store_approver_received_timestamp(supervision_event)
+
+        return supervision_message_id, supervision_thread_id
+
+    async def update_supervision_status(
+        self, space_id: str, message_id: str, status: str, user: str, query: str
+    ) -> None:
+        """
+        Update supervisor message with current status..
+        """
+
+        status_cards = {
+            "processing": self.responses.supervisor_request_processing,
+            "awaiting": self.responses.supervisor_request_pending,
+            "failed": self.responses.supervisor_request_failed,
+            "approved": self.responses.supervisor_request_approved,
+            "rejected": self.responses.supervisor_request_rejected,
+        }
+
+        if status not in status_cards:
+            logger.error(f"Unknown supervisor status: {status}")
+            return
+
+        status_card = status_cards[status](user, query)
+
+        await self.update_message_in_supervision_space(
+            space_id=space_id, message_id=message_id, message=status_card
+        )
+
+    async def handle_supervision_approval(
+        self,
+        event: Dict[str, Any],
+        approval_event: ApprovalEvent,
+        response_card: Dict[str, Any],
+    ) -> None:
+        """
+        Handle supervision approval flow
+        """
+        try:
+            user = event["common"]["parameters"]["userEmail"]
+            user_space = event["common"]["parameters"]["conversationId"]
+            supervisor_message_id = event["message"]["name"].split("/")[3]
+            thread_id = event["common"]["parameters"]["threadId"]
+            original_query = event["common"]["parameters"]["original_query"]
+
+            supervisor_space = event["space"]["name"].split("/")[1]
+            status_message_id = event["common"]["parameters"]["newRequestId"]
+
+            status_card = self.responses.supervisor_request_approved(
+                user, original_query
+            )
+
+            try:
+                await self.update_message_in_supervision_space(
+                    space_id=supervisor_space,
+                    message_id=status_message_id,
+                    message=status_card,
+                )
+            except Exception as e:
+                logger.error(f"Error updating supervisor status: {str(e)}")
+                raise
+
+            approval_section = self.responses.approval_json_widget(
+                approver=approval_event.approver_email,
+                supervisor_notes=approval_event.supervisor_message,
+            )
+
+            card_sections = []
+            for section in response_card["cardsV2"][0]["card"]["sections"]:
+                if not any(
+                    w.get("buttonList") or w.get("textInput")
+                    for w in section.get("widgets", [])
+                ):
+                    card_sections.append(section)
+
+            updated_card = {
+                "cardsV2": [
+                    {
+                        "cardId": response_card["cardsV2"][0]["cardId"],
+                        "card": {"sections": [approval_section] + card_sections},
+                    }
+                ]
+            }
+
+            try:
+                self.supervisor.spaces().messages().patch(
+                    name=f"spaces/{supervisor_space}/messages/{supervisor_message_id}",
+                    updateMask="cardsV2",
+                    body=updated_card,
+                ).execute()
+            except Exception as e:
+                logger.error(f"Error updating supervisor message: {str(e)}")
+                raise
+
+            adviser_card = self.responses.create_client_friendly_card(updated_card)
+
+            try:
+                await self.update_message(
+                    space_id=user_space,
+                    message_id=event["common"]["parameters"]["status_id"],
+                    message=adviser_card,
+                )
+            except Exception as e:
+                logger.error(f"Error updating adviser message: {str(e)}")
+                raise
+
+            self.caddy_instance.store_approver_event(thread_id, approval_event)
+
+        except Exception as e:
+            logger.error(f"Error in handle_supervision_approval: {str(e)}")
+            raise
+
+    async def handle_supervision_rejection(
+        self, event: Dict[str, Any], rejection_event: ApprovalEvent
+    ) -> None:
+        """
+        Handle supervision rejection flow
+        """
+        try:
+            user = event["common"]["parameters"]["userEmail"]
+            user_space = event["common"]["parameters"]["conversationId"]
+            supervisor_message_id = event["message"]["name"].split("/")[3]
+            thread_id = event["common"]["parameters"]["threadId"]
+            original_query = event["common"]["parameters"]["original_query"]
+
+            supervisor_space = event["space"]["name"].split("/")[1]
+            status_message_id = event["common"]["parameters"]["newRequestId"]
+
+            status_card = self.responses.supervisor_request_rejected(
+                user, original_query
+            )
+            try:
+                await self.update_message_in_supervision_space(
+                    space_id=supervisor_space,
+                    message_id=status_message_id,
+                    message=status_card,
+                )
+            except Exception as e:
+                logger.error(f"Error updating supervisor status: {str(e)}")
+                raise
+
+            rejection_section = self.responses.rejection_json_widget(
+                approver=rejection_event.approver_email,
+                supervisor_message=rejection_event.supervisor_message,
+            )
+
+            card_sections = []
+            ai_response = json.loads(event["common"]["parameters"]["aiResponse"])
+            for section in ai_response["cardsV2"][0]["card"]["sections"]:
+                if not any(
+                    w.get("buttonList") or w.get("textInput")
+                    for w in section.get("widgets", [])
+                ):
+                    card_sections.append(section)
+
+            supervisor_card = {
+                "cardsV2": [
+                    {
+                        "cardId": f"rejectionCard_{thread_id}",
+                        "card": {"sections": [rejection_section] + card_sections},
+                    }
+                ]
+            }
+
+            try:
+                self.supervisor.spaces().messages().patch(
+                    name=f"spaces/{supervisor_space}/messages/{supervisor_message_id}",
+                    updateMask="cardsV2",
+                    body=supervisor_card,
+                ).execute()
+            except Exception as e:
+                logger.error(f"Error updating supervisor message: {str(e)}")
+                raise
+
+            adviser_card = self.responses.supervisor_rejection(
+                approver=rejection_event.approver_email,
+                supervisor_message=rejection_event.supervisor_message,
+            )
+
+            try:
+                await self.update_message(
+                    space_id=user_space,
+                    message_id=event["common"]["parameters"]["status_id"],
+                    message=adviser_card,
+                )
+            except Exception as e:
+                logger.error(f"Error updating adviser message: {str(e)}")
+                raise
+
+            self.caddy_instance.store_approver_event(thread_id, rejection_event)
+
+        except Exception as e:
+            logger.error(f"Error in handle_supervision_rejection: {str(e)}")
+            raise
+
+    async def send_follow_up_questions(
+        self,
+        message_query: UserMessage,
+        llm_output: LLMOutput,
+        context_sources: List[str],
+        status_message_id: Optional[str] = None,
+    ) -> None:
+        """
+        Send follow-up questions to user
+        """
+        follow_up_card = self.responses.create_follow_up_questions_card(
+            llm_output, message_query
+        )
+
+        if status_message_id:
+            await self.update_message(
+                space_id=message_query.conversation_id,
+                message_id=status_message_id,
+                message=follow_up_card,
+            )
+        else:
+            await self.send_message(
+                space_id=message_query.conversation_id,
+                message=follow_up_card,
+            )
+
+    async def process_follow_up_answers(self, event: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Process follow-up answers from user
+        """
+        original_query = event["common"]["parameters"]["original_query"]
+        original_message = event["common"]["parameters"]["original_message"]
+        follow_up_questions = json.loads(
+            event["common"]["parameters"]["follow_up_questions"]
+        )
+        status_message_id = self._extract_status_message_id(event)
+
+        follow_up_context = self._build_follow_up_context(
+            original_query, original_message, follow_up_questions, event
+        )
+
+        message_query = UserMessage(
+            conversation_id=event["space"]["name"].split("/")[1],
+            thread_id=event["common"]["parameters"]["original_thread_id"],
+            message_id=event["message"]["name"].split("/")[3],
+            client=self.client,
+            user_email=event["user"]["email"],
+            message=original_query,
+            message_sent_timestamp=str(datetime.now()),
+            message_received_timestamp=datetime.now(),
+            status_message_id=status_message_id,
+        )
+
+        await self.caddy_instance.process_follow_up_answers(
+            message_query, follow_up_context
+        )
+
         return self.responses.ACCEPTED
+
+    async def send_survey(self, user: str, thread_id: str, space_id: str) -> None:
+        """
+        Send survey to user
+        """
+        survey_card = self._create_survey_card(user, thread_id)
+        await self.send_dynamic_to_adviser_space(
+            response_type="cardsV2",
+            space_id=space_id,
+            message=survey_card,
+            thread_id=thread_id,
+        )
+
+    async def handle_survey_response(self, event: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Handle survey response
+        """
+        user = event["user"]["email"]
+        thread_id = event["common"]["parameters"]["threadId"]
+        space_id = event["space"]["name"].split("/")[1]
+        message_id = event["message"]["name"].split("/")[3]
+        message_event = event["common"]["parameters"]["event"]
+
+        questions_and_values = []
+        for question, response in event["common"]["formInputs"].items():
+            value = response["stringInputs"]["value"][0]
+            questions_and_values.append({question: value})
+
+        self.caddy_instance.store_survey_response(thread_id, questions_and_values)
+
+        card = event["message"]["cardsV2"]
+        card[0]["card"]["sections"].pop()
+        if message_event:
+            card[0]["card"]["sections"].pop()
+        card[0]["card"]["sections"].append(self.messages.SURVEY_COMPLETE_WIDGET)
+
+        self.caddy_instance.mark_call_complete(user=user, thread_id=thread_id)
+
+        await self.update_survey_card_in_adviser_space(
+            space_id=space_id, message_id=message_id, card={"cardsV2": card}
+        )
+
+        return message_event if message_event else self.responses.NO_CONTENT
+
+    async def create_supervision_card(
+        self,
+        user_email: str,
+        supervision_event: SupervisionEvent,
+        response_card: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Create supervision card for review
+        """
+        return self.responses.create_supervision_card(
+            user_email=user_email,
+            event=supervision_event,
+            new_request_message_id=None,
+            request_approved=self.responses.supervisor_request_approved(
+                user_email, supervision_event.llmPrompt
+            ),
+            request_rejected=self.responses.supervisor_request_rejected(
+                user_email, supervision_event.llmPrompt
+            ),
+            card_for_approval=response_card,
+        )
+
+    async def convert_to_client_friendly(
+        self, card_content: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Convert response to client friendly format
+        """
+        response = await self.caddy_instance.create_client_friendly(card_content)
+
+        return self.responses.create_client_friendly_dialog(response)
+
+    async def add_user(self, event: Dict[str, Any]) -> None:
+        """
+        Add user to Caddy
+        """
+        user = event["common"]["formInputs"]["email"]["stringInputs"]["value"][0]
+        role = event["common"]["formInputs"]["role"]["stringInputs"]["value"][0]
+        supervisor_space_id = event["space"]["name"].split("/")[1]
+
+        try:
+            enrolment.register_user(user, role, supervisor_space_id)
+        except Exception as error:
+            logger.error(f"Adding user failed: {error}")
+
+    async def remove_user(self, event: Dict[str, Any]) -> None:
+        """
+        Remove user from Caddy
+        """
+        user = event["common"]["formInputs"]["email"]["stringInputs"]["value"][0]
+        try:
+            enrolment.remove_user(user)
+        except Exception as error:
+            logger.error(f"Removing user failed: {error}")
+
+    async def list_users(self, event: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        List users in space
+        """
+        space_id = event["space"]["name"].split("/")[1]
+        space_users = enrolment.list_users(space_id)
+        return self.responses.create_user_list_dialog(space_users)
+
+    def _validate_url(self, url: str, context_sources: List[str]) -> bool:
+        """
+        Validate URL exists and is accessible
+        """
+        if url in context_sources:
+            return True
+
+        try:
+            response = requests.head(url, timeout=5, allow_redirects=True)
+            return response.status_code in [200, 302, 403] or (
+                "advisernet" in url and response.status_code == 302
+            )
+        except requests.RequestException as e:
+            logger.error(f"Error checking URL {url}: {str(e)}")
+            return False
+
+    def _get_domain(self, url: str) -> str:
+        """
+        Extract and format domain from URL
+        """
+        parsed_url = urlparse(url)
+        domain = parsed_url.netloc
+
+        if domain.startswith("www."):
+            domain = domain[4:]
+
+        if "advisernet" in url:
+            domain = "advisernet"
+
+        return domain
+
+    def _build_follow_up_context(
+        self,
+        original_query: str,
+        original_message: str,
+        follow_up_questions: List[str],
+        event: Dict[str, Any],
+    ) -> str:
+        """
+        Build context string from follow up answers
+        """
+        context = f"Original Query: {original_query}\n\n"
+        context += f"Original response: {original_message}\n\n"
+        context += "Follow-up Questions and Answers:\n"
+
+        for i, question in enumerate(follow_up_questions, start=1):
+            answer_key = f"follow_up_answer_{i}"
+            if answer_key in event["common"]["formInputs"]:
+                answer = event["common"]["formInputs"][answer_key]["stringInputs"][
+                    "value"
+                ][0]
+                context += f"Q: {question}\nA: {answer}\n\n"
+
+        return context
+
+    def _create_survey_card(self, user: str, thread_id: str) -> Dict[str, Any]:
+        """
+        Create survey card
+        """
+        post_call_survey_questions = get_survey(user)
+        return self.get_post_call_survey_card(post_call_survey_questions, thread_id)
 
     async def continue_existing_interaction(
         self, event: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Continue an existing interaction
+        Continue existing interaction
         """
-        self.update_survey_card_in_adviser_space(
+        await self.update_survey_card_in_adviser_space(
             space_id=event["space"]["name"].split("/")[1],
             message_id=event["message"]["name"].split("/")[3],
             card=self.messages.CONTINUE_EXISTING_INTERACTION,
         )
-        return self.handle_proceed_query(event)
+        return await self.handle_proceed_query(event)
 
     async def end_existing_interaction(self, event: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -512,208 +1114,34 @@ class GoogleChat:
         message_event = message_event["message"]["text"]
         card = self.messages.END_EXISTING_INTERACTION
         card = self.append_survey_questions(card, survey_thread_id, user, message_event)
-        self.update_survey_card_in_adviser_space(
+        await self.update_survey_card_in_adviser_space(
             space_id=user_space,
             message_id=message_id,
             card=card,
         )
         return self.responses.NO_CONTENT
 
-    async def handle_survey_response(self, event: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Handle a survey response
-        """
-        user = event["user"]["email"]
-        survey_responses = event["common"]["formInputs"]
-        thread_id = event["common"]["parameters"]["threadId"]
-        card = event["message"]["cardsV2"]
-        space_id = event["space"]["name"].split("/")[1]
-        message_id = event["message"]["name"].split("/")[3]
-        message_event = event["common"]["parameters"]["event"]
-
-        questions_and_values = []
-        for question, response in survey_responses.items():
-            value = response["stringInputs"]["value"][0]
-            questions_and_values.append({question: value})
-
-        caddy.store_survey_response(thread_id, questions_and_values)
-
-        card[0]["card"]["sections"].pop()
-        if message_event:
-            card[0]["card"]["sections"].pop()
-        card[0]["card"]["sections"].append(self.messages.SURVEY_COMPLETE_WIDGET)
-
-        caddy.mark_call_complete(user=user, thread_id=thread_id)
-
-        self.update_survey_card_in_adviser_space(
-            space_id=space_id, message_id=message_id, card={"cardsV2": card}
-        )
-        return message_event if message_event else self.responses.NO_CONTENT
-
     async def finalise_caddy_call(self, event: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Finalise a Caddy call
+        Finalise Caddy call
         """
         survey_card = json.loads(event["common"]["parameters"]["survey"])
         thread_id = event["message"]["thread"]["name"].split("/")[3]
         user_space = event["space"]["name"].split("/")[1]
         user = event["user"]["email"]
-        caddy.mark_call_complete(user=user, thread_id=thread_id)
+
+        self.caddy_instance.mark_call_complete(user=user, thread_id=thread_id)
         survey_required = check_if_survey_required(user)
+
         if survey_required:
-            self.update_survey_card_in_adviser_space(
+            await self.update_survey_card_in_adviser_space(
                 space_id=user_space,
                 message_id=event["message"]["name"].split("/")[3],
                 card=self.messages.CALL_COMPLETE,
             )
-            self.run_survey(survey_card, user_space, thread_id)
+            await self.run_survey(survey_card, user_space, thread_id)
+
         return self.responses.NO_CONTENT
-
-    async def handle_supervisor_approval(self, event: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Handle supervisor approval
-        """
-        user, user_space, thread_id, approval_event = self.received_approval(event)
-        caddy.store_approver_event(thread_id, approval_event)
-        return self.responses.NO_CONTENT
-
-    async def handle_supervisor_rejection(
-        self, event: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """
-        Handle supervisor rejection
-        """
-        self.handle_supervisor_rejection_internal(event)
-        return self.responses.NO_CONTENT
-
-    async def handle_supervisor_dialog(self, event: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Handle supervisor dialog actions
-        """
-        match event["message"]["annotations"][0]["slashCommand"]["commandName"]:
-            case "/addUser":
-                self.add_user(event)
-            case "/removeUser":
-                self.remove_user(event)
-        return self.responses.SUCCESS_DIALOG
-
-    async def list_space_users(self, event: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        List users in the supervision space
-        """
-        supervision_space_id = event["space"]["name"].split("/")[1]
-        space_name = event["space"]["displayName"]
-        space_users = enrolment.list_users(supervision_space_id)
-        return self.user_list_dialog(
-            supervision_users=space_users, space_display_name=space_name
-        )
-
-    def update_message_in_adviser_space(
-        self, message_type: str, space_id: str, message_id: str, message: Dict[str, Any]
-    ):
-        """
-        Update a message in the adviser space
-        """
-        match message_type:
-            case "text":
-                self.caddy.spaces().messages().patch(
-                    name=f"spaces/{space_id}/messages/{message_id}",
-                    body=message,
-                    updateMask="text",
-                ).execute()
-            case "cardsV2":
-                self.caddy.spaces().messages().patch(
-                    name=f"spaces/{space_id}/messages/{message_id}",
-                    body=message,
-                    updateMask="cardsV2",
-                ).execute()
-
-    def update_survey_card_in_adviser_space(
-        self, space_id: str, message_id: str, card: Dict[str, Any]
-    ):
-        """
-        Update a survey card in the adviser space
-        """
-        self.caddy.spaces().messages().patch(
-            name=f"spaces/{space_id}/messages/{message_id}",
-            body=card,
-            updateMask="cardsV2",
-        ).execute()
-
-    def edit_query_dialog(
-        self, message_event: Dict[str, Any], message_string: str
-    ) -> Dict[str, Any]:
-        """
-        Create an edit query dialog
-        """
-        return {
-            "action_response": {
-                "type": "DIALOG",
-                "dialog_action": {
-                    "dialog": {
-                        "body": {
-                            "sections": [
-                                {
-                                    "header": "PII Detected: Edit query",
-                                    "widgets": [
-                                        {
-                                            "textInput": {
-                                                "label": "Please edit your original query to remove PII",
-                                                "type": "MULTIPLE_LINE",
-                                                "name": "editedQuery",
-                                                "value": message_string,
-                                            }
-                                        },
-                                        {
-                                            "buttonList": {
-                                                "buttons": [
-                                                    {
-                                                        "text": "Submit edited query",
-                                                        "onClick": {
-                                                            "action": {
-                                                                "function": "receiveEditedQuery",
-                                                                "parameters": [
-                                                                    {
-                                                                        "key": "message_event",
-                                                                        "value": json.dumps(
-                                                                            message_event
-                                                                        ),
-                                                                    },
-                                                                ],
-                                                            }
-                                                        },
-                                                    }
-                                                ]
-                                            },
-                                            "horizontalAlignment": "END",
-                                        },
-                                    ],
-                                }
-                            ]
-                        }
-                    }
-                },
-            }
-        }
-
-    def run_survey(self, survey_card: Dict[str, Any], user_space: str, thread_id: str):
-        """
-        Run a survey in the adviser space given a survey card input
-
-        Args:
-            survey_card (dict): The survey card to run
-            user_space (str): The space ID of the user
-            thread_id (str): The thread ID of the conversation
-
-        Returns:
-            None
-        """
-        self.send_dynamic_to_adviser_space(
-            response_type="cardsV2",
-            space_id=user_space,
-            message=survey_card,
-            thread_id=thread_id,
-        )
 
     def append_survey_questions(
         self,
@@ -723,24 +1151,13 @@ class GoogleChat:
         event: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        Append survey questions to a card
+        Append survey questions to card
         """
         survey_card = self.get_survey_card(thread_id, user, event)
         card["cardsV2"][0]["card"]["sections"].append(
             survey_card["cardsV2"][0]["card"]["sections"][0]
         )
         return card
-
-    def get_survey_card(
-        self, thread_id: str, user: str, event: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        """
-        Get a survey card
-        """
-        post_call_survey_questions = get_survey(user)
-        return self.get_post_call_survey_card(
-            post_call_survey_questions, thread_id, event
-        )
 
     def get_post_call_survey_card(
         self,
@@ -749,15 +1166,13 @@ class GoogleChat:
         event: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        Create a post-call survey card
+        Create post-call survey card
         """
         card = {
             "cardsV2": [
                 {
                     "cardId": "postCallSurvey",
-                    "card": {
-                        "sections": [],
-                    },
+                    "card": {"sections": []},
                 },
             ],
         }
@@ -777,7 +1192,6 @@ class GoogleChat:
                 }
             },
         }
-
         button_section["buttonList"]["buttons"].append(copy_button)
 
         for question_dict in post_call_survey_questions:
@@ -812,737 +1226,104 @@ class GoogleChat:
                 }
             },
         }
-
         button_section["buttonList"]["buttons"].append(submit_button)
+
         section["widgets"].append(button_section)
         card["cardsV2"][0]["card"]["sections"].append(section)
 
         return card
 
-    def received_approval(
+    def get_survey_card(
+        self, thread_id: str, user: str, event: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Get survey card
+        """
+        post_call_survey_questions = get_survey(user)
+        return self.get_post_call_survey_card(
+            post_call_survey_questions, thread_id, event
+        )
+
+    def _create_approval_event(
         self, event: Dict[str, Any]
-    ) -> Tuple[str, str, str, ApprovalEvent]:
+    ) -> Tuple[ApprovalEvent, Dict[str, Any]]:
         """
-        Process a received approval
+        Create approval event and response card from event data
         """
-        card = json.loads(event["common"]["parameters"]["aiResponse"])
-        user_space = event["common"]["parameters"]["conversationId"]
-        approver = event["user"]["email"]
-        response_id = event["common"]["parameters"]["responseId"]
-        thread_id = event["common"]["parameters"]["threadId"]
-        supervisor_space = event["space"]["name"].split("/")[1]
-        message_id = event["message"]["name"].split("/")[3]
-        supervisor_card = {"cardsV2": event["message"]["cardsV2"]}
-        user_message_id = event["common"]["parameters"]["messageId"]
-        request_message_id = event["common"]["parameters"]["newRequestId"]
-        request_card = json.loads(event["common"]["parameters"]["requestApproved"])
-        user_email = event["common"]["parameters"]["userEmail"]
-        supervisor_notes = event["common"]["formInputs"]["supervisor_notes"][
-            "stringInputs"
-        ]["value"][0]
-
-        approved_card = self.create_approved_card(card, approver, supervisor_notes)
-
-        client_friendly_button = {
-            "buttonList": {
-                "buttons": [
-                    {
-                        "text": "Convert to Client Friendly",
-                        "onClick": {
-                            "action": {
-                                "function": "convert_to_client_friendly",
-                                "interaction": "OPEN_DIALOG",
-                                "parameters": [
-                                    {
-                                        "key": "card_content",
-                                        "value": json.dumps(approved_card),
-                                    },
-                                ],
-                            }
-                        },
-                    }
-                ]
-            }
-        }
-
-        approved_card["cardsV2"][0]["card"]["sections"].append(
-            {"widgets": [client_friendly_button]}
-        )
-
-        domain = user_email.split("@")[1]
-        _, office = enrolment.check_domain_status(domain)
-        included_in_rct = enrolment.check_rct_status(office)
-        if included_in_rct:
-            approved_card = self.append_survey_questions(
-                approved_card, thread_id, user_email
-            )
-
-        self.update_dynamic_message_in_adviser_space(
-            space_id=user_space,
-            message_id=user_message_id,
-            response_type="cardsV2",
-            message=approved_card,
-        )
-
-        updated_supervision_card = self.create_updated_supervision_card(
-            supervision_card=supervisor_card,
-            approver=approver,
-            approved=True,
-            supervisor_message=supervisor_notes,
-        )
-        self.update_message_in_supervisor_space(
-            space_id=supervisor_space,
-            message_id=message_id,
-            new_message=updated_supervision_card,
-        )
-
-        self.update_message_in_supervisor_space(
-            space_id=supervisor_space,
-            message_id=request_message_id,
-            new_message=request_card,
-        )
-
-        approval_event = ApprovalEvent(
-            response_id=response_id,
-            thread_id=thread_id,
-            approver_email=approver,
-            approved=True,
-            approval_timestamp=event["eventTime"],
-            user_response_timestamp=datetime.now(),
-            supervisor_message=supervisor_notes,
-        )
-
-        return user_email, user_space, thread_id, approval_event
-
-    def handle_supervisor_rejection_internal(self, event: Dict[str, Any]):
-        """
-        Handle supervisor rejection internally
-        """
-        supervisor_card = {"cardsV2": event["message"]["cardsV2"]}
-        user_space = event["common"]["parameters"]["conversationId"]
-        approver = event["user"]["email"]
-        response_id = event["common"]["parameters"]["responseId"]
-        supervisor_space = event["space"]["name"].split("/")[1]
-        message_id = event["message"]["name"].split("/")[3]
-        user_message_id = event["common"]["parameters"]["messageId"]
-        supervisor_message = event["common"]["formInputs"]["supervisor_notes"][
-            "stringInputs"
-        ]["value"][0]
-        thread_id = event["common"]["parameters"]["threadId"]
-        request_message_id = event["common"]["parameters"]["newRequestId"]
-        request_card = json.loads(event["common"]["parameters"]["requestRejected"])
-        user_email = event["common"]["parameters"]["userEmail"]
-
-        rejection_card = self.responses.supervisor_rejection(
-            approver=approver, supervisor_message=supervisor_message
-        )
-
-        domain = user_email.split("@")[1]
-        _, office = enrolment.check_domain_status(domain)
-        included_in_rct = enrolment.check_rct_status(office)
-        if included_in_rct:
-            rejection_card = self.append_survey_questions(
-                rejection_card, thread_id, user_email
-            )
-
-        self.update_message_in_supervisor_space(
-            space_id=supervisor_space,
-            message_id=request_message_id,
-            new_message=request_card,
-        )
-
-        self.update_dynamic_message_in_adviser_space(
-            space_id=user_space,
-            message_id=user_message_id,
-            response_type="cardsV2",
-            message=rejection_card,
-        )
-
-        updated_supervision_card = self.create_updated_supervision_card(
-            supervision_card=supervisor_card,
-            approver=approver,
-            approved=False,
-            supervisor_message=supervisor_message,
-        )
-        self.update_message_in_supervisor_space(
-            space_id=supervisor_space,
-            message_id=message_id,
-            new_message=updated_supervision_card,
-        )
-
-        rejection_event = ApprovalEvent(
-            response_id=response_id,
-            thread_id=thread_id,
-            approver_email=approver,
-            approved=False,
-            approval_timestamp=event["eventTime"],
-            user_response_timestamp=datetime.now(),
-            supervisor_message=supervisor_message,
-        )
-
-        caddy.store_approver_event(thread_id, rejection_event)
-
-    def create_approved_card(
-        self, card: Dict[str, Any], approver: str, supervisor_notes: str
-    ) -> Dict[str, Any]:
-        """
-        Create an approved card
-        """
-        card["cardsV2"][0]["card"]["sections"].insert(
-            0, self.responses.approval_json_widget(approver, supervisor_notes)
-        )
-        return card
-
-    def create_updated_supervision_card(
-        self,
-        supervision_card: Dict[str, Any],
-        approver: str,
-        approved: bool,
-        supervisor_message: str,
-    ) -> Dict[str, Any]:
-        """
-        Create an updated supervision card
-        """
-        if approved:
-            approval_section = self.responses.approval_json_widget(
-                approver, supervisor_notes=supervisor_message
-            )
-        else:
-            approval_section = self.responses.rejection_json_widget(
-                approver, supervisor_message
-            )
-
-        card_for_approval_sections = list(
-            supervision_card["cardsV2"][0]["card"]["sections"]
-        )
-        card_for_approval_sections.pop()  # remove thumbs up/ thumbs down section
-        card_for_approval_sections.append(approval_section)
-
-        supervision_card["cardsV2"][0]["card"]["sections"] = card_for_approval_sections
-
-        return supervision_card
-
-    def update_message_in_supervisor_space(
-        self, space_id: str, message_id: str, new_message: Dict[str, Any]
-    ):
-        """
-        Update a message in the supervisor space
-        """
-        self.supervisor.spaces().messages().patch(
-            name=f"spaces/{space_id}/messages/{message_id}",
-            updateMask="cardsV2",
-            body=new_message,
-        ).execute()
-
-    def update_dynamic_message_in_adviser_space(
-        self,
-        space_id: str,
-        message_id: str,
-        response_type: str,
-        message: Dict[str, Any],
-    ):
-        """
-        Update a dynamic message in the adviser space
-        """
-        self.caddy.spaces().messages().patch(
-            name=f"spaces/{space_id}/messages/{message_id}",
-            updateMask=response_type,
-            body=message,
-        ).execute()
-
-    def add_user(self, event: Dict[str, Any]):
-        """
-        Add a user to Caddy
-        """
-        user = event["common"]["formInputs"]["email"]["stringInputs"]["value"][0]
-        role = event["common"]["formInputs"]["role"]["stringInputs"]["value"][0]
-        supervisor_space_id = event["space"]["name"].split("/")[1]
-
         try:
-            enrolment.register_user(user, role, supervisor_space_id)
-        except Exception as error:
-            logger.error(f"Adding user failed: {error}")
+            card_content = json.loads(event["common"]["parameters"]["aiResponse"])
 
-    def remove_user(self, event: Dict[str, Any]):
-        """
-        Remove a user from Caddy
-        """
-        user = event["common"]["formInputs"]["email"]["stringInputs"]["value"][0]
-
-        try:
-            enrolment.remove_user(user)
-        except Exception as error:
-            logger.error(f"Removing user failed: {error}")
-
-    def user_list_dialog(
-        self, supervision_users: str, space_display_name: str
-    ) -> Dict[str, Any]:
-        """
-        Create a user list dialog
-        """
-        return {
-            "action_response": {
-                "type": "DIALOG",
-                "dialog_action": {
-                    "dialog": {
-                        "body": {
-                            "sections": [
-                                {
-                                    "header": f"Supervision users for {space_display_name}",
-                                    "widgets": [
-                                        {"textParagraph": {"text": supervision_users}}
-                                    ],
-                                }
-                            ]
-                        }
-                    }
-                },
-            }
-        }
-
-    def create_card(
-        self, llm_response: str, context_sources: List[str]
-    ) -> Dict[str, Any]:
-        """
-        Takes in the LLM response and context sources, extracts citations, fuzzy matches them
-        with actual context sources, and adds them as reference links in the Google Chat card
-
-        Args:
-            llm_response: Response from LLM
-            context_sources: List of actual source URLs from the context
-
-        Returns:
-            Google Chat Card
-        """
-        card = {
-            "cardsV2": [
-                {
-                    "cardId": "aiResponseCard",
-                    "card": {
-                        "sections": [],
-                    },
-                },
-            ],
-        }
-
-        reference_links_section = {"header": "Reference links", "widgets": []}
-
-        urls = re.findall(
-            r"<ref>((?:SOURCE_URL:)?(http[s]?://[^\s>]+))</ref>", llm_response
-        )
-
-        processed_urls = []
-        ref = 0
-
-        for i, (full_url, base_url) in enumerate(urls):
-            if full_url in processed_urls:
-                continue
-
-            url_to_check = full_url.replace("SOURCE_URL:", "")
-
-            url_parts = urlparse(url_to_check)
-            base_url = urlunparse(url_parts._replace(fragment=""))
-            fragment = url_parts.fragment
-
-            best_match = max(context_sources, key=lambda x: fuzz.ratio(base_url, x))
-            match_score = fuzz.ratio(base_url, best_match)
-
-            logger.debug(f"Cited: {url_to_check}")
-            logger.debug(f"Best match: {best_match}")
-            logger.debug(f"Match score: {match_score}")
-
-            use_url = best_match if match_score > 95 else base_url
-
-            url_valid = False
-            if use_url in context_sources:
-                url_valid = True
-            else:
-                try:
-                    response = requests.head(use_url, timeout=5, allow_redirects=True)
-                    if response.status_code in [200, 302, 403] or (
-                        "advisernet" in use_url and response.status_code == 302
-                    ):
-                        url_valid = True
-                    else:
-                        logger.warning(
-                            f"URL {use_url} returned status code {response.status_code}"
-                        )
-                except requests.RequestException as e:
-                    logger.error(f"Error checking URL {use_url}: {str(e)}")
-
-            if url_valid:
-                ref += 1
-                parsed_url = urlparse(use_url)
-                domain = parsed_url.netloc
-
-                if domain.startswith("www."):
-                    domain = domain[4:]
-
-                if "advisernet" in use_url:
-                    domain = "advisernet"
-
-                resource = domain
-
-                full_use_url = f"{use_url}#{fragment}" if fragment else use_url
-
-                llm_response = llm_response.replace(
-                    f"<ref>{full_url}</ref>",
-                    f'<a href="{full_use_url}">[{ref} - {resource}]</a>',
-                )
-
-                reference_link = {
-                    "textParagraph": {
-                        "text": f'<a href="{full_use_url}">[{ref}- {resource}] {full_use_url}</a>'
-                    }
-                }
-                reference_links_section["widgets"].append(reference_link)
-
-                processed_urls.append(full_url)
-            else:
-                llm_response = llm_response.replace(f"<ref>{full_url}</ref>", "")
-
-        llm_response_section = {
-            "widgets": [
-                {"textParagraph": {"text": llm_response}},
-            ],
-        }
-
-        card["cardsV2"][0]["card"]["sections"].append(llm_response_section)
-
-        if reference_links_section["widgets"]:
-            card["cardsV2"][0]["card"]["sections"].append(reference_links_section)
-
-        return card
-
-    def create_supervision_request_card(
-        self, user: str, initial_query: str
-    ) -> Tuple[
-        Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any]
-    ]:
-        """
-        Create supervision request cards
-        """
-        request_failed = self.responses.supervisor_request_failed(user, initial_query)
-        request_processing = self.responses.supervisor_request_processing(
-            user, initial_query
-        )
-        request_awaiting = self.responses.supervisor_request_pending(
-            user, initial_query
-        )
-        request_approved = self.responses.supervisor_request_approved(
-            user, initial_query
-        )
-        request_rejected = self.responses.supervisor_request_rejected(
-            user, initial_query
-        )
-
-        return (
-            request_failed,
-            request_processing,
-            request_awaiting,
-            request_approved,
-            request_rejected,
-        )
-
-    def create_supervision_card(
-        self,
-        user_email: str,
-        event: CaddyMessageEvent,
-        new_request_message_id: str,
-        request_approved: Dict[str, Any],
-        request_rejected: Dict[str, Any],
-        card_for_approval: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        """
-        Create a supervision card
-        """
-        conversation_id = event.conversation_id
-        response_id = event.response_id
-        message_id = event.message_id
-        thread_id = event.thread_id
-
-        approval_buttons_section = {
-            "widgets": [
-                {
-                    "textInput": {
-                        "label": "Supervisor Notes",
-                        "type": "MULTIPLE_LINE",
-                        "hintText": "Add approval notes or an override response for rejection",
-                        "name": "supervisor_notes",
-                    }
-                },
-                {
-                    "buttonList": {
-                        "buttons": [
-                            {
-                                "text": "👍",
-                                "onClick": {
-                                    "action": {
-                                        "function": "Approved",
-                                        "parameters": [
-                                            {
-                                                "key": "aiResponse",
-                                                "value": json.dumps(card_for_approval),
-                                            },
-                                            {
-                                                "key": "conversationId",
-                                                "value": conversation_id,
-                                            },
-                                            {"key": "responseId", "value": response_id},
-                                            {"key": "messageId", "value": message_id},
-                                            {"key": "threadId", "value": thread_id},
-                                            {
-                                                "key": "newRequestId",
-                                                "value": new_request_message_id,
-                                            },
-                                            {
-                                                "key": "requestApproved",
-                                                "value": json.dumps(request_approved),
-                                            },
-                                            {"key": "userEmail", "value": user_email},
-                                        ],
-                                    }
-                                },
-                            },
-                            {
-                                "text": "👎",
-                                "onClick": {
-                                    "action": {
-                                        "function": "Rejected",
-                                        "parameters": [
-                                            {
-                                                "key": "conversationId",
-                                                "value": conversation_id,
-                                            },
-                                            {"key": "responseId", "value": response_id},
-                                            {"key": "messageId", "value": message_id},
-                                            {"key": "threadId", "value": thread_id},
-                                            {
-                                                "key": "newRequestId",
-                                                "value": new_request_message_id,
-                                            },
-                                            {
-                                                "key": "requestRejected",
-                                                "value": json.dumps(request_rejected),
-                                            },
-                                            {"key": "userEmail", "value": user_email},
-                                        ],
-                                    }
-                                },
-                            },
-                        ]
-                    }
-                },
-            ],
-        }
-
-        card_for_approval_sections = list(
-            card_for_approval["cardsV2"][0]["card"]["sections"]
-        )
-        card_for_approval_sections.append(approval_buttons_section)
-        card_for_approval["cardsV2"][0]["card"]["sections"] = card_for_approval_sections
-
-        return card_for_approval
-
-    def send_message_to_supervisor_space(
-        self, space_id: str, message: Dict[str, Any]
-    ) -> Tuple[str, str]:
-        """
-        Send a message to the supervisor space
-        """
-        response = (
-            self.supervisor.spaces()
-            .messages()
-            .create(parent=f"spaces/{space_id}", body=message)
-            .execute()
-        )
-
-        thread_id = response["thread"]["name"].split("/")[3]
-        message_id = response["name"].split("/")[3]
-
-        return thread_id, message_id
-
-    def respond_to_supervisor_thread(
-        self, space_id: str, message: Dict[str, Any], thread_id: str
-    ) -> str:
-        """
-        Creates a message within a supervisor thread
-
-        Args:
-            space_id (str): id of the supervisor space
-            message (dict): card to be sent
-            thread_id (str): id of the supervisor space thread to create message in
-
-        Returns:
-            message_id: Id of the new message
-        """
-        response = (
-            self.supervisor.spaces()
-            .messages()
-            .create(
-                parent=f"spaces/{space_id}",
-                body={
-                    "cardsV2": message["cardsV2"],
-                    "thread": {"name": f"spaces/{space_id}/threads/{thread_id}"},
-                },
-                messageReplyOption="REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD",
+            supervisor_notes = (
+                event.get("common", {})
+                .get("formInputs", {})
+                .get("supervisor_notes", {})
+                .get("stringInputs", {})
+                .get("value", [""])[0]
             )
-            .execute()
-        )
+            approver_name = event.get("user", {}).get("email", "")
 
-        message_id = response["name"].split("/")[3]
-        return message_id
+            approval_event = ApprovalEvent(
+                response_id=event["common"]["parameters"]["responseId"],
+                thread_id=event["common"]["parameters"]["threadId"],
+                approver_email=approver_name,
+                approved=True,
+                approval_timestamp=datetime.now(),
+                user_response_timestamp=datetime.now(),
+                supervisor_message=supervisor_notes,
+            )
 
-    def delete_message_in_adviser_space(self, space_id: str, message_id: str):
+            return approval_event, card_content
+
+        except KeyError as e:
+            logger.error(f"Missing required field in approval event data: {e}")
+            raise
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse card content: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Error creating approval event: {e}")
+            raise
+
+    def _create_rejection_event(self, event: Dict[str, Any]) -> ApprovalEvent:
         """
-        Delete a message in the adviser space
+        Create rejection event from event data
         """
-        self.caddy.spaces().messages().delete(
-            name=f"spaces/{space_id}/messages/{message_id}"
-        ).execute()
+        try:
+            supervisor_notes = (
+                event.get("common", {})
+                .get("formInputs", {})
+                .get("supervisor_notes", {})
+                .get("stringInputs", {})
+                .get("value", [""])[0]
+            )
+            approver_name = event.get("user", {}).get("email", "")
 
-    def similar_question_dialog(
-        self, similar_question: str, question_answer: str, similarity: float
-    ) -> Dict[str, Any]:
+            rejection_event = ApprovalEvent(
+                response_id=event["common"]["parameters"]["responseId"],
+                thread_id=event["common"]["parameters"]["threadId"],
+                approver_email=approver_name,
+                approved=False,
+                approval_timestamp=datetime.now(),
+                user_response_timestamp=datetime.now(),
+                supervisor_message=supervisor_notes,
+            )
+
+            return rejection_event
+
+        except KeyError as e:
+            logger.error(f"Missing required field in rejection event data: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Error creating rejection event: {e}")
+            raise
+
+    async def handle_supervisor_dialog(self, event: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Create a similar question dialog
+        Handle supervisor dialog actions
         """
-        return {
-            "action_response": {
-                "type": "DIALOG",
-                "dialog_action": {
-                    "dialog": {
-                        "body": {
-                            "sections": [
-                                {
-                                    "header": f'<font color="#004f88"><b>{similar_question}</b></font>',
-                                    "widgets": [
-                                        {"textParagraph": {"text": question_answer}},
-                                        {
-                                            "textParagraph": {
-                                                "text": f'<font color="#004f88"><b>{similarity}% Match</b></font>'
-                                            }
-                                        },
-                                    ],
-                                }
-                            ]
-                        }
-                    }
-                },
-            }
-        }
-
-    def call_complete_confirmation(self, user: str, user_space: str, thread_id: str):
-        """
-        Send a call complete confirmation
-        """
-        survey_card = self.get_survey_card(thread_id, user)
-        call_complete_card = self.responses.call_complete_card(survey_card)
-
-        self.send_dynamic_to_adviser_space(
-            response_type="cardsV2",
-            space_id=user_space,
-            message=call_complete_card,
-            thread_id=thread_id,
-        )
-
-    def run_new_survey(
-        self,
-        user: str,
-        thread_id: str,
-        user_space: str,
-        reminder_thread_id: Optional[str] = None,
-    ):
-        """
-        Run a new survey
-        """
-        post_call_survey_questions = get_survey(thread_id, user)
-        survey_card = self.get_post_call_survey_card(
-            post_call_survey_questions, thread_id
-        )
-
-        thread_for_survey = reminder_thread_id if reminder_thread_id else thread_id
-
-        self.send_dynamic_to_adviser_space(
-            response_type="cardsV2",
-            space_id=user_space,
-            message=survey_card,
-            thread_id=thread_for_survey,
-        )
-
-    async def convert_to_client_friendly(self, event: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Converts the card content to a client-friendly version and returns it in a dialog.
-
-        Args:
-            event (Dict[str, Any]): The event containing the card content.
-
-        Returns:
-            Dict[str, Any]: The dialog response containing the client-friendly version.
-        """
-        card_content = json.loads(event["common"]["parameters"]["card_content"])
-
-        llm = ChatBedrock(
-            model_id=os.getenv("LLM"),
-            region_name="eu-west-3",
-            model_kwargs={"temperature": 0.3, "top_k": 5, "max_tokens": 2000},
-        )
-
-        prompt = f"""
-        You are an AI assistant tasked with converting a technical response into a client-friendly letter style version
-        to be returned to the client via email as an overview to their advice session. Your task is to:
-
-        1. Simplify the language, avoiding jargon and technical terms.
-        2. Summarise the key points in a way that's easy for the client to understand.
-        3. Maintain the essential information and advice, but present it in a more conversational tone.
-        4. Exclude any internal references (such as advisernet) or notes that aren't relevant to the client.
-        5. Keep your response concise, aiming for about half the length of the original content.
-
-        Keep the style in line with "as discussed in our recent contact these are available options" do not
-        include any follow up questions for the client but phrase as paths they can explore. This is after
-        contact so do not ask if any further support is required, instead let the client know they can get
-        contact the service if they need further help in the future.
-
-        Include any public facing helpful links at the end of the response.
-
-        Here's the content to convert:
-
-        {card_content}
-
-        Please provide the client-friendly version:
-        """
-
-        response = llm.invoke(prompt)
-        client_friendly_content = response.content
-
-        return self.client_friendly_dialog(client_friendly_content)
-
-    def client_friendly_dialog(self, content: str) -> Dict[str, Any]:
-        """
-        Creates a dialog with the client-friendly content.
-
-        Args:
-            content (str): The client-friendly content.
-
-        Returns:
-            Dict[str, Any]: The dialog response.
-        """
-        return {
-            "action_response": {
-                "type": "DIALOG",
-                "dialog_action": {
-                    "dialog": {
-                        "body": {
-                            "sections": [
-                                {
-                                    "header": "Client Friendly Version",
-                                    "widgets": [
-                                        {"textParagraph": {"text": content}},
-                                    ],
-                                }
-                            ]
-                        }
-                    }
-                },
-            }
-        }
+        match event["message"]["annotations"][0]["slashCommand"]["commandName"]:
+            case "/addUser":
+                await self.add_user(event)
+            case "/removeUser":
+                await self.remove_user(event)
+        return self.responses.SUCCESS_DIALOG
