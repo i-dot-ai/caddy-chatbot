@@ -208,7 +208,7 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     DependsOn: CaddyLoadBalancer
     Properties:
-      Name: !Sub caddy-targetgroup-${StageName}
+      Name: !Sub caddy-tg-${StageName}
       Port: 8080
       Protocol: HTTP
       TargetType: ip

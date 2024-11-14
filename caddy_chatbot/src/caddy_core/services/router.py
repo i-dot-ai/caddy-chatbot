@@ -97,7 +97,7 @@ def load_semantic_router() -> RouteLayer:
     except ValueError:
         route_count_in_index = 0
 
-    if os.environ.get("AWS_SESSION_TOKEN", None):
+    if os.environ.get("TASK_ROLE_ARN", None):
         embeddings = AutoRefreshBedrockEncoder(region="eu-west-3", score_threshold=0.5)
     else:
         session = boto3.Session()

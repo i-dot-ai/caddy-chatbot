@@ -10,14 +10,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip install --no-cache-dir poetry && \
     poetry config virtualenvs.create false
 
+WORKDIR /app
+
 COPY pyproject.toml poetry.lock* ./
 
 RUN poetry install --no-root --no-interaction
 
 RUN python -m spacy download en_core_web_sm
 
-COPY caddy_chatbot/src ./caddy_chatbot/src/
+COPY caddy_chatbot .
 
-WORKDIR /caddy_chatbot
+ENV PYTHONPATH=/app/src/
 
-ENTRYPOINT ["poetry", "run", "uvicorn", "caddy_chatbot.src.app:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "4"]
+EXPOSE 8080
+
+ENTRYPOINT ["poetry", "run", "uvicorn", "src.app:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "4"]
